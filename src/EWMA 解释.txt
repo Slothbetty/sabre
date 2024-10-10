@@ -1,0 +1,55 @@
+指数加权移动平均 (EWMA) 及其半衰期值的解释
+什么是 EWMA？
+指数加权移动平均（Exponentially Weighted Moving Average, EWMA）是一种用于平滑时间序列数据的技术。与简单移动平均不同，EWMA 对较新的数据点赋予更大的权重，而较旧的数据点权重逐渐减小。这使得 EWMA 能够更敏感地反映最新的数据变化，同时保留历史数据的影响。
+
+EWMA 的计算公式
+EWMA 的计算公式如下：
+
+[ \text{EWMA}t = \alpha \cdot x_t + (1 - \alpha) \cdot \text{EWMA}{t-1} ]
+
+其中：
+
+(\text{EWMA}_t) 表示时间 (t) 时刻的 EWMA 值。
+(x_t) 表示时间 (t) 时刻的实际数据值。
+(\alpha) 是平滑系数，取值范围为 (0 < \alpha \leq 1)。
+(\text{EWMA}_{t-1}) 表示时间 (t-1) 时刻的 EWMA 值。
+半衰期值
+半衰期（Half-Life）是 EWMA 中的一个重要参数，用于确定数据点的权重衰减速度。半衰期表示数据点的权重减半所需的时间。半衰期越短，较新的数据点权重越大，EWMA 对最新数据变化的反应越敏感；半衰期越长，较旧的数据点权重越大，EWMA 对历史数据的保留越多。
+
+半衰期与平滑系数 (\alpha) 的关系
+半衰期 (h) 与平滑系数 (\alpha) 的关系可以通过以下公式表示：
+
+[ \alpha = 1 - e^{-\ln(2) / h} ]
+
+其中：
+
+(e) 是自然对数的底数（约等于 2.71828）。
+(\ln(2)) 是 2 的自然对数（约等于 0.693147）。
+通过这个公式，可以根据半衰期值计算出相应的平滑系数 (\alpha)，从而用于 EWMA 的计算。
+
+示例
+假设我们有一组时间序列数据，并希望使用 EWMA 进行平滑处理。我们选择半衰期为 3 和 8 的值进行计算。
+import numpy as np
+
+def calculate_ewma(data, half_life):
+    alpha = 1 - np.exp(-np.log(2) / half_life)
+    ewma = [data[0]]  # 初始化 EWMA 值
+    for x in data[1:]:
+        ewma.append(alpha * x + (1 - alpha) * ewma[-1])
+    return ewma
+
+data = [10, 12, 14, 13, 15, 16, 18, 17, 19, 20]
+half_life_3 = calculate_ewma(data, 3)
+half_life_8 = calculate_ewma(data, 8)
+
+print("原始数据:", data)
+print("半衰期为 3 的 EWMA:", half_life_3)
+print("半衰期为 8 的 EWMA:", half_life_8)
+
+在这个示例中，我们定义了一个 calculate_ewma 函数，根据给定的半衰期值计算 EWMA。然后，我们使用半衰期为 3 和 8 的值对一组数据进行平滑处理，并输出结果。
+
+总结
+EWMA 是一种对较新数据赋予更大权重的平滑技术。
+半衰期 决定了数据点权重衰减的速度，半衰期越短，EWMA 对最新数据变化的反应越敏感。
+半衰期与平滑系数 (\alpha) 之间存在数学关系，可以通过公式进行转换。
+通过理解 EWMA 和半衰期的概念，可以更好地应用这项技术来平滑和分析时间序列数据。
