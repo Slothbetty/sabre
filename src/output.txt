@@ -1,0 +1,45 @@
+[0] Network: bandwidth->790, lantency->166 (sustainable_quality=3: bitrate=688)
+[30000] Network: bandwidth->1351, lantency->239 (sustainable_quality=4: bitrate=991)
+[60000] Network: bandwidth->1879, lantency->128 (sustainable_quality=5: bitrate=1427)
+[90000] Network: bandwidth->3273, lantency->213 (sustainable_quality=7: bitrate=2962)
+[120000] Network: bandwidth->2870, lantency->141 (sustainable_quality=6: bitrate=2056)
+[150000] Network: bandwidth->1753, lantency->60 (sustainable_quality=5: bitrate=1427)
+[180000] Network: bandwidth->2534, lantency->121 (sustainable_quality=6: bitrate=2056)
+[210000] Network: bandwidth->1630, lantency->35 (sustainable_quality=5: bitrate=1427)
+[240000] Network: bandwidth->1442, lantency->196 (sustainable_quality=4: bitrate=991)
+[270000] Network: bandwidth->659, lantency->137 (sustainable_quality=2: bitrate=477)
+[300000] Network: bandwidth->790, lantency->166 (sustainable_quality=3: bitrate=688)
+[330000] Network: bandwidth->1351, lantency->239 (sustainable_quality=4: bitrate=991)
+[360000] Network: bandwidth->1879, lantency->128 (sustainable_quality=5: bitrate=1427)
+[390000] Network: bandwidth->3273, lantency->213 (sustainable_quality=7: bitrate=2962)
+[420000] Network: bandwidth->2870, lantency->141 (sustainable_quality=6: bitrate=2056)
+[450000] Network: bandwidth->1753, lantency->60 (sustainable_quality=5: bitrate=1427)
+[480000] Network: bandwidth->2534, lantency->121 (sustainable_quality=6: bitrate=2056)
+[510000] Network: bandwidth->1630, lantency->35 (sustainable_quality=5: bitrate=1427)
+[540000] Network: bandwidth->1442, lantency->196 (sustainable_quality=4: bitrate=991)
+[570000] Network: bandwidth->659, lantency->137 (sustainable_quality=2: bitrate=477)
+[593758] Network: sustainable_quality=2: bitrate=477
+buffer size: 25000
+total played utility: 366.535030
+time average played utility: 1.837919
+total played bitrate: 339033.000000
+time average played bitrate: 1700.015783
+total play time: 598.287975
+total play time chunks: 199.429325
+total rebuffer: 0.000000
+rebuffer ratio: 0.000000
+time average rebuffer: 0.000000
+total rebuffer events: 0.000000
+time average rebuffer events: 0.000000
+total bitrate change: 65562.000000
+time average bitrate change: 328.748042
+total log bitrate change: 48.571908
+time average log bitrate change: 0.243554
+time average score: 1.837919
+over estimate count: 103
+over estimate: 137.837570
+leq estimate count: 121
+leq estimate: 266.444771
+estimate: -80.547087
+rampup time: 7.287975
+total reaction time: 81.439873

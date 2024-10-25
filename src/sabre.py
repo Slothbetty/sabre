@@ -91,6 +91,16 @@ def deplete_buffer(time):
 
     if len(buffer_contents) == 0:
         rebuffer_time += time
+        if graph:
+            print(
+                "[%d] Network:sustainable_quality=%d: bitrate=%d, rebuffer_time=%f"
+                % (
+                    round(network_total_time),
+                    sustainable_quality,
+                    manifest.bitrates[sustainable_quality],
+                    time
+                )
+            )
         total_play_time += time
         return
 
@@ -144,9 +154,18 @@ def deplete_buffer(time):
 
     if time > 0:
         rebuffer_time += time
+        if graph:
+            print(
+                "[%d] Network: sustainable_quality=%d: bitrate=%d, rebuffer_time=%f"
+                % (
+                    round(network_total_time),
+                    sustainable_quality,
+                    manifest.bitrates[sustainable_quality],
+                    time
+                )
+            )
         total_play_time += time
         rebuffer_event_count += 1
-
     process_quality_up(total_play_time)
 
 
@@ -160,7 +179,9 @@ def playout_buffer():
     del buffer_contents[:]
     buffer_fcc = 0
 
-
+# The process_quality_up function processes pending quality upgrade requests that are older than a certain cutoff time. 
+# It calculates the reaction time for each processed request and accumulates this time in a global counter. 
+# The reaction time is either the maximum buffer size or a calculated value based on the request details.
 def process_quality_up(now):
     global max_buffer_size
     global pending_quality_up
@@ -168,7 +189,10 @@ def process_quality_up(now):
 
     # check which switches can be processed
 
+    # print("now=%d, max_buffer_size=%d" % (now, max_buffer_size))
     cutoff = now - max_buffer_size
+    # print("cutoff=%d" % cutoff)
+    # print("pending_quality_up=%s" % pending_quality_up)
     while len(pending_quality_up) > 0 and pending_quality_up[0][0] < cutoff:
         p = pending_quality_up.pop(0)
         if len(p) == 2:
@@ -217,10 +241,13 @@ class NetworkModel:
     min_progress_time = 50
 
     def __init__(self, network_trace):
+        # Purpose: sustainable_quality represents the highest quality level of video that can be sustained given the current network conditions.
+        # Initialization: It is initially set to None and then reset to 0 at the beginning of each network period calculation.
+        # Calculation: It is determined by iterating through the available bitrates and comparing them to the effective_bandwidth.
         global sustainable_quality
         global network_total_time
 
-        sustainable_quality = None
+        sustainable_quality = 0
         network_total_time = 0
         self.trace = network_trace
         self.index = -1
@@ -237,6 +264,7 @@ class NetworkModel:
             self.index = 0
         self.time_to_next = self.trace[self.index].time
 
+        # calculate effective bandwidth by removing the latency factor from the current bandwidth
         latency_factor = 1 - self.trace[self.index].latency / manifest.segment_time
         effective_bandwidth = self.trace[self.index].bandwidth * latency_factor
 
@@ -245,6 +273,8 @@ class NetworkModel:
         for i in range(1, len(manifest.bitrates)):
             if manifest.bitrates[i] > effective_bandwidth:
                 break
+            # sustainable_quality is the highest quality level that can be sustained given the current network conditions
+            # it is the index of the bitrate in the manifest.bitrates list
             sustainable_quality = i
         if (
             sustainable_quality != previous_sustainable_quality
@@ -254,19 +284,19 @@ class NetworkModel:
                 sustainable_quality, previous_sustainable_quality
             )
 
-        if verbose:
+        if verbose or graph:
             print(
-                "[%d] Network: %d,%d  (q=%d: bitrate=%d)"
+                "[%d] Network: bandwidth->%d, lantency->%d (sustainable_quality=%d: bitrate=%d)"
                 % (
                     round(network_total_time),
                     self.trace[self.index].bandwidth,
                     self.trace[self.index].latency,
                     sustainable_quality,
-                    manifest.bitrates[sustainable_quality],
+                    manifest.bitrates[sustainable_quality]
                 )
             )
 
-    # return delay time
+    # apply latency delay for the given number of units and return delay time
     def do_latency_delay(self, delay_units):
         global network_total_time
 
@@ -274,6 +304,7 @@ class NetworkModel:
         while delay_units > 0:
             current_latency = self.trace[self.index].latency
             time = delay_units * current_latency
+            # print("%d, %d" % (time, self.time_to_next), end="\n")
             if time <= self.time_to_next:
                 total_delay += time
                 network_total_time += time
@@ -293,6 +324,8 @@ class NetworkModel:
         total_download_time = 0
         while size > 0:
             current_bandwidth = self.trace[self.index].bandwidth
+            # print("size=%d, current_bandwidth=%d" % (size, current_bandwidth), end="\n")
+            # print("time_to_next=%d" % self.time_to_next, end="\n")
             if size <= self.time_to_next * current_bandwidth:
                 # current_bandwidth > 0
                 time = size / current_bandwidth
@@ -388,6 +421,9 @@ class NetworkModel:
         self.time_to_next -= time
         network_total_time += time
 
+    # The download method simulates the downloading of a video segment, handling latency, download progress, 
+    # and potential abandonment based on buffer levels and a provided callback function. 
+    # It returns a DownloadProgress object with the details of the download process.
     def download(self, size, idx, quality, buffer_level, check_abandon=None):
         if size <= 0:
             return DownloadProgress(
@@ -469,7 +505,7 @@ class NetworkModel:
                 )
                 if abandon_quality != None:
                     if verbose:
-                        print("%d abandoning %d->%d" % (idx, quality, abandon_quality))
+                        print("[%d] abandoning: quality=%d->abandon_quality=%d" % (idx, quality, abandon_quality))
                         print(
                             "%d/%d %d(%d)"
                             % (dp.downloaded, dp.size, dp.time, dp.time_to_first_bit)
@@ -840,7 +876,6 @@ class BolaEnh(Abr):
             buffer = BolaEnh.minimum_buffer
             buffer += BolaEnh.minimum_buffer_per_level * len(manifest.bitrates)
             buffer = max(buffer, config_buffer_size)
-            print(buffer)
             self.gp = (self.utilities[-1] - 1) / (buffer / BolaEnh.minimum_buffer - 1)
             self.Vp = BolaEnh.minimum_buffer / self.gp
             # equivalently:
@@ -1246,6 +1281,12 @@ class NoReplace(Replacement):
 
 
 # TODO: different classes instead of strategy
+# The Replace class manages the replacement of video segments in a buffer based on a specified strategy. 
+# It checks the buffer contents and determines which segment, if any, should be replaced to improve the overall quality. 
+# The class supports two strategies:
+# Strategy 0: Iterates from the skip index to the end of the buffer.
+# Strategy 1: Iterates from the end of the buffer to the skip index in reverse.
+# The method returns the index of the segment to be replaced or None if no replacement is needed.
 class Replace(Replacement):
 
     def __init__(self, strategy):
@@ -1394,7 +1435,7 @@ if __name__ == "__main__":
         "-a",
         "--abr",
         metavar="ABR",
-        # choices = abr_list.keys(),
+        choices = abr_list.keys(),
         default=abr_default,
         help="Choose ABR algorithm from predefined list (%s), or specify .py module to import."
         % ", ".join(abr_list.keys()),
@@ -1530,9 +1571,13 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Run in verbose mode."
     )
+    parser.add_argument(
+        "-g", "--graph", action="store_true", help="Run in graph mode."
+    )
     args = parser.parse_args()
 
     verbose = args.verbose
+    graph = args.graph
 
     buffer_contents = []
     # Buffer First Content Chunk
@@ -1623,6 +1668,9 @@ if __name__ == "__main__":
         # default no_insufficient_buffer_rule = False
         "no_ibr": args.no_insufficient_buffer_rule,
     }
+    # default abr = "bolae"
+    # our abr algorithm is the output from the RL model.
+    # this program does not achieve dynamic buffering. Maybe?
     if args.abr[-3:] == ".py":
         abr = AbrInput(args.abr, config)
     else:
@@ -1631,6 +1679,7 @@ if __name__ == "__main__":
         abr = abr_list[args.abr](config)
     network = NetworkModel(network_trace)
 
+    # default replace = "none"
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
     if args.replace == "left":
@@ -1640,12 +1689,17 @@ if __name__ == "__main__":
     else:
         replacer = NoReplace()
 
+    # default window_size = 3
+    # default half_life = 3, 8
     config = {"window_size": args.window_size, "half_life": args.half_life}
+    # default moving_average = "ewma"
     throughput_history = average_list[args.moving_average](config)
 
     # download first segment
     quality = abr.get_first_quality()
+    # print("first quality: %d" % quality)
     size = manifest.segments[0][quality]
+    # print("first segment size: %d" % size)
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     startup_time = download_time
@@ -1658,7 +1712,7 @@ if __name__ == "__main__":
 
     if verbose:
         print(
-            "[%d-%d]  %d: q=%d s=%d/%d t=%d=%d+%d bl=0->0->%d"
+            "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d buffer_level=0->0->%d"
             % (
                 0,
                 round(download_metric.time),
@@ -1739,7 +1793,7 @@ if __name__ == "__main__":
 
         if verbose:
             print(
-                "[%d-%d]  %d: q=%d s=%d/%d t=%d=%d+%d "
+                "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
                 % (
                     round(total_play_time),
                     round(total_play_time + download_metric.time),
@@ -1755,7 +1809,7 @@ if __name__ == "__main__":
             )
             if replace == None:
                 if download_metric.abandon_to_quality == None:
-                    print("bl=%d" % get_buffer_level(), end="")
+                    print("buffer_level=%d" % get_buffer_level(), end="")
                 else:
                     print(
                         " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
@@ -1849,6 +1903,15 @@ if __name__ == "__main__":
         # loop while next_segment < len(manifest.segments)
 
     playout_buffer()
+    if graph:
+        print(
+                "[%d] Network: sustainable_quality=%d: bitrate=%d"
+                % (
+                    round(network_total_time),
+                    sustainable_quality,
+                    manifest.bitrates[sustainable_quality]
+                )
+            )
 
     # multiply by to_time_average to get per/chunk average
     to_time_average = 1 / (total_play_time / manifest.segment_time)
