@@ -91,16 +91,6 @@ def deplete_buffer(time):
 
     if len(buffer_contents) == 0:
         rebuffer_time += time
-        if graph:
-            print(
-                "[%d] Network:sustainable_quality=%d: bitrate=%d, rebuffer_time=%f"
-                % (
-                    round(network_total_time),
-                    sustainable_quality,
-                    manifest.bitrates[sustainable_quality],
-                    time
-                )
-            )
         total_play_time += time
         return
 
@@ -154,16 +144,6 @@ def deplete_buffer(time):
 
     if time > 0:
         rebuffer_time += time
-        if graph:
-            print(
-                "[%d] Network: sustainable_quality=%d: bitrate=%d, rebuffer_time=%f"
-                % (
-                    round(network_total_time),
-                    sustainable_quality,
-                    manifest.bitrates[sustainable_quality],
-                    time
-                )
-            )
         total_play_time += time
         rebuffer_event_count += 1
     process_quality_up(total_play_time)
@@ -284,7 +264,7 @@ class NetworkModel:
                 sustainable_quality, previous_sustainable_quality
             )
 
-        if verbose or graph:
+        if verbose:
             print(
                 "[%d] Network: bandwidth->%d, lantency->%d (sustainable_quality=%d: bitrate=%d)"
                 % (
@@ -436,11 +416,13 @@ class NetworkModel:
                 abandon_to_quality=None,
             )
 
+        # print("check_abandon=%s" % check_abandon)
         if not check_abandon or (
             NetworkModel.min_progress_time <= 0 and NetworkModel.min_progress_size <= 0
         ):
             latency = self.do_latency_delay(1)
             time = latency + self.do_download(size)
+            # print("time=%d" % time)
             return DownloadProgress(
                 index=idx,
                 quality=quality,
@@ -455,7 +437,7 @@ class NetworkModel:
         total_download_size = 0
         min_time_to_progress = NetworkModel.min_progress_time
         min_size_to_progress = NetworkModel.min_progress_size
-
+        # print("min_time_to_progress=%d, min_size_to_progress=%d" % (min_time_to_progress, min_size_to_progress))
         if NetworkModel.min_progress_size > 0:
             latency = self.do_latency_delay(1)
             total_download_time += latency
@@ -1697,9 +1679,9 @@ if __name__ == "__main__":
 
     # download first segment
     quality = abr.get_first_quality()
-    # print("first quality: %d" % quality)
+    print("quality=", quality)
     size = manifest.segments[0][quality]
-    # print("first segment size: %d" % size)
+    print("size=", size)
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     startup_time = download_time
@@ -1707,8 +1689,8 @@ if __name__ == "__main__":
     t = download_metric.size / download_time
     l = download_metric.time_to_first_bit
     throughput_history.push(download_time, t, l)
-    # print('%d,%d -> %d,%d' % (t, l, throughput, latency))
     total_play_time += download_metric.time
+    print("download_metric.time=", download_metric.time)
 
     if verbose:
         print(
@@ -1903,15 +1885,6 @@ if __name__ == "__main__":
         # loop while next_segment < len(manifest.segments)
 
     playout_buffer()
-    if graph:
-        print(
-                "[%d] Network: sustainable_quality=%d: bitrate=%d"
-                % (
-                    round(network_total_time),
-                    sustainable_quality,
-                    manifest.bitrates[sustainable_quality]
-                )
-            )
 
     # multiply by to_time_average to get per/chunk average
     to_time_average = 1 / (total_play_time / manifest.segment_time)
