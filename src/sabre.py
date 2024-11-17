@@ -88,10 +88,13 @@ def deplete_buffer(time):
     global rampup_time
     global rampup_threshold
     global sustainable_quality
+    global segment_rebuffer_time
 
     if len(buffer_contents) == 0:
         rebuffer_time += time
         total_play_time += time
+        rebuffer_event_count += 1
+        segment_rebuffer_time = time
         return
 
     if buffer_fcc > 0:
@@ -146,6 +149,7 @@ def deplete_buffer(time):
         rebuffer_time += time
         total_play_time += time
         rebuffer_event_count += 1
+        segment_rebuffer_time = time
     process_quality_up(total_play_time)
 
 
@@ -159,8 +163,9 @@ def playout_buffer():
     del buffer_contents[:]
     buffer_fcc = 0
 
-# The process_quality_up function processes pending quality upgrade requests that are older than a certain cutoff time. 
-# It calculates the reaction time for each processed request and accumulates this time in a global counter. 
+
+# The process_quality_up function processes pending quality upgrade requests that are older than a certain cutoff time.
+# It calculates the reaction time for each processed request and accumulates this time in a global counter.
 # The reaction time is either the maximum buffer size or a calculated value based on the request details.
 def process_quality_up(now):
     global max_buffer_size
@@ -268,11 +273,11 @@ class NetworkModel:
             print(
                 "[%d] Network: bandwidth->%d, lantency->%d (sustainable_quality=%d: bitrate=%d)"
                 % (
-                    round(network_total_time),
+                    network_total_time,
                     self.trace[self.index].bandwidth,
                     self.trace[self.index].latency,
                     sustainable_quality,
-                    manifest.bitrates[sustainable_quality]
+                    manifest.bitrates[sustainable_quality],
                 )
             )
 
@@ -401,8 +406,8 @@ class NetworkModel:
         self.time_to_next -= time
         network_total_time += time
 
-    # The download method simulates the downloading of a video segment, handling latency, download progress, 
-    # and potential abandonment based on buffer levels and a provided callback function. 
+    # The download method simulates the downloading of a video segment, handling latency, download progress,
+    # and potential abandonment based on buffer levels and a provided callback function.
     # It returns a DownloadProgress object with the details of the download process.
     def download(self, size, idx, quality, buffer_level, check_abandon=None):
         if size <= 0:
@@ -487,7 +492,10 @@ class NetworkModel:
                 )
                 if abandon_quality != None:
                     if verbose:
-                        print("[%d] abandoning: quality=%d->abandon_quality=%d" % (idx, quality, abandon_quality))
+                        print(
+                            "[%d] abandoning: quality=%d->abandon_quality=%d"
+                            % (idx, quality, abandon_quality)
+                        )
                         print(
                             "%d/%d %d(%d)"
                             % (dp.downloaded, dp.size, dp.time, dp.time_to_first_bit)
@@ -1263,8 +1271,8 @@ class NoReplace(Replacement):
 
 
 # TODO: different classes instead of strategy
-# The Replace class manages the replacement of video segments in a buffer based on a specified strategy. 
-# It checks the buffer contents and determines which segment, if any, should be replaced to improve the overall quality. 
+# The Replace class manages the replacement of video segments in a buffer based on a specified strategy.
+# It checks the buffer contents and determines which segment, if any, should be replaced to improve the overall quality.
 # The class supports two strategies:
 # Strategy 0: Iterates from the skip index to the end of the buffer.
 # Strategy 1: Iterates from the end of the buffer to the skip index in reverse.
@@ -1417,7 +1425,7 @@ if __name__ == "__main__":
         "-a",
         "--abr",
         metavar="ABR",
-        choices = abr_list.keys(),
+        choices=abr_list.keys(),
         default=abr_default,
         help="Choose ABR algorithm from predefined list (%s), or specify .py module to import."
         % ", ".join(abr_list.keys()),
@@ -1553,9 +1561,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-v", "--verbose", action="store_true", help="Run in verbose mode."
     )
-    parser.add_argument(
-        "-g", "--graph", action="store_true", help="Run in graph mode."
-    )
+    parser.add_argument("-g", "--graph", action="store_true", help="Run in graph mode.")
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -1569,6 +1575,7 @@ if __name__ == "__main__":
 
     rebuffer_event_count = 0
     rebuffer_time = 0
+    segment_rebuffer_time = 0
     played_utility = 0
     played_bitrate = 0
     total_play_time = 0
@@ -1593,7 +1600,7 @@ if __name__ == "__main__":
     bitrates = manifest["bitrates_kbps"]
     # Utilities: A list of utility values corresponding to different bitrates.
     # Calculation: Logarithm of bitrates adjusted by an offset to make the lowest bitrate's utility zero.
-    # Purpose: Used in ABR algorithms to make informed decisions about bitrate selection based on network conditions, 
+    # Purpose: Used in ABR algorithms to make informed decisions about bitrate selection based on network conditions,
     # aiming to balance video quality and playback smoothness.
     utility_offset = 0 - math.log(bitrates[0])  # so utilities[0] = 0
     utilities = [math.log(b) + utility_offset for b in bitrates]
@@ -1679,9 +1686,7 @@ if __name__ == "__main__":
 
     # download first segment
     quality = abr.get_first_quality()
-    print("quality=", quality)
     size = manifest.segments[0][quality]
-    print("size=", size)
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     startup_time = download_time
@@ -1690,7 +1695,6 @@ if __name__ == "__main__":
     l = download_metric.time_to_first_bit
     throughput_history.push(download_time, t, l)
     total_play_time += download_metric.time
-    print("download_metric.time=", download_metric.time)
 
     if verbose:
         print(
@@ -1706,6 +1710,37 @@ if __name__ == "__main__":
                 download_metric.time_to_first_bit,
                 download_metric.time - download_metric.time_to_first_bit,
                 get_buffer_level(),
+            )
+        )
+    if graph:
+        print(
+            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d"
+            % (
+                0,
+                0,
+                network.trace[network.index].bandwidth,
+                network.trace[network.index].latency,
+                download_metric.quality,
+                manifest.bitrates[download_metric.quality],
+                0,
+                0,
+                0,
+                0,
+            )
+        )
+        print(
+            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d"
+            % (
+                0,
+                download_metric.time,
+                network.trace[network.index].bandwidth,
+                network.trace[network.index].latency,
+                download_metric.quality,
+                manifest.bitrates[download_metric.quality],
+                download_metric.downloaded,
+                download_metric.time,
+                get_buffer_level(),
+                0,
             )
         )
 
@@ -1820,6 +1855,21 @@ if __name__ == "__main__":
                         ),
                         end="",
                     )
+        if graph:
+            print(
+                "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
+                % (
+                    current_segment,
+                    total_play_time + download_metric.time,
+                    network.trace[network.index].bandwidth,
+                    network.trace[network.index].latency,
+                    download_metric.quality,
+                    manifest.bitrates[download_metric.quality],
+                    download_metric.downloaded,
+                    download_metric.time,
+                ),
+                end="",
+            )
 
         # print('deplete buffer %d' % download_metric.time)
         deplete_buffer(download_metric.time)
@@ -1855,6 +1905,15 @@ if __name__ == "__main__":
 
         if verbose:
             print("->%d" % get_buffer_level())
+        if graph:
+            if segment_rebuffer_time > 0:
+                print(
+                    "buffer_level=%d rebuffer_time=%d"
+                    % (get_buffer_level(), segment_rebuffer_time)
+                )
+                segment_rebuffer_time = 0
+            else:
+                print("buffer_level=%d rebuffer_time=%d" % (get_buffer_level(), 0))
 
         abr.report_download(download_metric, replace != None)
 
@@ -1886,53 +1945,63 @@ if __name__ == "__main__":
 
     playout_buffer()
 
-    # multiply by to_time_average to get per/chunk average
-    to_time_average = 1 / (total_play_time / manifest.segment_time)
-    count = len(manifest.segments)
-    time = count * manifest.segment_time + rebuffer_time + startup_time
-    print("buffer size: %d" % buffer_size)
-    print("total played utility: %f" % played_utility)
-    print("time average played utility: %f" % (played_utility * to_time_average))
-    print("total played bitrate: %f" % played_bitrate)
-    print("time average played bitrate: %f" % (played_bitrate * to_time_average))
-    print("total play time: %f" % (total_play_time / 1000))
-    print("total play time chunks: %f" % (total_play_time / manifest.segment_time))
-    print("total rebuffer: %f" % (rebuffer_time / 1000))
-    print("rebuffer ratio: %f" % (rebuffer_time / total_play_time))
-    print("time average rebuffer: %f" % (rebuffer_time / 1000 * to_time_average))
-    print("total rebuffer events: %f" % rebuffer_event_count)
-    print("time average rebuffer events: %f" % (rebuffer_event_count * to_time_average))
-    print("total bitrate change: %f" % total_bitrate_change)
-    print("time average bitrate change: %f" % (total_bitrate_change * to_time_average))
-    print("total log bitrate change: %f" % total_log_bitrate_change)
-    print(
-        "time average log bitrate change: %f"
-        % (total_log_bitrate_change * to_time_average)
-    )
-    print(
-        "time average score: %f"
-        % (
-            to_time_average
-            * (played_utility - args.gamma_p * rebuffer_time / manifest.segment_time)
-        )
-    )
-    if overestimate_count == 0:
-        print("over estimate count: 0")
-        print("over estimate: 0")
-    else:
-        print("over estimate count: %d" % overestimate_count)
-        print("over estimate: %f" % overestimate_average)
-    if goodestimate_count == 0:
-        print("leq estimate count: 0")
-        print("leq estimate: 0")
-    else:
-        print("leq estimate count: %d" % goodestimate_count)
-        print("leq estimate: %f" % goodestimate_average)
-    print("estimate: %f" % estimate_average)
-    if rampup_time == None:
+    if verbose:
+        # multiply by to_time_average to get per/chunk average
+        to_time_average = 1 / (total_play_time / manifest.segment_time)
+        count = len(manifest.segments)
+        time = count * manifest.segment_time + rebuffer_time + startup_time
+        print("buffer size: %d" % buffer_size)
+        print("total played utility: %f" % played_utility)
+        print("time average played utility: %f" % (played_utility * to_time_average))
+        print("total played bitrate: %f" % played_bitrate)
+        print("time average played bitrate: %f" % (played_bitrate * to_time_average))
+        print("total play time: %f" % (total_play_time / 1000))
+        print("total play time chunks: %f" % (total_play_time / manifest.segment_time))
+        print("total rebuffer: %f" % (rebuffer_time / 1000))
+        print("rebuffer ratio: %f" % (rebuffer_time / total_play_time))
+        print("time average rebuffer: %f" % (rebuffer_time / 1000 * to_time_average))
+        print("total rebuffer events: %f" % rebuffer_event_count)
         print(
-            "rampup time: %f" % (len(manifest.segments) * manifest.segment_time / 1000)
+            "time average rebuffer events: %f"
+            % (rebuffer_event_count * to_time_average)
         )
-    else:
-        print("rampup time: %f" % (rampup_time / 1000))
-    print("total reaction time: %f" % (total_reaction_time / 1000))
+        print("total bitrate change: %f" % total_bitrate_change)
+        print(
+            "time average bitrate change: %f" % (total_bitrate_change * to_time_average)
+        )
+        print("total log bitrate change: %f" % total_log_bitrate_change)
+        print(
+            "time average log bitrate change: %f"
+            % (total_log_bitrate_change * to_time_average)
+        )
+        print(
+            "time average score: %f"
+            % (
+                to_time_average
+                * (
+                    played_utility
+                    - args.gamma_p * rebuffer_time / manifest.segment_time
+                )
+            )
+        )
+        if overestimate_count == 0:
+            print("over estimate count: 0")
+            print("over estimate: 0")
+        else:
+            print("over estimate count: %d" % overestimate_count)
+            print("over estimate: %f" % overestimate_average)
+        if goodestimate_count == 0:
+            print("leq estimate count: 0")
+            print("leq estimate: 0")
+        else:
+            print("leq estimate count: %d" % goodestimate_count)
+            print("leq estimate: %f" % goodestimate_average)
+        print("estimate: %f" % estimate_average)
+        if rampup_time == None:
+            print(
+                "rampup time: %f"
+                % (len(manifest.segments) * manifest.segment_time / 1000)
+            )
+        else:
+            print("rampup time: %f" % (rampup_time / 1000))
+        print("total reaction time: %f" % (total_reaction_time / 1000))
