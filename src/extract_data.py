@@ -1,32 +1,43 @@
-import re
-import pandas as pd
-import sys
+import subprocess
+import csv
+import argparse
 
-def extract_data(input_file, csv_file):
-    with open(input_file, 'r') as file:
-        content = file.read()
+# Function to run sabre.py with the `-g` argument and capture its output
+def capture_print_output(abr):
+    # Run sabre.py with the `-g` argument and capture the output
+    result = subprocess.run(['python', 'sabre.py', '-g','-a', abr], capture_output=True, text=True)
+    # Split the output into lines
+    return result.stdout.splitlines()
 
-    # Regular expression to extract the data
-    pattern = r'\[(\d+)\].*bitrate=(\d+)(.*rebuffer_time=(\d+\.?\d*))?'
+# Function to parse each line into a dictionary
+def parse_line(line):
+    fields = line.split()
+    # Filter out invalid fields that don’t contain '='
+    valid_fields = [field for field in fields if '=' in field]
+    return {field.split('=')[0]: field.split('=')[1] for field in valid_fields}
 
-    # Find all matches in the content
-    matches = re.findall(pattern, content)
+if __name__ == "__main__":
+    parser = argparse.ArgumentParser(description='Generate graph with specified ABR algorithm')
+    parser.add_argument('-a', '--abr', type=str, required=True, help='ABR algorithm to use')
+    args = parser.parse_args()
+    
+    # Capture the printed data
+    data = capture_print_output(args.abr)
+    # Filter out any empty lines or lines that are not properly formatted
+    parsed_data = [parse_line(line) for line in data if line.strip() and '=' in line]
 
-    # Prepare the data for CSV
-    data = []
-    for match in matches:
-        time = int(match[0]) / 1000  # convert time from ms to seconds
-        bitrate = int(match[1])
-        rebuffer_time = float(match[2]) if match[2] else 0  # convert rebuffer_time from ms to seconds, if available
-        data.append([time, bitrate, rebuffer_time])
+    # Ensure there is data to write
+    if parsed_data:
+        # Get the header from the keys of the first dictionary
+        header = parsed_data[0].keys()
 
-    # Convert to DataFrame
-    df = pd.DataFrame(data, columns=['Time (s)', 'Bitrate', 'Rebuffer Time (s)'])
+        # Write to a CSV file
+        with open('output.csv', 'w', newline='') as file:
+            writer = csv.DictWriter(file, fieldnames=header)
+            writer.writeheader()
+            writer.writerows(parsed_data)
 
-    # Write the DataFrame to a CSV file
-    df.to_csv(csv_file, index=False)
-
-if __name__ == '__main__':
-    input_file = sys.argv[1]
-    csv_file = sys.argv[2]
-    extract_data(input_file, csv_file)
+        print("Data successfully written to output.csv")
+    else:
+        print("No valid data found to write to CSV.")
+    
