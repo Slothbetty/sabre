@@ -32,12 +32,12 @@ if __name__ == "__main__":
         header = parsed_data[0].keys()
 
         # Write to a CSV file
-        with open('output.csv', 'w', newline='') as file:
+        with open(f'{args.abr}.csv', 'w', newline='') as file:
             writer = csv.DictWriter(file, fieldnames=header)
             writer.writeheader()
             writer.writerows(parsed_data)
 
-        print("Data successfully written to output.csv")
+        print(f"Data successfully written to {args.abr}.csv")
     else:
         print("No valid data found to write to CSV.")
     
