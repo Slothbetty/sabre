@@ -3,18 +3,18 @@ import matplotlib.pyplot as plt
 import argparse
 
 def generate_graph(abrarray):
-    # 字典来存储每个 ABR 的 DataFrame
+    # Dictionary to store the DataFrame for each ABR algorithm
     dataframes = {}
 
-    # 颜色列表
+    # List of colors
     colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
-    marker = 'o'  # 使用相同的标记符号
+    marker = 'o'  # Use the same marker symbol
 
-    # 加载每个 CSV 文件的数据并存储到字典中
+    # Load the data from each CSV file and store it in the dictionary
     for abr in abrarray:
         dataframes[abr] = pd.read_csv(f'{abr}.csv')
 
-    # 绘制所有 ABR 算法的 network_bandwidth vs time，使用对数刻度
+    # Plot network_bandwidth vs time for all ABR algorithms with logarithmic scale
     plt.figure(figsize=(10, 5))
     for i, abr in enumerate(abrarray):
         plt.plot(
@@ -22,18 +22,18 @@ def generate_graph(abrarray):
             dataframes[abr]['network_bandwidth'], 
             label=f'{abr} Network Bandwidth', 
             color=colors[i % len(colors)], 
-            marker=marker,  # 使用相同的标记符号
-            alpha=0.8  # 设置透明度
+            marker=marker,  # Use the same marker symbol
+            alpha=0.8  # Set transparency
         )
     plt.xlabel('Time(ms)')
     plt.ylabel('Network Bandwidth(kbps)')
-    plt.yscale('log')  # 设置 y 轴为对数刻度
+    # plt.yscale('log')  # Set y-axis to logarithmic scale
     plt.title("Network Bandwidth vs Time for All ABR Algorithms (Log Scale)")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
 
-    # 绘制所有 ABR 算法的 bitrate vs time，使用对数刻度
+    # Plot bitrate vs time for all ABR algorithms with logarithmic scale
     plt.figure(figsize=(10, 5))
     for i, abr in enumerate(abrarray):
         plt.plot(
@@ -41,18 +41,18 @@ def generate_graph(abrarray):
             dataframes[abr]['bitrate'], 
             label=f'{abr} Bitrate', 
             color=colors[i % len(colors)], 
-            marker=marker,  # 使用相同的标记符号
-            alpha=0.8  # 设置透明度
+            marker=marker,  # Use the same marker symbol
+            alpha=0.8  # Set transparency
         )
     plt.xlabel('Time(ms)')
     plt.ylabel('Bitrate(kbps)')
-    plt.yscale('log')  # 设置 y 轴为对数刻度
+    # plt.yscale('log')  # Set y-axis to logarithmic scale
     plt.title("Bitrate vs Time for All ABR Algorithms (Log Scale)")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
 
-    # 绘制所有 ABR 算法的 buffer_level vs time，使用对数刻度
+    # Plot buffer_level vs time for all ABR algorithms with logarithmic scale
     plt.figure(figsize=(10, 5))
     for i, abr in enumerate(abrarray):
         plt.plot(
@@ -60,18 +60,18 @@ def generate_graph(abrarray):
             dataframes[abr]['buffer_level'], 
             label=f'{abr} Buffer Level', 
             color=colors[i % len(colors)], 
-            marker=marker,  # 使用相同的标记符号
-            alpha=0.8  # 设置透明度
+            marker=marker,  # Use the same marker symbol
+            alpha=0.8  # Set transparency
         )
     plt.xlabel('Time(ms)')
     plt.ylabel('Buffer Level(ms)')
-    plt.yscale('log')  # 设置 y 轴为对数刻度
+    # plt.yscale('log')  # Set y-axis to logarithmic scale
     plt.title("Buffer Level vs Time for All ABR Algorithms (Log Scale)")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
 
-    # 绘制所有 ABR 算法的 rebuffer_time vs time，使用对数刻度
+    # Plot rebuffer_time vs time for all ABR algorithms with logarithmic scale
     plt.figure(figsize=(10, 5))
     for i, abr in enumerate(abrarray):
         plt.plot(
@@ -79,12 +79,12 @@ def generate_graph(abrarray):
             dataframes[abr]['rebuffer_time'], 
             label=f'{abr} Rebuffer Time', 
             color=colors[i % len(colors)], 
-            marker=marker,  # 使用相同的标记符号
-            alpha=0.8  # 设置透明度
+            marker=marker,  # Use the same marker symbol
+            alpha=0.8  # Set transparency
         )
     plt.xlabel('Time(ms)')
     plt.ylabel('Rebuffer Time(ms)')
-    plt.yscale('log')  # 设置 y 轴为对数刻度
+    # plt.yscale('log')  # Set y-axis to logarithmic scale
     plt.title("Rebuffer Time vs Time for All ABR Algorithms (Log Scale)")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
@@ -95,5 +95,5 @@ if __name__ == "__main__":
     parser.add_argument('-a', '--abr', type=str, nargs='+', required=True, help='Array of ABR algorithms to use (space-separated)')
     args = parser.parse_args()
 
-    # 将 ABR 算法数组传递给 generate_graph 函数
+    # Pass the ABR algorithm array to the generate_graph function
     generate_graph(args.abr)

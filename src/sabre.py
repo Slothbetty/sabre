@@ -2005,3 +2005,4 @@ if __name__ == "__main__":
         else:
             print("rampup time: %f" % (rampup_time / 1000))
         print("total reaction time: %f" % (total_reaction_time / 1000))
+        print("network total time: %f" % (network_total_time/1000))

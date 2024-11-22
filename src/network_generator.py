@@ -2,6 +2,7 @@ import numpy as np
 import json
 import argparse
 
+# print the parameters in the graphs.
 def generate_network_conditions(num_entries, duration, bandwidth_mean, bandwidth_std, latency_mean, latency_std):
     network_conditions = []
     
