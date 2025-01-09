@@ -5,7 +5,7 @@ import argparse
 # Function to run sabre.py with the `-g` argument and capture its output
 def capture_print_output(abr):
     # Run sabre.py with the `-g` argument and capture the output
-    result = subprocess.run(['python', 'sabre.py', '-g','-a', abr], capture_output=True, text=True)
+    result = subprocess.run(['python', 'sabre.py', '-g','-a', abr,'--seek', '30', '120'], capture_output=True, text=True)
     # Split the output into lines
     return result.stdout.splitlines()
 

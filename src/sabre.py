@@ -66,7 +66,7 @@ DownloadProgress = namedtuple(
 def get_buffer_level():
     global manifest
     global buffer_contents
-    global buffer_fcc
+    global buffer_fcc # buffer first content chunk: use to track remaining portion of the first segment in the playback buffer.
 
     return manifest.segment_time * len(buffer_contents) - buffer_fcc
 
@@ -1146,29 +1146,31 @@ class Dynamic(Abr):
 
     def __init__(self, config):
         global manifest
+        global is_bola
 
         self.bola = Bola(config)
         self.tput = ThroughputRule(config)
 
-        self.is_bola = False
+        # self.is_bola = False
 
     def get_quality_delay(self, segment_index):
+        global is_bola
         level = get_buffer_level()
 
         b = self.bola.get_quality_delay(segment_index)
         t = self.tput.get_quality_delay(segment_index)
 
-        if self.is_bola:
+        if is_bola:
             if level < Dynamic.low_buffer_threshold and b[0] < t[0]:
-                self.is_bola = False
+                is_bola = False
         else:
             if level > Dynamic.low_buffer_threshold and b[0] >= t[0]:
-                self.is_bola = True
+                is_bola = True
 
-        return b if self.is_bola else t
+        return b if is_bola else t
 
     def get_first_quality(self):
-        if self.is_bola:
+        if is_bola:
             return self.bola.get_first_quality()
         else:
             return self.tput.get_first_quality()
@@ -1181,10 +1183,10 @@ class Dynamic(Abr):
         self.bola.report_download(metrics, is_replacment)
         self.tput.report_download(metrics, is_replacment)
         if is_replacment:
-            self.is_bola = False
+            is_bola = False
 
     def check_abandon(self, progress, buffer_level):
-        if False and self.is_bola:
+        if False and is_bola:
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
@@ -1617,6 +1619,7 @@ if __name__ == "__main__":
         segments=manifest["segment_sizes_bits"],
     )
     SessionInfo.manifest = manifest
+    is_bola = False
 
     # Network Duration (duration_ms):
     # Definition: The duration for which the network conditions (bandwidth and latency) are observed or simulated.
@@ -1714,7 +1717,7 @@ if __name__ == "__main__":
         )
     if graph:
         print(
-            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d"
+            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
             % (
                 0,
                 0,
@@ -1726,10 +1729,11 @@ if __name__ == "__main__":
                 0,
                 0,
                 0,
+                is_bola,
             )
         )
         print(
-            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d"
+            "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
             % (
                 0,
                 download_metric.time,
@@ -1741,6 +1745,7 @@ if __name__ == "__main__":
                 download_metric.time,
                 get_buffer_level(),
                 0,
+                is_bola,
             )
         )
 
@@ -1908,12 +1913,12 @@ if __name__ == "__main__":
         if graph:
             if segment_rebuffer_time > 0:
                 print(
-                    "buffer_level=%d rebuffer_time=%d"
-                    % (get_buffer_level(), segment_rebuffer_time)
+                    "buffer_level=%d rebuffer_time=%d is_bola=%s"
+                    % (get_buffer_level(), segment_rebuffer_time, is_bola)
                 )
                 segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d" % (get_buffer_level(), 0))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(), 0, is_bola))
 
         abr.report_download(download_metric, replace != None)
 
