@@ -66,7 +66,7 @@ DownloadProgress = namedtuple(
 def get_buffer_level():
     global manifest
     global buffer_contents
-    global buffer_fcc # buffer first content chunk: use to track remaining portion of the first segment in the playback buffer.
+    global buffer_fcc # Note: buffer first content chunk: use to track remaining portion of the first segment in the playback buffer.
 
     return manifest.segment_time * len(buffer_contents) - buffer_fcc
 
