@@ -222,6 +222,7 @@ def advertize_new_network_quality(quality, previous_quality):
 
 class NetworkModel:
 
+    # Question: these variables are hardcoded, should they be configurable?
     min_progress_size = 12000
     min_progress_time = 50
 
@@ -564,7 +565,7 @@ class Abr:
     def check_abandon(self, progress, buffer_level):
         return None
 
-    def quality_from_throughput(self, tput):
+    def quality_from_throughput(self, tput): # Note: This function calculates the quality level based on the throughput.
         global manifest
         global throughput
         global latency
@@ -733,7 +734,7 @@ class Bola(Abr):
                     ll = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
                     print("%d %d    <- %d %d" % (q, l, qq, ll))
 
-    def quality_from_buffer(self):
+    def quality_from_buffer(self): # Note: This function calculates the quality level based on the buffer level.
         level = get_buffer_level()
         quality = 0
         score = None
@@ -772,7 +773,7 @@ class Bola(Abr):
                 delay = 0
             else:
                 if not self.abr_osc:
-                    quality = quality_t + 1
+                    quality = quality_t + 1 # Note: Without oscillation control, the algorithm prioritizes a higher quality level, assuming the buffer can handle the extra risk.
                     delay = 0
                 else:
                     quality = quality_t
@@ -1518,6 +1519,7 @@ if __name__ == "__main__":
         default=[3, 8],
         help="Specify EWMA half life.",
     )
+    # Our seek will need to read from the config file to support multiple seek strategies.
     parser.add_argument(
         "-s",
         "--seek",
@@ -1662,7 +1664,7 @@ if __name__ == "__main__":
     }
     # default abr = "bolae"
     # our abr algorithm is the output from the RL model.
-    # this program does not achieve dynamic buffering. Maybe?
+    # this program does not achieve dynamic buffering
     if args.abr[-3:] == ".py":
         abr = AbrInput(args.abr, config)
     else:
