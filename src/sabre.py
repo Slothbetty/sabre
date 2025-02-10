@@ -219,6 +219,45 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     pending_quality_up.append([network_total_time, quality])
 
+def handle_seek():
+    """
+    Check whether a seek event is scheduled and, if so, update the playback state.
+    
+    The seek is defined by the --seek argument as a pair (seek_when, seek_to) in seconds.
+    When total_play_time (in ms) reaches seek_when * 1000, we:
+      - Compute the new segment index corresponding to seek_to.
+      - Clear the current playback buffer.
+      - Notify the ABR via report_seek() of the new playback position (in ms).
+      - Reset state variables such as rampup_origin and rampup_time.
+      - Mark the seek as handled (by setting args.seek to None).
+    """
+    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, args, abr, verbose
+
+    if args.seek is not None:
+        # Unpack the seek parameters (both in seconds)
+        seek_when, seek_to = args.seek
+        # Discuss Note:
+        # Below was changed from: if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
+        # To ensure the seek is triggered based on the actual elapsed playback time.
+        # Check if playback time (in ms) has reached the scheduled seek time.
+        if total_play_time >= seek_when * 1000:
+            # Calculate the new segment index from the seek-to time.
+            new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
+            if verbose:
+                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+                      (total_play_time, seek_to, new_segment))
+            # Update the next segment index.
+            next_segment = new_segment
+            # Flush the playback buffer.
+            buffer_contents.clear()
+            buffer_fcc = 0
+            # Notify the ABR algorithm of the new playback position.
+            abr.report_seek(seek_to * 1000)
+            # Reset any relevant state variables.
+            rampup_origin = total_play_time
+            rampup_time = None
+            # Mark the seek as handled.
+            args.seek = None
 
 class NetworkModel:
 
@@ -1679,17 +1718,20 @@ if __name__ == "__main__":
     abandoned_to_quality = None
     while next_segment < len(manifest.segments):
 
-        # TODO: BEGIN TODO: reimplement seeking - currently only proof-of-concept hack
-        if args.seek != None:
-            if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
-                next_segment = math.floor(1000 * args.seek[1] / manifest.segment_time)
-                buffer_contents = []
-                buffer_fcc = 0
-                abr.report_seek(1000 * args.seek[1])
-                args.seek = None
-                rampup_origin = total_play_time
-                rampup_time = None
-        # TODO:  END TODO:  reimplement seeking - currently only proof-of-concept hack
+        # Call handle_seek() at the beginning of each iteration.
+        handle_seek()
+
+        # # TODO: BEGIN TODO: reimplement seeking - currently only proof-of-concept hack
+        # if args.seek != None:
+        #     if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
+        #         next_segment = math.floor(1000 * args.seek[1] / manifest.segment_time)
+        #         buffer_contents = []
+        #         buffer_fcc = 0
+        #         abr.report_seek(1000 * args.seek[1])
+        #         args.seek = None
+        #         rampup_origin = total_play_time
+        #         rampup_time = None
+        # # TODO:  END TODO:  reimplement seeking - currently only proof-of-concept hack
 
         # do we have space for a new segment on the buffer?
         full_delay = get_buffer_level() + manifest.segment_time - buffer_size
