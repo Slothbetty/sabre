@@ -1275,12 +1275,6 @@ class NoReplace(Replacement):
 
 
 # TODO: different classes instead of strategy
-# The Replace class manages the replacement of video segments in a buffer based on a specified strategy.
-# It checks the buffer contents and determines which segment, if any, should be replaced to improve the overall quality.
-# The class supports two strategies:
-# Strategy 0: Iterates from the skip index to the end of the buffer.
-# Strategy 1: Iterates from the end of the buffer to the skip index in reverse.
-# The method returns the index of the segment to be replaced or None if no replacement is needed.
 class Replace(Replacement):
 
     def __init__(self, strategy):
