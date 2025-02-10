@@ -1152,6 +1152,7 @@ class Dynamic(Abr):
         self.bola = Bola(config)
         self.tput = ThroughputRule(config)
 
+        is_bola = False
         # self.is_bola = False
 
     def get_quality_delay(self, segment_index):
@@ -1418,12 +1419,6 @@ if __name__ == "__main__":
         default=None,
         help="Specify the movie length in seconds (use MOVIE length if None).",
     )
-    # Purpose: This argument allows the user to specify the ABR algorithm to use.
-    # Usage: --abr ABR
-    # Details:
-    # The user can choose an ABR algorithm from a predefined list or specify a .py module to import.
-    # This argument is flexible and can be used to select from multiple ABR strategies.
-    # Example: --abr my_custom_abr.py
     parser.add_argument(
         "-a",
         "--abr",
@@ -1433,40 +1428,18 @@ if __name__ == "__main__":
         help="Choose ABR algorithm from predefined list (%s), or specify .py module to import."
         % ", ".join(abr_list.keys()),
     )
-    # Purpose: This argument sets the ABR algorithm to a basic strategy.
-    # Usage: --abr-basic
-    # Details:
-    # When this flag is used, the script will use a basic ABR strategy.
-    # This is typically a simpler or default ABR algorithm provided by the script.
-    # It is a boolean flag, meaning it does not require a value; its presence alone enables the basic ABR strategy.
-    # Example: --abr-basic
     parser.add_argument(
         "-ab",
         "--abr-basic",
         action="store_true",
         help="Set ABR to BASIC (ABR strategy dependant).",
     )
-    # Purpose: This argument sets the ABR algorithm to minimize oscillations.
-    # Usage: --abr-osc
-    # Details:
-    # When this flag is used, the script will use an ABR strategy designed to minimize oscillations in bitrate selection.
-    # Oscillations refer to frequent changes in bitrate, which can negatively impact the viewing experience.
-    # This flag is also a boolean flag, meaning its presence alone enables the oscillation-minimizing strategy.
-    # Example: --abr-osc
     parser.add_argument(
         "-ao",
         "--abr-osc",
         action="store_true",
         help="Set ABR to minimize oscillations.",
     )
-    # Purpose: This argument allows the user to specify the product of gamma and p, which is a parameter used in the ABR algorithm.
-    # Usage: --gamma-p GAMMAP
-    # Type: float
-    # Default Value: 5
-    # Details:
-    # The gamma-p parameter is likely used to control some aspect of the ABR algorithm, such as the trade-off between different metrics (e.g., quality, rebuffering).
-    # The exact role of gamma-p would depend on the specific implementation of the ABR algorithm in the script.
-    # Example: --gamma-p 10.5
     parser.add_argument(
         "-gp",
         "--gamma-p",
@@ -1475,14 +1448,6 @@ if __name__ == "__main__":
         default=5,
         help="Specify the (gamma p) product in seconds.",
     )
-    # Purpose: This argument disables the "Insufficient Buffer Rule" in the ABR algorithm.
-    # Usage: --no-insufficient-buffer-rule
-    # Type: Boolean flag (does not require a value)
-    # Details:
-    # The "Insufficient Buffer Rule" is likely a rule within the ABR algorithm that takes action when the buffer is deemed insufficient.
-    # Disabling this rule means that the ABR algorithm will not apply whatever logic or constraints are defined by this rule when the buffer is low.
-    # This could be useful in scenarios where you want to test the behavior of the ABR algorithm without this specific rule or if you believe the rule is too restrictive for your use case.
-    # Example: --no-insufficient-buffer-rule
     parser.add_argument(
         "-noibr",
         "--no-insufficient-buffer-rule",
@@ -1507,9 +1472,6 @@ if __name__ == "__main__":
         default=[3],
         help="Specify sliding window size.",
     )
-    # The --half-life argument is used to specify the half-life values for an Exponentially Weighted Moving Average (EWMA) calculation.
-    # The half-life is a parameter that determines the rate at which older data points decay in significance.
-    # In the context of ABR (Adaptive Bitrate) algorithms, EWMA can be used to smooth out variations in metrics such as bandwidth or buffer levels.
     parser.add_argument(
         "-hl",
         "--half-life",
@@ -1550,10 +1512,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "-noa", "--no-abandon", action="store_true", help="Disable abandonment."
     )
-    # The --rampup-threshold argument is used to specify the quality index at which the system is considered to have "ramped up" in the
-    # context of an Adaptive Bitrate (ABR) algorithm. "Ramping up" typically refers to the process of increasing the video quality as
-    # the network conditions improve. By setting this threshold, the user can control when the system should consider itself to have reached
-    # a stable, higher quality level.
+
     parser.add_argument(
         "-rmp",
         "--rampup-threshold",
@@ -1572,7 +1531,6 @@ if __name__ == "__main__":
     graph = args.graph
 
     buffer_contents = []
-    # Buffer First Content Chunk
     buffer_fcc = 0
     pending_quality_up = []
     reaction_metrics = []
@@ -1602,13 +1560,9 @@ if __name__ == "__main__":
 
     manifest = load_json(args.movie)
     bitrates = manifest["bitrates_kbps"]
-    # Utilities: A list of utility values corresponding to different bitrates.
-    # Calculation: Logarithm of bitrates adjusted by an offset to make the lowest bitrate's utility zero.
-    # Purpose: Used in ABR algorithms to make informed decisions about bitrate selection based on network conditions,
-    # aiming to balance video quality and playback smoothness.
-    utility_offset = 0 - math.log(bitrates[0])  # so utilities[0] = 0
+
+    utility_offset = 0 - math.log(bitrates[0])
     utilities = [math.log(b) + utility_offset for b in bitrates]
-    # default movie_length = None
     if args.movie_length != None:
         l1 = len(manifest["segment_sizes_bits"])
         l2 = math.ceil(args.movie_length * 1000 / manifest["segment_duration_ms"])
@@ -1623,20 +1577,6 @@ if __name__ == "__main__":
     SessionInfo.manifest = manifest
     is_bola = False
 
-    # Network Duration (duration_ms):
-    # Definition: The duration for which the network conditions (bandwidth and latency) are observed or simulated.
-    # Unit: Milliseconds (ms).
-    # Example: "duration_ms": 30000 means the network conditions are observed or simulated for 30,000 milliseconds (30 seconds).
-
-    # Network Bandwidth (bandwidth_kbps):
-    # Definition: The amount of data that can be transmitted over the network in a given amount of time.
-    # Unit: Kilobits per second (kbps).
-    # Example: "bandwidth_kbps": 5000 means the network can transmit 5,000 kilobits of data per second.
-
-    # Network Latency (latency_ms):
-    # Definition: The time it takes for a data packet to travel from the source to the destination.
-    # Unit: Milliseconds (ms).
-    # Example: "latency_ms": 75 means it takes 75 milliseconds for a data packet to travel from the source to the destination.
     network_trace = load_json(args.network)
     network_trace = [
         NetworkPeriod(
@@ -1647,24 +1587,17 @@ if __name__ == "__main__":
         for p in network_trace
     ]
 
-    # default max_buffer = 25
     buffer_size = args.max_buffer * 1000
-    # default gamma_p = 5
     gamma_p = args.gamma_p
 
     config = {
         "buffer_size": buffer_size,
         "gp": gamma_p,
-        # default abr_osc = False
         "abr_osc": args.abr_osc,
-        # default abr_basic = False
         "abr_basic": args.abr_basic,
-        # default no_insufficient_buffer_rule = False
         "no_ibr": args.no_insufficient_buffer_rule,
     }
-    # default abr = "bolae"
-    # our abr algorithm is the output from the RL model.
-    # this program does not achieve dynamic buffering
+
     if args.abr[-3:] == ".py":
         abr = AbrInput(args.abr, config)
     else:
@@ -1673,7 +1606,6 @@ if __name__ == "__main__":
         abr = abr_list[args.abr](config)
     network = NetworkModel(network_trace)
 
-    # default replace = "none"
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
     if args.replace == "left":
@@ -1683,10 +1615,7 @@ if __name__ == "__main__":
     else:
         replacer = NoReplace()
 
-    # default window_size = 3
-    # default half_life = 3, 8
     config = {"window_size": args.window_size, "half_life": args.half_life}
-    # default moving_average = "ewma"
     throughput_history = average_list[args.moving_average](config)
 
     # download first segment
