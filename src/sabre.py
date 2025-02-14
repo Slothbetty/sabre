@@ -236,10 +236,13 @@ def handle_seek():
     if args.seek is not None:
         # Unpack the seek parameters (both in seconds)
         seek_when, seek_to = args.seek
-        # Discuss Note:
+        # Seek Update Note:
         # Below was changed from: if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
         # To ensure the seek is triggered based on the actual elapsed playback time.
         # Check if playback time (in ms) has reached the scheduled seek time.
+        # --seek 30 120: 
+        # Without update, BOLA seek start at 23109ms. 
+        # After update, BOLA seek starts at 30400ms, which is better.
         if total_play_time >= seek_when * 1000:
             # Calculate the new segment index from the seek-to time.
             new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
@@ -832,9 +835,14 @@ class Bola(Abr):
         return (quality, delay)
 
     def report_seek(self, where):
-        # TODO: seek properly
         global manifest
+        # Compute the segment index corresponding to the new playback position.
         self.last_seek_index = math.floor(where / manifest.segment_time)
+        # Seek Update Note:
+        # Reset the last chosen quality to a safe starting point.
+        # Doesn't affect the simluation result, due to the buffer level is cleaned up.
+        # The quality_from_buffer() in get_quality_delay() will re-calculate the quality level and update the self.last_quality into 0.
+        self.last_quality = self.get_first_quality()
 
     def check_abandon(self, progress, buffer_level):
         global manifest
@@ -992,7 +1000,6 @@ class BolaEnh(Abr):
 
         max_level = self.max_buffer_for_quality(quality)
 
-        ################
         if quality > 0:
             q = quality
             b = manifest.bitrates[q]
@@ -1001,7 +1008,6 @@ class BolaEnh(Abr):
             bb = manifest.bitrates[qq]
             uu = self.utilities[qq]
             # max_level = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
-        ################
 
         delay = buffer_level + self.placeholder - max_level
         if delay > 0:
@@ -1073,8 +1079,13 @@ class BolaEnh(Abr):
             self.placeholder = min(self.placeholder, max_placeholder)
 
     def report_seek(self, where):
-        # TODO: seek properly
         self.state = BolaEnh.State.STARTUP
+        # Clear any accumulated placeholder since the buffer state is effectively reset.
+        self.placeholder = 0
+        # Reset the last chosen quality to a safe starting quality.
+        self.last_quality = self.get_first_quality()
+        # Record the new playback segment index (assuming segment_time is in ms).
+        self.last_seek_index = math.floor(where / manifest.segment_time)
 
     def check_abandon(self, progress, buffer_level):
         global manifest
@@ -1620,6 +1631,7 @@ if __name__ == "__main__":
         for p in network_trace
     ]
 
+    # default max buffer size is 25 seconds
     buffer_size = args.max_buffer * 1000
     gamma_p = args.gamma_p
 
@@ -1638,7 +1650,6 @@ if __name__ == "__main__":
         abr_list[args.abr].use_abr_u = not args.abr_osc
         abr = abr_list[args.abr](config)
     network = NetworkModel(network_trace)
-
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
     if args.replace == "left":
