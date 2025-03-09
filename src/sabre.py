@@ -219,6 +219,44 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     pending_quality_up.append([network_total_time, quality])
 
+def handle_seek():
+    """
+    Check whether one or more scheduled seek events should be processed.
+    
+    Each seek event is defined in the global `seek_events` list as a dict with keys:
+      - "seek_when": playback time (in seconds) at which the seek should occur.
+      - "seek_to": target playback time (in seconds) to seek to.
+    
+    When total_play_time (in ms) reaches a seek event's scheduled time (seek_when * 1000),
+    update the playback state:
+      - Compute the new segment index corresponding to seek_to.
+      - Clear the playback buffer.
+      - Notify the ABR algorithm via report_seek().
+      - Reset state variables (like rampup_origin and rampup_time).
+    """
+    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, abr, verbose, seek_events
+
+    # Process all seek events that are due.
+    # Seek Update Note:
+        # Below was changed from: if next_segment * manifest.segment_time >= seek_events[0]["seek_when"] * 1000:
+        # To ensure the seek is triggered based on the actual elapsed playback time.
+        # Check if playback time (in ms) has reached the scheduled seek time.
+        # --seek 30 120: 
+        # Without update, BOLA seek start at 23109ms. 
+        # After update, BOLA seek starts at 30400ms, which is better.
+    while seek_events and total_play_time >= seek_events[0]["seek_when"] * 1000:
+        event = seek_events.pop(0)
+        seek_to = event["seek_to"]
+        new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
+        if verbose:
+            print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+                  (total_play_time, seek_to, new_segment))
+        next_segment = new_segment
+        buffer_contents.clear()
+        buffer_fcc = 0
+        abr.report_seek(seek_to * 1000)
+        rampup_origin = total_play_time
+        rampup_time = None
 
 class NetworkModel:
 
@@ -310,8 +348,6 @@ class NetworkModel:
         total_download_time = 0
         while size > 0:
             current_bandwidth = self.trace[self.index].bandwidth
-            # print("size=%d, current_bandwidth=%d" % (size, current_bandwidth), end="\n")
-            # print("time_to_next=%d" % self.time_to_next, end="\n")
             if size <= self.time_to_next * current_bandwidth:
                 # current_bandwidth > 0
                 time = size / current_bandwidth
@@ -717,7 +753,7 @@ class Bola(Abr):
             self.utilities[-1] + self.gp
         )
 
-        self.last_seek_index = 0  # TODO
+        self.last_seek_index = 0  # TODO: need to update when multiple seeks
         self.last_quality = 0
 
         if verbose:
@@ -793,9 +829,14 @@ class Bola(Abr):
         return (quality, delay)
 
     def report_seek(self, where):
-        # TODO: seek properly
         global manifest
+        # Compute the segment index corresponding to the new playback position.
         self.last_seek_index = math.floor(where / manifest.segment_time)
+        # Seek Update Note:
+        # Reset the last chosen quality to a safe starting point.
+        # Doesn't affect the simluation result, due to the buffer level is cleaned up.
+        # The quality_from_buffer() in get_quality_delay() will re-calculate the quality level and update the self.last_quality into 0.
+        self.last_quality = self.get_first_quality()
 
     def check_abandon(self, progress, buffer_level):
         global manifest
@@ -953,7 +994,6 @@ class BolaEnh(Abr):
 
         max_level = self.max_buffer_for_quality(quality)
 
-        ################
         if quality > 0:
             q = quality
             b = manifest.bitrates[q]
@@ -962,7 +1002,6 @@ class BolaEnh(Abr):
             bb = manifest.bitrates[qq]
             uu = self.utilities[qq]
             # max_level = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
-        ################
 
         delay = buffer_level + self.placeholder - max_level
         if delay > 0:
@@ -1034,8 +1073,13 @@ class BolaEnh(Abr):
             self.placeholder = min(self.placeholder, max_placeholder)
 
     def report_seek(self, where):
-        # TODO: seek properly
         self.state = BolaEnh.State.STARTUP
+        # Clear any accumulated placeholder since the buffer state is effectively reset.
+        self.placeholder = 0
+        # Reset the last chosen quality to a safe starting quality.
+        self.last_quality = self.get_first_quality()
+        # Record the new playback segment index (assuming segment_time is in ms).
+        self.last_seek_index = math.floor(where / manifest.segment_time)
 
     def check_abandon(self, progress, buffer_level):
         global manifest
@@ -1136,6 +1180,10 @@ class ThroughputRule(Abr):
                     quality = None
 
         return quality
+    
+    def report_seek(self, where):
+        # Reset internal throughput-specific state.
+        self.ibr_safety = ThroughputRule.low_buffer_safety_factor_init
 
 
 abr_list["throughput"] = ThroughputRule
@@ -1192,6 +1240,11 @@ class Dynamic(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
+        
+    def report_seek(self, where):
+        # Delegate the seek notification to both underlying strategies.
+        self.bola.report_seek(where)
+        self.tput.report_seek(where)   
 
 
 abr_list["dynamic"] = Dynamic
@@ -1244,6 +1297,11 @@ class DynamicDash(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
+        
+    def report_seek(self, where):
+        # Notify both strategies of the seek event.
+        self.bola.report_seek(where)
+        self.tput.report_seek(where)
 
 
 abr_list["dynamicdash"] = DynamicDash
@@ -1519,6 +1577,12 @@ if __name__ == "__main__":
         "-v", "--verbose", action="store_true", help="Run in verbose mode."
     )
     parser.add_argument("-g", "--graph", action="store_true", help="Run in graph mode.")
+    parser.add_argument(
+    "-sc",
+    "--seek-config",
+    metavar="SEEK_CONFIG",
+    help="Specify the JSON file containing multiple seek events."
+)
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -1557,6 +1621,20 @@ if __name__ == "__main__":
 
     utility_offset = 0 - math.log(bitrates[0])
     utilities = [math.log(b) + utility_offset for b in bitrates]
+    # If a seek configuration file is provided, load it.
+    seek_events = []
+    if args.seek_config:
+        with open(args.seek_config) as f:
+            seek_config = json.load(f)
+        # Expecting a key "seeks" which is a list of { "seek_when": <seconds>, "seek_to": <seconds> }
+        if "seeks" in seek_config:
+            # Global list of pending seeks, sorted by seek_when
+            seek_events = sorted(seek_config["seeks"], key=lambda x: x["seek_when"])
+        else:
+            seek_events = []
+    else:
+        seek_events = []
+
     if args.movie_length != None:
         l1 = len(manifest["segment_sizes_bits"])
         l2 = math.ceil(args.movie_length * 1000 / manifest["segment_duration_ms"])
@@ -1581,6 +1659,7 @@ if __name__ == "__main__":
         for p in network_trace
     ]
 
+    # default max buffer size is 25 seconds
     buffer_size = args.max_buffer * 1000
     gamma_p = args.gamma_p
 
@@ -1599,7 +1678,6 @@ if __name__ == "__main__":
         abr_list[args.abr].use_abr_u = not args.abr_osc
         abr = abr_list[args.abr](config)
     network = NetworkModel(network_trace)
-
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
     if args.replace == "left":
@@ -1679,17 +1757,20 @@ if __name__ == "__main__":
     abandoned_to_quality = None
     while next_segment < len(manifest.segments):
 
-        # TODO: BEGIN TODO: reimplement seeking - currently only proof-of-concept hack
-        if args.seek != None:
-            if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
-                next_segment = math.floor(1000 * args.seek[1] / manifest.segment_time)
-                buffer_contents = []
-                buffer_fcc = 0
-                abr.report_seek(1000 * args.seek[1])
-                args.seek = None
-                rampup_origin = total_play_time
-                rampup_time = None
-        # TODO:  END TODO:  reimplement seeking - currently only proof-of-concept hack
+        # Call handle_seek() at the beginning of each iteration.
+        handle_seek()
+
+        # # TODO: BEGIN TODO: reimplement seeking - currently only proof-of-concept hack
+        # if args.seek != None:
+        #     if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
+        #         next_segment = math.floor(1000 * args.seek[1] / manifest.segment_time)
+        #         buffer_contents = []
+        #         buffer_fcc = 0
+        #         abr.report_seek(1000 * args.seek[1])
+        #         args.seek = None
+        #         rampup_origin = total_play_time
+        #         rampup_time = None
+        # # TODO:  END TODO:  reimplement seeking - currently only proof-of-concept hack
 
         # do we have space for a new segment on the buffer?
         full_delay = get_buffer_level() + manifest.segment_time - buffer_size
