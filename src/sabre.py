@@ -352,8 +352,6 @@ class NetworkModel:
         total_download_time = 0
         while size > 0:
             current_bandwidth = self.trace[self.index].bandwidth
-            # print("size=%d, current_bandwidth=%d" % (size, current_bandwidth), end="\n")
-            # print("time_to_next=%d" % self.time_to_next, end="\n")
             if size <= self.time_to_next * current_bandwidth:
                 # current_bandwidth > 0
                 time = size / current_bandwidth
@@ -759,7 +757,7 @@ class Bola(Abr):
             self.utilities[-1] + self.gp
         )
 
-        self.last_seek_index = 0  # TODO
+        self.last_seek_index = 0  # TODO: need to update when multiple seeks
         self.last_quality = 0
 
         if verbose:
@@ -1186,6 +1184,10 @@ class ThroughputRule(Abr):
                     quality = None
 
         return quality
+    
+    def report_seek(self, where):
+        # Reset internal throughput-specific state.
+        self.ibr_safety = ThroughputRule.low_buffer_safety_factor_init
 
 
 abr_list["throughput"] = ThroughputRule
@@ -1242,6 +1244,11 @@ class Dynamic(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
+        
+    def report_seek(self, where):
+        # Delegate the seek notification to both underlying strategies.
+        self.bola.report_seek(where)
+        self.tput.report_seek(where)   
 
 
 abr_list["dynamic"] = Dynamic
@@ -1294,6 +1301,11 @@ class DynamicDash(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
+        
+    def report_seek(self, where):
+        # Notify both strategies of the seek event.
+        self.bola.report_seek(where)
+        self.tput.report_seek(where)
 
 
 abr_list["dynamicdash"] = DynamicDash
