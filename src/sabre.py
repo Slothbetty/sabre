@@ -221,46 +221,42 @@ def advertize_new_network_quality(quality, previous_quality):
 
 def handle_seek():
     """
-    Check whether a seek event is scheduled and, if so, update the playback state.
+    Check whether one or more scheduled seek events should be processed.
     
-    The seek is defined by the --seek argument as a pair (seek_when, seek_to) in seconds.
-    When total_play_time (in ms) reaches seek_when * 1000, we:
+    Each seek event is defined in the global `seek_events` list as a dict with keys:
+      - "seek_when": playback time (in seconds) at which the seek should occur.
+      - "seek_to": target playback time (in seconds) to seek to.
+    
+    When total_play_time (in ms) reaches a seek event's scheduled time (seek_when * 1000),
+    update the playback state:
       - Compute the new segment index corresponding to seek_to.
-      - Clear the current playback buffer.
-      - Notify the ABR via report_seek() of the new playback position (in ms).
-      - Reset state variables such as rampup_origin and rampup_time.
-      - Mark the seek as handled (by setting args.seek to None).
+      - Clear the playback buffer.
+      - Notify the ABR algorithm via report_seek().
+      - Reset state variables (like rampup_origin and rampup_time).
     """
-    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, args, abr, verbose
+    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, abr, verbose, seek_events
 
-    if args.seek is not None:
-        # Unpack the seek parameters (both in seconds)
-        seek_when, seek_to = args.seek
-        # Seek Update Note:
-        # Below was changed from: if next_segment * manifest.segment_time >= 1000 * args.seek[0]:
+    # Process all seek events that are due.
+    # Seek Update Note:
+        # Below was changed from: if next_segment * manifest.segment_time >= seek_events[0]["seek_when"] * 1000:
         # To ensure the seek is triggered based on the actual elapsed playback time.
         # Check if playback time (in ms) has reached the scheduled seek time.
         # --seek 30 120: 
         # Without update, BOLA seek start at 23109ms. 
         # After update, BOLA seek starts at 30400ms, which is better.
-        if total_play_time >= seek_when * 1000:
-            # Calculate the new segment index from the seek-to time.
-            new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
-            if verbose:
-                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-                      (total_play_time, seek_to, new_segment))
-            # Update the next segment index.
-            next_segment = new_segment
-            # Flush the playback buffer.
-            buffer_contents.clear()
-            buffer_fcc = 0
-            # Notify the ABR algorithm of the new playback position.
-            abr.report_seek(seek_to * 1000)
-            # Reset any relevant state variables.
-            rampup_origin = total_play_time
-            rampup_time = None
-            # Mark the seek as handled.
-            args.seek = None
+    while seek_events and total_play_time >= seek_events[0]["seek_when"] * 1000:
+        event = seek_events.pop(0)
+        seek_to = event["seek_to"]
+        new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
+        if verbose:
+            print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+                  (total_play_time, seek_to, new_segment))
+        next_segment = new_segment
+        buffer_contents.clear()
+        buffer_fcc = 0
+        abr.report_seek(seek_to * 1000)
+        rampup_origin = total_play_time
+        rampup_time = None
 
 class NetworkModel:
 
@@ -1581,6 +1577,12 @@ if __name__ == "__main__":
         "-v", "--verbose", action="store_true", help="Run in verbose mode."
     )
     parser.add_argument("-g", "--graph", action="store_true", help="Run in graph mode.")
+    parser.add_argument(
+    "-sc",
+    "--seek-config",
+    metavar="SEEK_CONFIG",
+    help="Specify the JSON file containing multiple seek events."
+)
     args = parser.parse_args()
 
     verbose = args.verbose
@@ -1619,6 +1621,20 @@ if __name__ == "__main__":
 
     utility_offset = 0 - math.log(bitrates[0])
     utilities = [math.log(b) + utility_offset for b in bitrates]
+    # If a seek configuration file is provided, load it.
+    seek_events = []
+    if args.seek_config:
+        with open(args.seek_config) as f:
+            seek_config = json.load(f)
+        # Expecting a key "seeks" which is a list of { "seek_when": <seconds>, "seek_to": <seconds> }
+        if "seeks" in seek_config:
+            # Global list of pending seeks, sorted by seek_when
+            seek_events = sorted(seek_config["seeks"], key=lambda x: x["seek_when"])
+        else:
+            seek_events = []
+    else:
+        seek_events = []
+
     if args.movie_length != None:
         l1 = len(manifest["segment_sizes_bits"])
         l2 = math.ceil(args.movie_length * 1000 / manifest["segment_duration_ms"])
