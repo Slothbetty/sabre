@@ -72,13 +72,7 @@ def get_buffer_level():
 
 
 def update_total_play_time(delta):
-    """
-    Update total_play_time in steps of 1000 ms (1 second).
-    If a seek event is detected (i.e. total_play_time reaches or exceeds seek_events[0]["seek_when"]*1000),
-    process it via seek function and return False to signal an interruption.
-    Otherwise, return True after fully updating.
-    """
-    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, abr, verbose, seek_events
+    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
     while delta > 0:
         step = min(delta, 1)  # process in 1-ms chunks
         total_play_time += step
@@ -88,9 +82,11 @@ def update_total_play_time(delta):
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
             new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
+            # Record the seek time for later log adjustments.
+            last_seek_time = total_play_time
             if verbose:
-                print("\n[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-                    (total_play_time, seek_to, new_segment))
+                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+                      (total_play_time, seek_to, new_segment))
             next_segment = new_segment
             buffer_contents.clear()
             buffer_fcc = 0
@@ -286,71 +282,210 @@ def process_download_loop():
 
         download_metric = network.download(size, current_segment, quality, get_buffer_level(), check_abandon)
 
-        if verbose:
-            print(
-                "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
-                % (
-                    round(total_play_time),
-                    round(total_play_time + download_metric.time),
-                    current_segment,
-                    download_metric.quality,
-                    download_metric.downloaded,
-                    download_metric.size,
-                    download_metric.time,
-                    download_metric.time_to_first_bit,
-                    download_metric.time - download_metric.time_to_first_bit,
-                ),
-                end="",
-            )
-            if replace is None:
-                if download_metric.abandon_to_quality is None:
-                    print("buffer_level=%d" % get_buffer_level(), end="")
-                else:
-                    print(
-                        " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
-                        % (
-                            download_metric.abandon_to_quality,
-                            download_metric.downloaded,
-                            download_metric.size,
-                            download_metric.time,
-                            download_metric.time_to_first_bit,
-                            download_metric.time - download_metric.time_to_first_bit,
-                            get_buffer_level(),
-                        ),
-                        end="",
-                    )
-            else:
-                if download_metric.abandon_to_quality is None:
-                    print(" REPLACEMENT  bl=%d" % get_buffer_level(), end="")
-                else:
-                    print(
-                        " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
-                        % (
-                            download_metric.time,
-                            download_metric.time_to_first_bit,
-                            download_metric.time - download_metric.time_to_first_bit,
-                            get_buffer_level(),
-                        ),
-                        end="",
-                    )
-        if graph:
-            print(
-                "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
-                % (
-                    current_segment,
-                    total_play_time + download_metric.time,
-                    network.trace[network.index].bandwidth,
-                    network.trace[network.index].latency,
-                    download_metric.quality,
-                    manifest.bitrates[download_metric.quality],
-                    download_metric.downloaded,
-                    download_metric.time,
-                ),
-                end="",
-            )
+        # if verbose:
+        #     print(
+        #         "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
+        #         % (
+        #             round(total_play_time),
+        #             round(total_play_time + download_metric.time),
+        #             current_segment,
+        #             download_metric.quality,
+        #             download_metric.downloaded,
+        #             download_metric.size,
+        #             download_metric.time,
+        #             download_metric.time_to_first_bit,
+        #             download_metric.time - download_metric.time_to_first_bit,
+        #         ),
+        #         end="",
+        #     )
+        #     if replace is None:
+        #         if download_metric.abandon_to_quality is None:
+        #             print("buffer_level=%d" % get_buffer_level(), end="")
+        #         else:
+        #             print(
+        #                 " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
+        #                 % (
+        #                     download_metric.abandon_to_quality,
+        #                     download_metric.downloaded,
+        #                     download_metric.size,
+        #                     download_metric.time,
+        #                     download_metric.time_to_first_bit,
+        #                     download_metric.time - download_metric.time_to_first_bit,
+        #                     get_buffer_level(),
+        #                 ),
+        #                 end="",
+        #             )
+        #     else:
+        #         if download_metric.abandon_to_quality is None:
+        #             print(" REPLACEMENT  bl=%d" % get_buffer_level(), end="")
+        #         else:
+        #             print(
+        #                 " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
+        #                 % (
+        #                     download_metric.time,
+        #                     download_metric.time_to_first_bit,
+        #                     download_metric.time - download_metric.time_to_first_bit,
+        #                     get_buffer_level(),
+        #                 ),
+        #                 end="",
+        #             )
+        # if graph:
+        #     print(
+        #         "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
+        #         % (
+        #             current_segment,
+        #             total_play_time + download_metric.time,
+        #             network.trace[network.index].bandwidth,
+        #             network.trace[network.index].latency,
+        #             download_metric.quality,
+        #             manifest.bitrates[download_metric.quality],
+        #             download_metric.downloaded,
+        #             download_metric.time,
+        #         ),
+        #         end="",
+        #     )
 
-        if not deplete_buffer(download_metric.time):
-            continue  # Seek occurred, restart loop.
+        start_time = round(total_play_time)
+        success = deplete_buffer(download_metric.time)
+        end_time = round(total_play_time)
+        if not success:
+            # A seek occurred during depleting the buffer.
+            effective_end = last_seek_time
+            effective_download_time = effective_end - start_time
+            if download_metric.time > 0:
+                effective_downloaded = int(download_metric.downloaded * effective_download_time / download_metric.time)
+            else:
+                effective_downloaded = download_metric.downloaded
+            if verbose:
+                print(
+                    "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
+                    % (
+                        start_time,
+                        effective_end,
+                        current_segment,
+                        download_metric.quality,
+                        effective_downloaded,
+                        download_metric.size,
+                        effective_download_time,
+                        download_metric.time_to_first_bit,
+                        effective_download_time - download_metric.time_to_first_bit,
+                    ),
+                    end="",
+                )
+                # Append extra logging details.
+                if replace is None:
+                    if download_metric.abandon_to_quality is None:
+                        print("buffer_level=%d" % get_buffer_level())
+                    else:
+                        print(
+                            " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
+                            % (
+                                download_metric.abandon_to_quality,
+                                download_metric.downloaded,
+                                download_metric.size,
+                                download_metric.time,
+                                download_metric.time_to_first_bit,
+                                download_metric.time - download_metric.time_to_first_bit,
+                                get_buffer_level(),
+                            ),
+                            end="",
+                        )
+                else:
+                    if download_metric.abandon_to_quality is None:
+                        print(" REPLACEMENT  bl=%d" % get_buffer_level())
+                    else:
+                        print(
+                            " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
+                            % (
+                                download_metric.time,
+                                download_metric.time_to_first_bit,
+                                download_metric.time - download_metric.time_to_first_bit,
+                                get_buffer_level(),
+                            ),
+                            end="",
+                        )
+            if graph:
+                print(
+                    "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
+                    % (
+                        current_segment,
+                        effective_end,
+                        network.trace[network.index].bandwidth,
+                        network.trace[network.index].latency,
+                        download_metric.quality,
+                        manifest.bitrates[download_metric.quality],
+                        effective_downloaded,
+                        effective_download_time,
+                        get_buffer_level(),
+                        0,
+                        is_bola
+                    )
+                )
+            continue  # After a seek, restart the loop.
+        else:
+            if verbose:
+                print(
+                    "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
+                    % (
+                        start_time,
+                        end_time,
+                        current_segment,
+                        download_metric.quality,
+                        download_metric.downloaded,
+                        download_metric.size,
+                        download_metric.time,
+                        download_metric.time_to_first_bit,
+                        download_metric.time - download_metric.time_to_first_bit,
+                    ),
+                    end="",
+                )
+                # Append extra logging details.
+                if replace is None:
+                    if download_metric.abandon_to_quality is None:
+                        print("buffer_level=%d" % get_buffer_level(), end="")
+                    else:
+                        print(
+                            " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
+                            % (
+                                download_metric.abandon_to_quality,
+                                download_metric.downloaded,
+                                download_metric.size,
+                                download_metric.time,
+                                download_metric.time_to_first_bit,
+                                download_metric.time - download_metric.time_to_first_bit,
+                                get_buffer_level(),
+                            ),
+                            end="",
+                        )
+                else:
+                    if download_metric.abandon_to_quality is None:
+                        print(" REPLACEMENT  bl=%d" % get_buffer_level(), end="")
+                    else:
+                        print(
+                            " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
+                            % (
+                                download_metric.time,
+                                download_metric.time_to_first_bit,
+                                download_metric.time - download_metric.time_to_first_bit,
+                                get_buffer_level(),
+                            ),
+                            end="",
+                        )
+            if graph:
+                print(
+                    "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
+                    % (
+                        current_segment,
+                        end_time,
+                        network.trace[network.index].bandwidth,
+                        network.trace[network.index].latency,
+                        download_metric.quality,
+                        manifest.bitrates[download_metric.quality],
+                        download_metric.downloaded,
+                        download_metric.time,
+                    ),
+                    end="",
+                )
         if verbose:
             print("->%d" % get_buffer_level(), end="")
 
