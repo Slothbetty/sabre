@@ -28,7 +28,7 @@ def generate_graph(abrarray):
     plt.xlabel('Time(ms)')
     plt.ylabel('Network Bandwidth(kbps)')
     # plt.yscale('log')  # Set y-axis to logarithmic scale
-    plt.title("Network Bandwidth vs Time for All ABR Algorithms Seek 30 120")
+    plt.title("Network Bandwidth vs Time for All ABR Algorithms Seek")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
@@ -47,7 +47,7 @@ def generate_graph(abrarray):
     plt.xlabel('Time(ms)')
     plt.ylabel('Bitrate(kbps)')
     # plt.yscale('log')  # Set y-axis to logarithmic scale
-    plt.title("Bitrate vs Time for All ABR Algorithms Seek 30 120")
+    plt.title("Bitrate vs Time for All ABR Algorithms Seek")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
@@ -66,7 +66,7 @@ def generate_graph(abrarray):
     plt.xlabel('Time(ms)')
     plt.ylabel('Buffer Level(ms)')
     # plt.yscale('log')  # Set y-axis to logarithmic scale
-    plt.title("Buffer Level vs Time for All ABR Algorithms Seek 30 120")
+    plt.title("Buffer Level vs Time for All ABR Algorithms Seek")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
@@ -85,7 +85,7 @@ def generate_graph(abrarray):
     plt.xlabel('Time(ms)')
     plt.ylabel('Rebuffer Time(ms)')
     # plt.yscale('log')  # Set y-axis to logarithmic scale
-    plt.title("Rebuffer Time vs Time for All ABR Algorithms Seek 30 120")
+    plt.title("Rebuffer Time vs Time for All ABR Algorithms Seek")
     plt.legend()
     plt.grid(visible=True, which='both', linestyle='--', alpha=0.5)
     plt.show()
