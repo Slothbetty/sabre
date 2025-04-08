@@ -71,30 +71,43 @@ def get_buffer_level():
     return manifest.segment_time * len(buffer_contents) - buffer_fcc
 
 
-def update_total_play_time(delta):
-    global next_segment, buffer_contents, buffer_fcc, total_play_time, rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
-    while delta > 0:
-        step = min(delta, 1)  # process in 1-ms chunks
-        total_play_time += step
-        delta -= step
-        # Check after each step whether a seek event should be triggered.
-        if seek_events and total_play_time >= seek_events[0]["seek_when"] * 1000:
+def interrupted_by_seek(delta):
+    global next_segment, buffer_contents, buffer_fcc, total_play_time
+    global rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
+
+    # If a seek event is scheduled, check if the added delta would pass its time.
+    if seek_events:
+        # Convert the next scheduled seek time to milliseconds.
+        seek_when_ms = seek_events[0]["seek_when"] * 1000
+        # If the upcoming delta would cross the seek event time:
+        if total_play_time < seek_when_ms and total_play_time + delta >= seek_when_ms:
+            # Instead of incrementing in 1-ms steps, update total_play_time to the seek event time directly.
+            total_play_time = seek_when_ms
+
+            # Process the seek event.
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
             new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
-            # Record the seek time for later log adjustments.
             last_seek_time = total_play_time
+
             if verbose:
                 print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
                       (total_play_time, seek_to, new_segment))
             next_segment = new_segment
+
+            # For a linear buffer, you might want to adjust the buffer contents instead of clearing
+            # if parts of the buffer should be kept, but for now we clear the buffer.
             buffer_contents.clear()
             buffer_fcc = 0
             abr.report_seek(seek_to * 1000)
             rampup_origin = total_play_time
             rampup_time = None
-            return False  # Interrupt: a seek was processed.
-    return True
+            return True  # Indicate a seek event was processed.
+    
+    # If no seek event occurs in this delta, just increment total_play_time.
+    total_play_time += delta
+    return False
+
 
 def deplete_buffer(time):
     """
@@ -108,7 +121,7 @@ def deplete_buffer(time):
 
     if len(buffer_contents) == 0:
         rebuffer_time += time
-        if not update_total_play_time(time):
+        if interrupted_by_seek(time):
             return False  # Seek event triggered: abort depleting further.
         rebuffer_event_count += 1
         segment_rebuffer_time = time
@@ -118,12 +131,12 @@ def deplete_buffer(time):
         # Play the remaining fraction of the first chunk.
         if time + buffer_fcc < manifest.segment_time:
             buffer_fcc += time
-            if not update_total_play_time(time):
+            if interrupted_by_seek(time):
                 return False
             return True
         dt = manifest.segment_time - buffer_fcc
         time -= dt
-        if not update_total_play_time(dt):
+        if interrupted_by_seek(dt):
             return False
         buffer_contents.pop(0)
         buffer_fcc = 0
@@ -150,18 +163,18 @@ def deplete_buffer(time):
 
         if time >= manifest.segment_time:
             buffer_contents.pop(0)
-            if not update_total_play_time(manifest.segment_time):
+            if interrupted_by_seek(manifest.segment_time):
                 return False
             time -= manifest.segment_time
         else:
             buffer_fcc = time
-            if not update_total_play_time(time):
+            if interrupted_by_seek(time):
                 return False
             time = 0
 
     if time > 0:
         rebuffer_time += time
-        if not update_total_play_time(time):
+        if interrupted_by_seek(time):
             return False
         rebuffer_event_count += 1
         segment_rebuffer_time = time
@@ -354,8 +367,6 @@ def process_download_loop():
             effective_download_time = effective_end - start_time
             if download_metric.time > 0:
                 effective_downloaded = int(download_metric.downloaded * effective_download_time / download_metric.time)
-            else:
-                effective_downloaded = download_metric.downloaded
             if verbose:
                 print(
                     "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
