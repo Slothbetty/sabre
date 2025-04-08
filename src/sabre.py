@@ -75,39 +75,55 @@ def interrupted_by_seek(delta):
     global next_segment, buffer_contents, buffer_fcc, total_play_time
     global rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
 
-    # If a seek event is scheduled, check if the added delta would pass its time.
+    # Check for a pending seek event.
     if seek_events:
         # Convert the next scheduled seek time to milliseconds.
         seek_when_ms = seek_events[0]["seek_when"] * 1000
-        # If the upcoming delta would cross the seek event time:
+        # If adding delta would cross the seek event time, process the seek.
         if total_play_time < seek_when_ms and total_play_time + delta >= seek_when_ms:
-            # Instead of incrementing in 1-ms steps, update total_play_time to the seek event time directly.
+            # Directly update the play time to the scheduled seek time.
             total_play_time = seek_when_ms
 
-            # Process the seek event.
+            # Get the seek event and convert seek_to into milliseconds.
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
-            new_segment = math.floor((seek_to * 1000) / manifest.segment_time)
+            seek_to_ms = seek_to * 1000
+            new_segment = math.floor(seek_to_ms / manifest.segment_time)
             last_seek_time = total_play_time
 
             if verbose:
                 print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
                       (total_play_time, seek_to, new_segment))
-            next_segment = new_segment
 
-            # For a linear buffer, you might want to adjust the buffer contents instead of clearing
-            # if parts of the buffer should be kept, but for now we clear the buffer.
-            buffer_contents.clear()
+            # Compute the segment index corresponding to the first element in the buffer.
+            # next_segment always equals: buffer_base + len(buffer_contents)
+            buffer_base = next_segment - len(buffer_contents)
+
+            # If the current buffered segments span content past the new playback position,
+            # keep the segments that are beyond 'new_segment'.
+            if buffer_contents and new_segment >= buffer_base and new_segment < next_segment:
+                # Calculate how many segments to drop.
+                skip_count = new_segment - buffer_base
+                buffer_contents = buffer_contents[skip_count:]
+                # Update next_segment to reflect the new base plus the segments kept.
+                next_segment = new_segment + len(buffer_contents)
+            else:
+                # Otherwise, if no buffered segment is relevant, clear the buffer.
+                buffer_contents.clear()
+                next_segment = new_segment
+
+            # Reset the first chunk indicator since we might be in a fresh segment.
             buffer_fcc = 0
-            abr.report_seek(seek_to * 1000)
+            # Notify ABR of the seek event (using seek time in milliseconds).
+            abr.report_seek(seek_to_ms)
+            # Reset rampup variables.
             rampup_origin = total_play_time
             rampup_time = None
-            return True  # Indicate a seek event was processed.
-    
-    # If no seek event occurs in this delta, just increment total_play_time.
+            return True  # Indicate that a seek was processed.
+
+    # If no seek event occurs in this delta, simply increment total_play_time.
     total_play_time += delta
     return False
-
 
 def deplete_buffer(time):
     """

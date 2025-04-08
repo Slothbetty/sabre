@@ -1,7 +1,6 @@
 {
-    "seeks": [
-      {"seek_when": 30, "seek_to": 120},
-      {"seek_when": 90, "seek_to": 240}
-    ]
-  }
-  
+  "seeks": [
+    {"seek_when": 15, "seek_to": 18},
+    {"seek_when": 40, "seek_to": 43}
+  ]
+}
