@@ -88,6 +88,9 @@ def interrupted_by_seek(delta):
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
             seek_to_ms = seek_to * 1000
+            # TODO: floor and ceil, seek_to_ms close to next segment time then use ceil. 
+            # seek_to_ms not close to next segment time then use floor.
+            # seek_to - prev chunk < chunk size/2 then use floor, else ceil.
             new_segment = math.floor(seek_to_ms / manifest.segment_time)
             last_seek_time = total_play_time
 
@@ -105,8 +108,6 @@ def interrupted_by_seek(delta):
                 # Calculate how many segments to drop.
                 skip_count = new_segment - buffer_base
                 buffer_contents = buffer_contents[skip_count:]
-                # Update next_segment to reflect the new base plus the segments kept.
-                next_segment = new_segment + len(buffer_contents)
             else:
                 # Otherwise, if no buffered segment is relevant, clear the buffer.
                 buffer_contents.clear()
@@ -114,6 +115,8 @@ def interrupted_by_seek(delta):
 
             # Reset the first chunk indicator since we might be in a fresh segment.
             buffer_fcc = 0
+            # TODO: may need to update the buffer_fcc to reflect the new segment.
+            # buffer_fcc = seek_to_ms - math.floor(seek_to_ms / manifest.segment_time)*manifest.segment_time
             # Notify ABR of the seek event (using seek time in milliseconds).
             abr.report_seek(seek_to_ms)
             # Reset rampup variables.
