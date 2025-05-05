@@ -30,6 +30,7 @@ import os
 from importlib.machinery import SourceFileLoader
 from collections import namedtuple
 from enum import Enum
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 
 # Units used throughout:
 #     size     : bits
@@ -1742,6 +1743,52 @@ class ReplacementInput(Replacement):
     def check_abandon(self, progress, buffer_level):
         return self.replacement.check_abandon(progress, buffer_level)
 
+class FakeHotDASH(Abr):
+    """
+    Fake HotDASH-style ABR:
+      • Stage-1: download `initial_safe_segments` of quality 0 per position.
+      • Stage-2: for each (segment_index, pos) cycle quality = (segment_index+pos) % (max_quality+1).
+    """
+    def __init__(self, config):
+        super().__init__(config)
+        # how many “safe” segments at startup:
+        self.initial_safe = config.get("initial_safe_segments", 2)
+        # highest quality index allowed:
+        self.max_quality   = config.get("max_quality", len(manifest.bitrates)-1)
+
+    def get_initial_segments(self, positions):
+        """
+        Returns a dict: position -> [0, 0, …] (quality-0 segments)
+        """
+        return {pos: [0]*self.initial_safe for pos in positions}
+
+    def get_quality_delay(self, segment_index, pos=None):
+        """
+        After startup, pick a simple cycling quality.
+          - quality = (segment_index + pos) % (max_quality+1)
+          - no additional delay
+        """
+        # if called without pos (legacy ABR), default pos=0
+        p = pos or 0
+        q = (segment_index + p) % (self.max_quality + 1)
+        return q, 0
+
+    def report_delay(self, delay):
+        # no-op for fake
+        pass
+
+    def report_download(self, metrics, is_replacement):
+        # no-op for fake
+        pass
+
+    def report_seek(self, where):
+        # no-op for fake
+        pass
+
+    def check_abandon(self, progress, buffer_level):
+        # never abandon mid-download
+        return None 
+abr_list["fakehotdash"] = FakeHotDASH
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
