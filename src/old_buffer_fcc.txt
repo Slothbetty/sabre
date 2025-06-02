@@ -1,0 +1,266 @@
+```json
+{
+  "seeks": [
+    {"seek_when": 15, "seek_to": 18},
+    {"seek_when": 40, "seek_to": 43}
+  ]
+}
+```
+0 16132
+1 18364    <- 0 11048
+2 20605    <- 1 13284
+3 22851    <- 2 15527
+4 25089    <- 3 17770
+5 27325    <- 4 20007
+6 29564    <- 5 22244
+7 31803    <- 6 24483
+8 35047    <- 7 27150
+9 36132    <- 8 29441
+[0] Network: bandwidth->1255, lantency->98 (sustainable_quality=4: bitrate=991)
+[0-804]  0: quality=0 download_size=886360/886360 download_time=804=98+706 buffer_level=0->0->3000
+[804-3102]  1: quality=4 download_size=2760272/2760272 download_time=2297=98+2199 buffer_level=702->702->3702
+[3102-4987]  2: quality=4 download_size=2243080/2243080 download_time=1885=98+1787 buffer_level=1817->1817->4817
+[4987-8088]  3: quality=4 download_size=3768472/3768472 download_time=3100=98+3002 buffer_level=1716->1716->4716
+[8088-10269]  4: quality=4 download_size=2614184/2614184 download_time=2181=98+2083 buffer_level=2535->2535->5535
+[10269-13282]  5: quality=5 download_size=3659008/3659008 download_time=3013=98+2915 buffer_level=2521->2521->5521
+[Seek] At playback time 15000 ms: seeking to 18 seconds (segment index 6)
+[13282-15000]  6: quality=4 download_size=2079086/3320728 download_time=1718=98+1620 buffer_level=0
+[15000-17744]  6: quality=4 download_size=3320728/3320728 download_time=2743=98+2645 buffer_level=0->0->3000
+[17744-20961]  7: quality=4 download_size=3914304/3914304 download_time=3216=98+3118 buffer_level=0->0->3000
+[20961-22480]  8: quality=3 download_size=1783880/1783880 download_time=1519=98+1421 buffer_level=1480->1480->4480
+[22480-24016]  9: quality=3 download_size=1803944/1803944 download_time=1535=98+1437 buffer_level=2945->2945->5945
+[24016-26635]  10: quality=4 download_size=3164568/3164568 download_time=2619=98+2521 buffer_level=3325->3325->6325
+[29999] Network: bandwidth->3775, lantency->202 (sustainable_quality=7: bitrate=2962)
+[26635-29014]  11: quality=4 download_size=2963000/2963000 download_time=2378=98+2280 buffer_level=3947->3947->6947
+[29014-29965]  12: quality=4 download_size=2829328/2829328 download_time=951=202+749 buffer_level=5995->5995->8995
+[29965-31378]  13: quality=5 download_size=4570208/4570208 download_time=1412=202+1210 buffer_level=7583->7583->10583
+[31378-33263]  14: quality=6 download_size=6351744/6351744 download_time=1884=202+1682 buffer_level=8698->8698->11698
+[33263-34981]  15: quality=6 download_size=5726000/5726000 download_time=1718=202+1516 buffer_level=9979->9979->12979
+[34981-37236]  16: quality=7 download_size=7749272/7749272 download_time=2254=202+2052 buffer_level=10724->10724->13724
+[Seek] At playback time 40000 ms: seeking to 43 seconds (segment index 14)
+[37236-40000]  17: quality=7 download_size=9717894/10346728 download_time=2764=202+2562 buffer_level=9000
+[40000-42041]  17: quality=6 download_size=6942520/6942520 download_time=2041=202+1839 buffer_level=6958->6958->9958
+[42041-43588]  18: quality=6 download_size=5077256/5077256 download_time=1546=202+1344 buffer_level=8411->8411->11411
+[43588-46722]  19: quality=7 download_size=11069064/11069064 download_time=3134=202+2932 buffer_level=8277->8277->11277
+[46722-49324]  20: quality=7 download_size=9059696/9059696 download_time=2601=202+2399 buffer_level=8675->8675->11675
+[49324-51435]  21: quality=7 download_size=7206624/7206624 download_time=2111=202+1909 buffer_level=9564->9564->12564
+[51435-53689]  22: quality=7 download_size=7744672/7744672 download_time=2253=202+2051 buffer_level=10311->10311->13311
+[53689-56629]  23: quality=7 download_size=10336808/10336808 download_time=2940=202+2738 buffer_level=10370->10370->13370
+[60000] Network: bandwidth->2354, lantency->63 (sustainable_quality=6: bitrate=2056)
+[56629-59266]  24: quality=7 download_size=8523464/8523464 download_time=2637=202+2435 buffer_level=10733->10733->13733
+[59266-63367]  25: quality=7 download_size=9503272/9503272 download_time=4100=63+4037 buffer_level=9633->9633->12633
+[63367-66475]  26: quality=7 download_size=7169384/7169384 download_time=3108=63+3045 buffer_level=9524->9524->12524
+[66475-70496]  27: quality=7 download_size=9316528/9316528 download_time=4020=63+3957 buffer_level=8504->8504->11504
+[70496-74255]  28: quality=7 download_size=8701352/8701352 download_time=3759=63+3696 buffer_level=7744->7744->10744
+[74255-77310]  29: quality=6 download_size=7043424/7043424 download_time=3055=63+2992 buffer_level=7689->7689->10689
+[77310-79728]  30: quality=6 download_size=5542176/5542176 download_time=2417=63+2354 buffer_level=8272->8272->11272
+[79728-83676]  31: quality=7 download_size=9146064/9146064 download_time=3948=63+3885 buffer_level=7323->7323->10323
+[83676-86085]  32: quality=6 download_size=5521280/5521280 download_time=2408=63+2345 buffer_level=7915->7915->10915
+[90000] Network: bandwidth->3157, lantency->58 (sustainable_quality=7: bitrate=2962)
+[86085-89219]  33: quality=6 download_size=7571168/7571168 download_time=3134=63+3071 buffer_level=7780->7780->10780
+[89219-90711]  34: quality=6 download_size=4525336/4525336 download_time=1491=58+1433 buffer_level=9289->9289->12289
+[90711-93949]  35: quality=7 download_size=10040424/10040424 download_time=3238=58+3180 buffer_level=9051->9051->12051
+[93949-96742]  36: quality=7 download_size=8633832/8633832 download_time=2792=58+2734 buffer_level=9258->9258->12258
+[96742-99906]  37: quality=7 download_size=9806400/9806400 download_time=3164=58+3106 buffer_level=9094->9094->12094
+[99906-102539]  38: quality=7 download_size=8128832/8128832 download_time=2632=58+2574 buffer_level=9461->9461->12461
+[102539-105859]  39: quality=7 download_size=10299616/10299616 download_time=3320=58+3262 buffer_level=9140->9140->12140
+[105859-108263]  40: quality=7 download_size=7404760/7404760 download_time=2403=58+2345 buffer_level=9737->9737->12737
+[108263-111260]  41: quality=7 download_size=9280520/9280520 download_time=2997=58+2939 buffer_level=9739->9739->12739
+[111260-114628]  42: quality=7 download_size=10446928/10446928 download_time=3367=58+3309 buffer_level=9372->9372->12372
+[114628-117401]  43: quality=7 download_size=8573384/8573384 download_time=2773=58+2715 buffer_level=9598->9598->12598
+[120000] Network: bandwidth->647, lantency->245 (sustainable_quality=2: bitrate=477)
+[117401-125094]  44: quality=7 download_size=8291704/8291704 download_time=7692=58+7634 buffer_level=4905->4905->7905
+[125094-131696]  45: quality=5 download_size=4112976/4112976 download_time=6601=245+6356 buffer_level=1303->1303->4303
+[131696-134284]  46: quality=2 download_size=1516120/1516120 download_time=2588=245+2343 buffer_level=1715->1715->4715
+[134284-136689]  47: quality=2 download_size=1397520/1397520 download_time=2405=245+2160 buffer_level=2310->2310->5310
+[136689-139109]  48: quality=2 download_size=1407200/1407200 download_time=2419=245+2174 buffer_level=2890->2890->5890
+[139109-141517]  49: quality=2 download_size=1399072/1399072 download_time=2407=245+2162 buffer_level=3483->3483->6483
+[141517-143986]  50: quality=2 download_size=1439256/1439256 download_time=2469=245+2224 buffer_level=4013->4013->7013
+[143986-147270]  51: quality=3 download_size=1966272/1966272 download_time=3284=245+3039 buffer_level=3729->3729->6729
+[150000] Network: bandwidth->2265, lantency->99 (sustainable_quality=6: bitrate=2056)
+[147270-149234]  52: quality=3 download_size=1822248/1822248 download_time=1963=245+1718 buffer_level=4766->4766->7766
+[149234-150392]  53: quality=3 download_size=2399016/2399016 download_time=1158=99+1059 buffer_level=6608->6608->9608
+[150392-151764]  54: quality=4 download_size=2883040/2883040 download_time=1371=99+1272 buffer_level=8236->8236->11236
+[151764-153563]  55: quality=5 download_size=3850696/3850696 download_time=1799=99+1700 buffer_level=9437->9437->12437
+[153563-155497]  56: quality=5 download_size=4156312/4156312 download_time=1934=99+1835 buffer_level=10503->10503->13503
+[155497-158738]  57: quality=6 download_size=7117856/7117856 download_time=3241=99+3142 buffer_level=10261->10261->13261
+[158738-160782]  58: quality=5 download_size=4405232/4405232 download_time=2043=99+1944 buffer_level=11217->11217->14217
+[160782-162944]  59: quality=6 download_size=4671576/4671576 download_time=2161=99+2062 buffer_level=12056->12056->15056
+[162944-166268]  60: quality=6 download_size=7304528/7304528 download_time=3323=99+3224 buffer_level=11732->11732->14732
+[166268-168828]  61: quality=6 download_size=5574976/5574976 download_time=2560=99+2461 buffer_level=12171->12171->15171
+[168828-172105]  62: quality=6 download_size=7198488/7198488 download_time=3277=99+3178 buffer_level=11894->11894->14894
+[172105-174419]  63: quality=6 download_size=5015856/5015856 download_time=2313=99+2214 buffer_level=12581->12581->15581
+[180000] Network: bandwidth->634, lantency->112 (sustainable_quality=2: bitrate=477)
+[174419-179682]  64: quality=7 download_size=10249336/10249336 download_time=5262=99+5163 buffer_level=10318->10318->13318
+[179682-189546]  65: quality=6 download_size=6182824/6182824 download_time=9864=112+9752 buffer_level=3454->3454->6454
+[189546-192214]  66: quality=2 download_size=1620744/1620744 download_time=2668=112+2556 buffer_level=3785->3785->6785
+[192214-195094]  67: quality=3 download_size=1755096/1755096 download_time=2880=112+2768 buffer_level=3905->3905->6905
+[195094-198460]  68: quality=3 download_size=2062952/2062952 download_time=3365=112+3253 buffer_level=3539->3539->6539
+[198460-200630]  69: quality=2 download_size=1304952/1304952 download_time=2170=112+2058 buffer_level=4369->4369->7369
+[200630-204155]  70: quality=3 download_size=2163344/2163344 download_time=3524=112+3412 buffer_level=3845->3845->6845
+[204155-206877]  71: quality=3 download_size=1654760/1654760 download_time=2722=112+2610 buffer_level=4123->4123->7123
+[210000] Network: bandwidth->1564, lantency->208 (sustainable_quality=5: bitrate=1427)
+[206877-209623]  72: quality=3 download_size=2440720/2440720 download_time=2746=112+2634 buffer_level=4376->4376->7376
+[209623-211059]  73: quality=3 download_size=1920088/1920088 download_time=1435=208+1227 buffer_level=5941->5941->8941
+[211059-213525]  74: quality=4 download_size=3532440/3532440 download_time=2466=208+2258 buffer_level=6474->6474->9474
+[213525-215153]  75: quality=4 download_size=2220472/2220472 download_time=1627=208+1419 buffer_level=7846->7846->10846
+[215153-217477]  76: quality=4 download_size=3309112/3309112 download_time=2323=208+2115 buffer_level=8523->8523->11523
+[217477-220215]  77: quality=5 download_size=3957240/3957240 download_time=2738=208+2530 buffer_level=8784->8784->11784
+[220215-224038]  78: quality=5 download_size=5653728/5653728 download_time=3822=208+3614 buffer_level=7961->7961->10961
+[224038-226192]  79: quality=4 download_size=3042872/3042872 download_time=2153=208+1945 buffer_level=8808->8808->11808
+[226192-228789]  80: quality=5 download_size=3737336/3737336 download_time=2597=208+2389 buffer_level=9210->9210->12210
+[228789-230782]  81: quality=5 download_size=2791712/2791712 download_time=1992=208+1784 buffer_level=10217->10217->13217
+[230782-234371]  82: quality=5 download_size=5286936/5286936 download_time=3588=208+3380 buffer_level=9629->9629->12629
+[234371-237082]  83: quality=5 download_size=3915464/3915464 download_time=2711=208+2503 buffer_level=9917->9917->12917
+[240000] Network: bandwidth->2489, lantency->207 (sustainable_quality=6: bitrate=2056)
+[237082-239865]  84: quality=5 download_size=5018104/5018104 download_time=2783=208+2575 buffer_level=10134->10134->13134
+[239865-241494]  85: quality=5 download_size=3538808/3538808 download_time=1628=207+1421 buffer_level=11505->11505->14505
+[241494-244469]  86: quality=6 download_size=6888272/6888272 download_time=2974=207+2767 buffer_level=11531->11531->14531
+[244469-246725]  87: quality=6 download_size=5099536/5099536 download_time=2255=207+2048 buffer_level=12275->12275->15275
+[246725-249743]  88: quality=6 download_size=6997848/6997848 download_time=3018=207+2811 buffer_level=12256->12256->15256
+[249743-252490]  89: quality=6 download_size=6322376/6322376 download_time=2747=207+2540 buffer_level=12509->12509->15509
+[252490-256369]  90: quality=7 download_size=9139528/9139528 download_time=3878=207+3671 buffer_level=11630->11630->14630
+[256369-258330]  91: quality=6 download_size=4364824/4364824 download_time=1960=207+1753 buffer_level=12670->12670->15670
+[258330-262749]  92: quality=7 download_size=10484824/10484824 download_time=4419=207+4212 buffer_level=11250->11250->14250
+[262749-265245]  93: quality=6 download_size=5695752/5695752 download_time=2495=207+2288 buffer_level=11755->11755->14755
+[265245-268250]  94: quality=6 download_size=6964448/6964448 download_time=3005=207+2798 buffer_level=11750->11750->14750
+[270000] Network: bandwidth->942, lantency->231 (sustainable_quality=3: bitrate=688)
+[268250-272677]  95: quality=6 download_size=4498536/4498536 download_time=4427=207+4220 buffer_level=10322->10322->13322
+[272677-279836]  96: quality=6 download_size=6526568/6526568 download_time=7159=231+6928 buffer_level=6163->6163->9163
+[279836-283704]  97: quality=4 download_size=3425752/3425752 download_time=3867=231+3636 buffer_level=5295->5295->8295
+[283704-285705]  98: quality=3 download_size=1667208/1667208 download_time=2000=231+1769 buffer_level=6294->6294->9294
+[285705-288973]  99: quality=4 download_size=2860952/2860952 download_time=3268=231+3037 buffer_level=6026->6026->9026
+[288973-295418]  100: quality=4 download_size=5853176/5853176 download_time=6444=231+6213 buffer_level=2582->2582->5582
+[295418-295983]  101: quality=2 download_size=315104/315104 download_time=565=231+334 buffer_level=5016->5016->8016
+[295983-298027]  102: quality=3 download_size=1707496/1707496 download_time=2043=231+1812 buffer_level=5973->5973->8973
+[300000] Network: bandwidth->1255, lantency->98 (sustainable_quality=4: bitrate=991)
+[298027-301099]  103: quality=4 download_size=3397696/3397696 download_time=3072=231+2841 buffer_level=5900->5900->8900
+[301099-303800]  104: quality=4 download_size=3266432/3266432 download_time=2700=98+2602 buffer_level=6200->6200->9200
+[303800-306221]  105: quality=4 download_size=2915640/2915640 download_time=2421=98+2323 buffer_level=6779->6779->9779
+[306221-308372]  106: quality=4 download_size=2576176/2576176 download_time=2150=98+2052 buffer_level=7628->7628->10628
+[308372-310829]  107: quality=4 download_size=2960288/2960288 download_time=2456=98+2358 buffer_level=8171->8171->11171
+[310829-314235]  108: quality=5 download_size=4152576/4152576 download_time=3406=98+3308 buffer_level=7764->7764->10764
+[314235-316722]  109: quality=4 download_size=2998144/2998144 download_time=2486=98+2388 buffer_level=8277->8277->11277
+[316722-320273]  110: quality=5 download_size=4333144/4333144 download_time=3550=98+3452 buffer_level=7726->7726->10726
+[320273-322705]  111: quality=4 download_size=2928704/2928704 download_time=2431=98+2333 buffer_level=8295->8295->11295
+[322705-326036]  112: quality=5 download_size=4057776/4057776 download_time=3331=98+3233 buffer_level=7964->7964->10964
+[329999] Network: bandwidth->3775, lantency->202 (sustainable_quality=7: bitrate=2962)
+[326036-328915]  113: quality=4 download_size=3792880/3792880 download_time=2878=98+2780 buffer_level=8085->8085->11085
+[328915-330111]  114: quality=5 download_size=3751800/3751800 download_time=1195=202+993 buffer_level=9889->9889->12889
+[330111-331313]  115: quality=5 download_size=3775656/3775656 download_time=1202=202+1000 buffer_level=11687->11687->14687
+[331313-333308]  116: quality=6 download_size=6768504/6768504 download_time=1994=202+1792 buffer_level=12692->12692->15692
+[333308-335716]  117: quality=7 download_size=8329608/8329608 download_time=2408=202+2206 buffer_level=13283->13283->16283
+[335716-338421]  118: quality=7 download_size=9447728/9447728 download_time=2704=202+2502 buffer_level=13578->13578->16578
+[338421-340991]  119: quality=7 download_size=8939816/8939816 download_time=2570=202+2368 buffer_level=14008->14008->17008
+[340991-343248]  120: quality=7 download_size=7755576/7755576 download_time=2256=202+2054 buffer_level=14752->14752->17752
+[343248-346151]  121: quality=7 download_size=10198424/10198424 download_time=2903=202+2701 buffer_level=14848->14848->17848
+[346151-348599]  122: quality=7 download_size=8477448/8477448 download_time=2447=202+2245 buffer_level=15401->15401->18401
+[348599-352093]  123: quality=8 download_size=12426304/12426304 download_time=3493=202+3291 buffer_level=14907->14907->17907
+[352093-354673]  124: quality=7 download_size=8977816/8977816 download_time=2580=202+2378 buffer_level=15327->15327->18327
+[360000] Network: bandwidth->2354, lantency->63 (sustainable_quality=6: bitrate=2056)
+[354673-358856]  125: quality=8 download_size=14942096/14942096 download_time=4183=202+3981 buffer_level=14143->14143->17143
+[358856-361467]  126: quality=7 download_size=5998152/5998152 download_time=2611=63+2548 buffer_level=14532->14532->17532
+[361467-365191]  127: quality=7 download_size=8616312/8616312 download_time=3723=63+3660 buffer_level=13809->13809->16809
+[365191-369525]  128: quality=7 download_size=10055408/10055408 download_time=4334=63+4271 buffer_level=12474->12474->15474
+[369525-372119]  129: quality=6 download_size=5956400/5956400 download_time=2593=63+2530 buffer_level=12881->12881->15881
+[372119-376486]  130: quality=7 download_size=10131864/10131864 download_time=4367=63+4304 buffer_level=11514->11514->14514
+[376486-378510]  131: quality=6 download_size=4617520/4617520 download_time=2024=63+1961 buffer_level=12489->12489->15489
+[378510-381500]  132: quality=6 download_size=6889000/6889000 download_time=2989=63+2926 buffer_level=12500->12500->15500
+[381500-383738]  133: quality=6 download_size=5119504/5119504 download_time=2237=63+2174 buffer_level=13262->13262->16262
+[383738-387762]  134: quality=7 download_size=9324224/9324224 download_time=4024=63+3961 buffer_level=12238->12238->15238
+[389999] Network: bandwidth->3157, lantency->58 (sustainable_quality=7: bitrate=2962)
+[387762-389930]  135: quality=6 download_size=5868392/5868392 download_time=2168=63+2105 buffer_level=13069->13069->16069
+[389930-392938]  136: quality=7 download_size=9311784/9311784 download_time=3007=58+2949 buffer_level=13062->13062->16062
+[392938-396759]  137: quality=7 download_size=11880648/11880648 download_time=3821=58+3763 buffer_level=12240->12240->15240
+[396759-398775]  138: quality=6 download_size=6182408/6182408 download_time=2016=58+1958 buffer_level=13224->13224->16224
+[398775-400590]  139: quality=7 download_size=5546128/5546128 download_time=1814=58+1756 buffer_level=14409->14409->17409
+[400590-404332]  140: quality=7 download_size=11630696/11630696 download_time=3742=58+3684 buffer_level=13667->13667->16667
+[404332-406253]  141: quality=7 download_size=5882256/5882256 download_time=1921=58+1863 buffer_level=14746->14746->17746
+[406253-409802]  142: quality=7 download_size=11019384/11019384 download_time=3548=58+3490 buffer_level=14198->14198->17198
+[409802-413081]  143: quality=7 download_size=10169184/10169184 download_time=3279=58+3221 buffer_level=13918->13918->16918
+[413081-414881]  144: quality=7 download_size=5498184/5498184 download_time=1799=58+1741 buffer_level=15119->15119->18119
+[414881-418236]  145: quality=7 download_size=10410992/10410992 download_time=3355=58+3297 buffer_level=14763->14763->17763
+[419999] Network: bandwidth->647, lantency->245 (sustainable_quality=2: bitrate=477)
+[418236-428503]  146: quality=7 download_size=7860952/7860952 download_time=10267=58+10209 buffer_level=7496->7496->10496
+[428503-434432]  147: quality=4 download_size=3677328/3677328 download_time=5928=245+5683 buffer_level=4567->4567->7567
+[434432-437565]  148: quality=3 download_size=1868376/1868376 download_time=3132=245+2887 buffer_level=4435->4435->7435
+[437565-440474]  149: quality=3 download_size=1723504/1723504 download_time=2908=245+2663 buffer_level=4526->4526->7526
+[440474-444188]  150: quality=3 download_size=2244608/2244608 download_time=3714=245+3469 buffer_level=3812->3812->6812
+[444188-447314]  151: quality=3 download_size=1863760/1863760 download_time=3125=245+2880 buffer_level=3686->3686->6686
+[450000] Network: bandwidth->2265, lantency->99 (sustainable_quality=6: bitrate=2056)
+[447314-449527]  152: quality=3 download_size=2458464/2458464 download_time=2213=245+1968 buffer_level=4472->4472->7472
+[449527-450389]  153: quality=3 download_size=1727112/1727112 download_time=861=99+762 buffer_level=6611->6611->9611
+[450389-452553]  154: quality=4 download_size=4678680/4678680 download_time=2164=99+2065 buffer_level=7446->7446->10446
+[452553-453268]  155: quality=4 download_size=1393736/1393736 download_time=714=99+615 buffer_level=9732->9732->12732
+[453268-455126]  156: quality=5 download_size=3984344/3984344 download_time=1858=99+1759 buffer_level=10874->10874->13874
+[455126-457817]  157: quality=6 download_size=5871536/5871536 download_time=2691=99+2592 buffer_level=11183->11183->14183
+[457817-460749]  158: quality=6 download_size=6416816/6416816 download_time=2932=99+2833 buffer_level=11251->11251->14251
+[460749-464018]  159: quality=6 download_size=7179968/7179968 download_time=3268=99+3169 buffer_level=10982->10982->13982
+[464018-466449]  160: quality=6 download_size=5283128/5283128 download_time=2431=99+2332 buffer_level=11550->11550->14550
+[466449-471218]  161: quality=6 download_size=10577000/10577000 download_time=4768=99+4669 buffer_level=9781->9781->12781
+[471218-472571]  162: quality=5 download_size=2839376/2839376 download_time=1352=99+1253 buffer_level=11429->11429->14429
+[472571-475356]  163: quality=6 download_size=6083544/6083544 download_time=2784=99+2685 buffer_level=11644->11644->14644
+[475356-477214]  164: quality=6 download_size=3985368/3985368 download_time=1858=99+1759 buffer_level=12785->12785->15785
+[480000] Network: bandwidth->634, lantency->112 (sustainable_quality=2: bitrate=477)
+[477214-492484]  165: quality=7 download_size=12034632/12034632 download_time=15269=99+15170 buffer_level=516->516->3516
+[492484-493740]  166: quality=1 download_size=725352/725352 download_time=1256=112+1144 buffer_level=2259->2259->5259
+[493740-495885]  167: quality=2 download_size=1288880/1288880 download_time=2144=112+2032 buffer_level=3115->3115->6115
+[495885-498235]  168: quality=2 download_size=1419112/1419112 download_time=2350=112+2238 buffer_level=3764->3764->6764
+[498235-501781]  169: quality=3 download_size=2176792/2176792 download_time=3545=112+3433 buffer_level=3219->3219->6219
+[501781-503989]  170: quality=2 download_size=1328824/1328824 download_time=2207=112+2095 buffer_level=4011->4011->7011
+[503989-507364]  171: quality=3 download_size=2069192/2069192 download_time=3375=112+3263 buffer_level=3635->3635->6635
+[510000] Network: bandwidth->1564, lantency->208 (sustainable_quality=5: bitrate=1427)
+[507364-509585]  172: quality=3 download_size=2072504/2072504 download_time=2221=112+2109 buffer_level=4414->4414->7414
+[509585-511081]  173: quality=3 download_size=2014280/2014280 download_time=1495=208+1287 buffer_level=5918->5918->8918
+[511081-513208]  174: quality=4 download_size=3000912/3000912 download_time=2126=208+1918 buffer_level=6791->6791->9791
+[513208-515270]  175: quality=4 download_size=2899040/2899040 download_time=2061=208+1853 buffer_level=7730->7730->10730
+[515270-517446]  176: quality=4 download_size=3078704/3078704 download_time=2176=208+1968 buffer_level=8553->8553->11553
+[517446-520627]  177: quality=5 download_size=4648880/4648880 download_time=3180=208+2972 buffer_level=8373->8373->11373
+[520627-523219]  178: quality=5 download_size=3729528/3729528 download_time=2592=208+2384 buffer_level=8780->8780->11780
+[523219-525975]  179: quality=5 download_size=3984144/3984144 download_time=2755=208+2547 buffer_level=9025->9025->12025
+[525975-528972]  180: quality=5 download_size=4362744/4362744 download_time=2997=208+2789 buffer_level=9027->9027->12027
+[528972-531998]  181: quality=5 download_size=4407976/4407976 download_time=3026=208+2818 buffer_level=9001->9001->12001
+[531998-534981]  182: quality=5 download_size=4339152/4339152 download_time=2982=208+2774 buffer_level=9019->9019->12019
+[534981-537889]  183: quality=5 download_size=4223648/4223648 download_time=2908=208+2700 buffer_level=9110->9110->12110
+[540000] Network: bandwidth->2489, lantency->207 (sustainable_quality=6: bitrate=2056)
+[537889-540222]  184: quality=5 download_size=4642496/4642496 download_time=2332=208+2124 buffer_level=9778->9778->12778
+[540222-542061]  185: quality=5 download_size=4063592/4063592 download_time=1839=207+1632 buffer_level=10938->10938->13938
+[542061-544620]  186: quality=6 download_size=5852216/5852216 download_time=2558=207+2351 buffer_level=11380->11380->14380
+[544620-547385]  187: quality=6 download_size=6366976/6366976 download_time=2765=207+2558 buffer_level=11615->11615->14615
+[547385-550131]  188: quality=6 download_size=6319784/6319784 download_time=2746=207+2539 buffer_level=11869->11869->14869
+[550131-553073]  189: quality=6 download_size=6808952/6808952 download_time=2942=207+2735 buffer_level=11926->11926->14926
+[553073-555255]  190: quality=6 download_size=4914480/4914480 download_time=2181=207+1974 buffer_level=12745->12745->15745
+[555255-558693]  191: quality=7 download_size=8042640/8042640 download_time=3438=207+3231 buffer_level=12306->12306->15306
+[558693-561968]  192: quality=6 download_size=7635784/7635784 download_time=3274=207+3067 buffer_level=12032->12032->15032
+[561968-564383]  193: quality=6 download_size=5496104/5496104 download_time=2415=207+2208 buffer_level=12616->12616->15616
+[564383-568010]  194: quality=7 download_size=8511648/8511648 download_time=3626=207+3419 buffer_level=11990->11990->14990
+[569999] Network: bandwidth->942, lantency->231 (sustainable_quality=3: bitrate=688)
+[568010-573574]  195: quality=6 download_size=5940848/5940848 download_time=5564=207+5357 buffer_level=9425->9425->12425
+[573574-578629]  196: quality=5 download_size=4544232/4544232 download_time=5055=231+4824 buffer_level=7370->7370->10370
+[578629-581822]  197: quality=4 download_size=2790288/2790288 download_time=3193=231+2962 buffer_level=7177->7177->10177
+[581822-584533]  198: quality=4 download_size=2335632/2335632 download_time=2710=231+2479 buffer_level=7467->7467->10467
+buffer size: 25000
+total played utility: 373.444273
+time average played utility: 1.882912
+total played bitrate: 351931.000000
+time average played bitrate: 1774.442017
+total play time: 595.000000
+total play time chunks: 198.333333
+total rebuffer: 2.960966
+rebuffer ratio: 0.004976
+time average rebuffer: 0.014929
+total rebuffer events: 2.000000
+time average rebuffer events: 0.010084
+total bitrate change: 62051.000000
+time average bitrate change: 312.862185
+total log bitrate change: 37.899875
+time average log bitrate change: 0.191092
+time average score: 1.858030
+over estimate count: 59
+over estimate: 318.817367
+leq estimate count: 139
+leq estimate: 533.039275
+estimate: -279.203205
+rampup time: 6.000000
+total reaction time: 146.804263
+network total time: 585.738192
