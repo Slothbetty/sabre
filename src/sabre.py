@@ -184,7 +184,7 @@ def deplete_buffer(time):
 
     # Process full segments.
     while time > 0 and len(buffer_contents) > 0:
-        quality = buffer_contents[0]
+        (_seg_idx, quality) = buffer_contents[0]
         played_utility += manifest.utilities[quality]
         played_bitrate += manifest.bitrates[quality]
         if last_played is not None and quality != last_played:
@@ -279,7 +279,7 @@ def advertize_new_network_quality(quality, previous_quality):
     # filter out switches which are not upwards (three separate checks)
     if quality <= previous_quality:
         return
-    for q in buffer_contents:
+    for (_idx, q) in buffer_contents:
         if quality <= q:
             return
     for p in pending_quality_up:
@@ -481,14 +481,15 @@ def process_download_loop():
         # Update buffer with new download.
         if replace is None:
             if download_metric.abandon_to_quality is None:
-                buffer_contents += [quality]
+                buffer_contents.append((next_segment, quality))
                 next_segment += 1
             else:
                 abandoned_to_quality = download_metric.abandon_to_quality
         else:
             if download_metric.abandon_to_quality is None:
                 if get_buffer_level() + manifest.segment_time * replace >= 0:
-                    buffer_contents[replace] = quality
+                    old_seg_idx, _ = buffer_contents[replace]
+                    buffer_contents[replace] = (old_seg_idx, quality)
                 else:
                     print("WARNING: too late to replace")
             else:
@@ -1618,7 +1619,8 @@ class Replace(Replacement):
             skip = math.ceil(1.5 + buffer_fcc / manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, buffer_fcc))
             for i in range(skip, len(buffer_contents)):
-                if buffer_contents[i] < quality:
+                (_seg_idx, q_i) = buffer_contents[i]
+                if q_i < quality:
                     self.replacing = i - len(buffer_contents)
                     break
 
@@ -1632,7 +1634,8 @@ class Replace(Replacement):
             skip = math.ceil(1.5 + buffer_fcc / manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, buffer_fcc))
             for i in range(len(buffer_contents) - 1, skip - 1, -1):
-                if buffer_contents[i] < quality:
+                (_seg_idx, q_i) = buffer_contents[i]
+                if q_i < quality:
                     self.replacing = i - len(buffer_contents)
                     break
 
@@ -1958,7 +1961,7 @@ if __name__ == "__main__":
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     startup_time = download_time
-    buffer_contents.append(download_metric.quality)
+    buffer_contents.append((0, download_metric.quality))
     t = download_metric.size / download_time
     l = download_metric.time_to_first_bit
     throughput_history.push(download_time, t, l)
