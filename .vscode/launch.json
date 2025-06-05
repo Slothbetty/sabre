@@ -7,10 +7,11 @@
             "request": "launch",
             "program": "${workspaceFolder}/src/sabre.py",  // Updated path to include src folder
             "args": [
-                "-g",
+                "-v",
                 "-a", "bola",
                 // "--seek", "30", "120",
-                "--movie", "movie.json"
+                "--movie", "movie.json",
+                "-sc", "seeks.json"
             ],
             "cwd": "${workspaceFolder}/src",  // Set working directory
             "console": "integratedTerminal",

@@ -88,10 +88,27 @@ def interrupted_by_seek(delta):
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
             seek_to_ms = seek_to * 1000
-            # TODO: floor and ceil, seek_to_ms close to next segment time then use ceil. 
-            # seek_to_ms not close to next segment time then use floor.
-            # seek_to - prev chunk < chunk size/2 then use floor, else ceil.
-            new_segment = math.floor(seek_to_ms / manifest.segment_time)
+            # Determine the segment index nearest to the requested seek time (seek_to_ms).
+            # We split each segment in half: if seek_to_ms is in the first half, round down;
+            # if it’s in the second half, round up.
+            seg_time = manifest.segment_time  # duration of each segment in milliseconds
+
+            # Compute the zero‐based index by flooring the division.
+            floor_idx = math.floor(seek_to_ms / seg_time)
+
+            # Calculate the timestamp of the start of the floor_idx segment.
+            prev_boundary = floor_idx * seg_time
+
+            # How many milliseconds past the start of that segment the seek target is.
+            delta = seek_to_ms - prev_boundary
+
+            if delta < (seg_time / 2):
+                # If target is in the first half of the segment, stay on floor_idx.
+                new_segment = floor_idx
+            else:
+                # If target is in the second half, advance to the next segment.
+                new_segment = floor_idx + 1
+
             last_seek_time = total_play_time
 
             if verbose:
@@ -113,10 +130,15 @@ def interrupted_by_seek(delta):
                 buffer_contents.clear()
                 next_segment = new_segment
 
-            # Reset the first chunk indicator since we might be in a fresh segment.
-            buffer_fcc = 0
-            # TODO: may need to update the buffer_fcc to reflect the new segment.
-            # buffer_fcc = seek_to_ms - math.floor(seek_to_ms / manifest.segment_time)*manifest.segment_time
+            # At this point, calculate how much of the first segment is already “used up”:
+            # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
+            # Otherwise, we jumped to the very start of a segment.
+            if new_segment == floor_idx:
+                # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
+                buffer_fcc = seek_to_ms - (floor_idx * seg_time)
+            else:
+                # Seek landed at a segment boundary: no partial chunk has been consumed.
+                buffer_fcc = 0
             # Notify ABR of the seek event (using seek time in milliseconds).
             abr.report_seek(seek_to_ms)
             # Reset rampup variables.
@@ -162,7 +184,7 @@ def deplete_buffer(time):
 
     # Process full segments.
     while time > 0 and len(buffer_contents) > 0:
-        quality = buffer_contents[0]
+        (_seg_idx, quality) = buffer_contents[0]
         played_utility += manifest.utilities[quality]
         played_bitrate += manifest.bitrates[quality]
         if last_played is not None and quality != last_played:
@@ -257,7 +279,7 @@ def advertize_new_network_quality(quality, previous_quality):
     # filter out switches which are not upwards (three separate checks)
     if quality <= previous_quality:
         return
-    for q in buffer_contents:
+    for (_idx, q) in buffer_contents:
         if quality <= q:
             return
     for p in pending_quality_up:
@@ -313,69 +335,6 @@ def process_download_loop():
                 print("abr delay %d bl=%d" % (delay, get_buffer_level()))
 
         download_metric = network.download(size, current_segment, quality, get_buffer_level(), check_abandon)
-
-        # if verbose:
-        #     print(
-        #         "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
-        #         % (
-        #             round(total_play_time),
-        #             round(total_play_time + download_metric.time),
-        #             current_segment,
-        #             download_metric.quality,
-        #             download_metric.downloaded,
-        #             download_metric.size,
-        #             download_metric.time,
-        #             download_metric.time_to_first_bit,
-        #             download_metric.time - download_metric.time_to_first_bit,
-        #         ),
-        #         end="",
-        #     )
-        #     if replace is None:
-        #         if download_metric.abandon_to_quality is None:
-        #             print("buffer_level=%d" % get_buffer_level(), end="")
-        #         else:
-        #             print(
-        #                 " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
-        #                 % (
-        #                     download_metric.abandon_to_quality,
-        #                     download_metric.downloaded,
-        #                     download_metric.size,
-        #                     download_metric.time,
-        #                     download_metric.time_to_first_bit,
-        #                     download_metric.time - download_metric.time_to_first_bit,
-        #                     get_buffer_level(),
-        #                 ),
-        #                 end="",
-        #             )
-        #     else:
-        #         if download_metric.abandon_to_quality is None:
-        #             print(" REPLACEMENT  bl=%d" % get_buffer_level(), end="")
-        #         else:
-        #             print(
-        #                 " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
-        #                 % (
-        #                     download_metric.time,
-        #                     download_metric.time_to_first_bit,
-        #                     download_metric.time - download_metric.time_to_first_bit,
-        #                     get_buffer_level(),
-        #                 ),
-        #                 end="",
-        #             )
-        # if graph:
-        #     print(
-        #         "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
-        #         % (
-        #             current_segment,
-        #             total_play_time + download_metric.time,
-        #             network.trace[network.index].bandwidth,
-        #             network.trace[network.index].latency,
-        #             download_metric.quality,
-        #             manifest.bitrates[download_metric.quality],
-        #             download_metric.downloaded,
-        #             download_metric.time,
-        #         ),
-        #         end="",
-        #     )
 
         start_time = round(total_play_time)
         success = deplete_buffer(download_metric.time)
@@ -522,14 +481,15 @@ def process_download_loop():
         # Update buffer with new download.
         if replace is None:
             if download_metric.abandon_to_quality is None:
-                buffer_contents += [quality]
+                buffer_contents.append((next_segment, quality))
                 next_segment += 1
             else:
                 abandoned_to_quality = download_metric.abandon_to_quality
         else:
             if download_metric.abandon_to_quality is None:
                 if get_buffer_level() + manifest.segment_time * replace >= 0:
-                    buffer_contents[replace] = quality
+                    old_seg_idx, _ = buffer_contents[replace]
+                    buffer_contents[replace] = (old_seg_idx, quality)
                 else:
                     print("WARNING: too late to replace")
             else:
@@ -1659,7 +1619,8 @@ class Replace(Replacement):
             skip = math.ceil(1.5 + buffer_fcc / manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, buffer_fcc))
             for i in range(skip, len(buffer_contents)):
-                if buffer_contents[i] < quality:
+                (_seg_idx, q_i) = buffer_contents[i]
+                if q_i < quality:
                     self.replacing = i - len(buffer_contents)
                     break
 
@@ -1673,7 +1634,8 @@ class Replace(Replacement):
             skip = math.ceil(1.5 + buffer_fcc / manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, buffer_fcc))
             for i in range(len(buffer_contents) - 1, skip - 1, -1):
-                if buffer_contents[i] < quality:
+                (_seg_idx, q_i) = buffer_contents[i]
+                if q_i < quality:
                     self.replacing = i - len(buffer_contents)
                     break
 
@@ -1999,7 +1961,7 @@ if __name__ == "__main__":
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     startup_time = download_time
-    buffer_contents.append(download_metric.quality)
+    buffer_contents.append((0, download_metric.quality))
     t = download_metric.size / download_time
     l = download_metric.time_to_first_bit
     throughput_history.push(download_time, t, l)
