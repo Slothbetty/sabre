@@ -47,6 +47,18 @@ from enum import Enum
 #     rebuffer total time
 #     session info
 
+"""
+[Jinhui] Coding style TODOs:
+1. Replace all the global variables with a singleton class GlobalState, and
+  update all the callsites.
+2. Move all the ABR algorithms into a separate file, and import them here.
+3. For any function w/ less than 5 global usage, refactor them to be local
+  functions, i.e., return the values of modified values, and update them in the
+  caller.
+4. [Optional, hard] For any function w/ more than 50 lines, separate into 2
+  functions.
+"""
+
 
 def load_json(path):
     with open(path) as file:
@@ -64,6 +76,7 @@ DownloadProgress = namedtuple(
 
 
 def get_buffer_level():
+    """Returns the current buffer level."""
     global manifest
     global buffer_contents
     global buffer_fcc # Note: buffer first content chunk: use to track remaining portion of the first segment in the playback buffer.
@@ -72,6 +85,9 @@ def get_buffer_level():
 
 
 def interrupted_by_seek(delta):
+    """[Jinhui] Add a function comment here.
+    """
+
     global next_segment, buffer_contents, buffer_fcc, total_play_time
     global rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
 
@@ -79,6 +95,16 @@ def interrupted_by_seek(delta):
     if seek_events:
         # Convert the next scheduled seek time to milliseconds.
         seek_when_ms = seek_events[0]["seek_when"] * 1000
+
+
+        """ [Jinhui] In the implementation below, the meanings of time are mixed:
+        - `total_play_time` is wall time;
+        - `seek_when` is defined also in wall time;
+        - `seek_to` is defined in playback time.
+        The last two are confusing.
+        Change `seek_to` to something like `pos_seek_to` might help.
+        """
+
         # If adding delta would cross the seek event time, process the seek.
         if total_play_time < seek_when_ms and total_play_time + delta >= seek_when_ms:
             # Directly update the play time to the scheduled seek time.
@@ -88,6 +114,10 @@ def interrupted_by_seek(delta):
             event = seek_events.pop(0)
             seek_to = event["seek_to"]
             seek_to_ms = seek_to * 1000
+
+            """ [Jinhui] Code/Comment below is too tedious, please
+            refactor this by extracting the code below into a function. """
+
             # Determine the segment index nearest to the requested seek time (seek_to_ms).
             # We split each segment in half: if seek_to_ms is in the first half, round down;
             # if it’s in the second half, round up.
@@ -160,6 +190,7 @@ def deplete_buffer(time):
     global rampup_origin, rampup_time, rampup_threshold, sustainable_quality, segment_rebuffer_time
     global pending_quality_up, seek_events
 
+    # Handles rebuffering when the buffer is empty
     if len(buffer_contents) == 0:
         rebuffer_time += time
         if interrupted_by_seek(time):
@@ -224,6 +255,7 @@ def deplete_buffer(time):
     return True  # Completed without interruption.
 
 def playout_buffer():
+    """Play out all the bufferred chunks. """
     global buffer_contents
     global buffer_fcc
 
@@ -726,9 +758,8 @@ class NetworkModel:
             )
 
         # print("check_abandon=%s" % check_abandon)
-        if not check_abandon or (
-            NetworkModel.min_progress_time <= 0 and NetworkModel.min_progress_size <= 0
-        ):
+        if not check_abandon or (NetworkModel.min_progress_time <= 0
+                                 and NetworkModel.min_progress_size <= 0):
             latency = self.do_latency_delay(1)
             time = latency + self.do_download(size)
             # print("time=%d" % time)
@@ -1447,7 +1478,7 @@ class ThroughputRule(Abr):
                     quality = None
 
         return quality
-    
+
     def report_seek(self, where):
         # Reset internal throughput-specific state.
         self.ibr_safety = ThroughputRule.low_buffer_safety_factor_init
@@ -1507,11 +1538,11 @@ class Dynamic(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
-        
+
     def report_seek(self, where):
         # Delegate the seek notification to both underlying strategies.
         self.bola.report_seek(where)
-        self.tput.report_seek(where)   
+        self.tput.report_seek(where)
 
 
 abr_list["dynamic"] = Dynamic
@@ -1564,7 +1595,7 @@ class DynamicDash(Abr):
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
-        
+
     def report_seek(self, where):
         # Notify both strategies of the seek event.
         self.bola.report_seek(where)
@@ -1851,13 +1882,13 @@ if __name__ == "__main__":
     "--seek-config",
     metavar="SEEK_CONFIG",
     help="Specify the JSON file containing multiple seek events."
-)
+    )
     args = parser.parse_args()
 
     verbose = args.verbose
     graph = args.graph
 
-    buffer_contents = []
+    buffer_contents = []    # buffer contents as in [chunk_quality_1, chunk_quality_2, ]
     buffer_fcc = 0
     pending_quality_up = []
     reaction_metrics = []
