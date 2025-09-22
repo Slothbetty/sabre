@@ -9,7 +9,7 @@ def main():
     parser.add_argument(
         "-o", "--output",
         required=True,
-        help="Path to the file where sabre.py’s stdout+stderr should be written."
+        help="Path to the file where sabre.py's stdout+stderr should be written."
     )
     parser.add_argument(
         "-s", "--seek-config",
