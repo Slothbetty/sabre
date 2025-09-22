@@ -83,9 +83,9 @@ DownloadProgress = namedtuple(
 )
 
 
-def get_buffer_level():
+def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
-    return gs.manifest.segment_time * len(gs.buffer_contents) - gs.buffer_fcc
+    return segment_time * len(buffer_contents) - buffer_fcc
 
 
 def interrupted_by_seek(delta):
@@ -247,44 +247,47 @@ def deplete_buffer(time):
         gs.rebuffer_event_count += 1
         gs.segment_rebuffer_time = time
 
-    process_quality_up(gs.total_play_time)
+    gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
     return True  # Completed without interruption.
 
-def playout_buffer():
+def playout_buffer(segment_time, buffer_contents, buffer_fcc, deplete_buffer_func):
     """Play out all the bufferred chunks. """
-    deplete_buffer(get_buffer_level())
+    deplete_buffer_func(get_buffer_level(segment_time, buffer_contents, buffer_fcc))
 
     # make sure no rounding error
-    del gs.buffer_contents[:]
-    gs.buffer_fcc = 0
+    del buffer_contents[:]
+    buffer_fcc = 0
+    return buffer_contents, buffer_fcc
 
 
 # The process_quality_up function processes pending quality upgrade requests that are older than a certain cutoff time.
 # It calculates the reaction time for each processed request and accumulates this time in a global counter.
 # The reaction time is either the maximum buffer size or a calculated value based on the request details.
-def process_quality_up(now):
+def process_quality_up(now, max_buffer_size, pending_quality_up, total_reaction_time):
     # check which switches can be processed
 
-    # print("now=%d, max_buffer_size=%d" % (now, gs.max_buffer_size))
-    cutoff = now - gs.max_buffer_size
+    # print("now=%d, max_buffer_size=%d" % (now, max_buffer_size))
+    cutoff = now - max_buffer_size
     # print("cutoff=%d" % cutoff)
-    # print("pending_quality_up=%s" % gs.pending_quality_up)
-    while len(gs.pending_quality_up) > 0 and gs.pending_quality_up[0][0] < cutoff:
-        p = gs.pending_quality_up.pop(0)
+    # print("pending_quality_up=%s" % pending_quality_up)
+    while len(pending_quality_up) > 0 and pending_quality_up[0][0] < cutoff:
+        p = pending_quality_up.pop(0)
         if len(p) == 2:
-            reaction = gs.max_buffer_size
+            reaction = max_buffer_size
         else:
-            reaction = min(gs.max_buffer_size, p[2] - p[0])
+            reaction = min(max_buffer_size, p[2] - p[0])
         # print('\n[%d] reaction time: %d' % (now, reaction))
         # print(p)
-        gs.total_reaction_time += reaction
+        total_reaction_time += reaction
+    
+    return pending_quality_up, total_reaction_time
 
 
 def advertize_new_network_quality(quality, previous_quality):
     # bookkeeping to track reaction time to increased bandwidth
 
     # process any previous quality up switches that have "matured"
-    process_quality_up(gs.network_total_time)
+    gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.network_total_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
 
     # mark any pending switch up done if new quality switches back below its quality
     for p in gs.pending_quality_up:
@@ -308,14 +311,14 @@ def advertize_new_network_quality(quality, previous_quality):
 def process_download_loop():
     while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
-        full_delay = get_buffer_level() + gs.manifest.segment_time - gs.buffer_size
+        full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
             if not deplete_buffer(full_delay):
                 continue  # A seek event was triggered; restart loop.
             gs.network.delay(full_delay)
             gs.abr.report_delay(full_delay)
             if gs.verbose:
-                print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level()))
+                print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
 
         # Determine quality and delay; handle potential replacement.
         if gs.abandoned_to_quality is None:
@@ -343,9 +346,9 @@ def process_download_loop():
                 continue  # Seek occurred, restart the loop.
             gs.network.delay(delay)
             if gs.verbose:
-                print("abr delay %d bl=%d" % (delay, get_buffer_level()))
+                print("abr delay %d bl=%d" % (delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
 
-        download_metric = gs.network.download(size, current_segment, quality, get_buffer_level(), check_abandon)
+        download_metric = gs.network.download(size, current_segment, quality, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), check_abandon)
 
         start_time = round(gs.total_play_time)
         success = deplete_buffer(download_metric.time)
@@ -375,7 +378,7 @@ def process_download_loop():
                 # Append extra logging details.
                 if replace is None:
                     if download_metric.abandon_to_quality is None:
-                        print("buffer_level=%d" % get_buffer_level())
+                        print("buffer_level=%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))
                     else:
                         print(
                             " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
@@ -386,13 +389,13 @@ def process_download_loop():
                                 download_metric.time,
                                 download_metric.time_to_first_bit,
                                 download_metric.time - download_metric.time_to_first_bit,
-                                get_buffer_level(),
+                                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
                             end="",
                         )
                 else:
                     if download_metric.abandon_to_quality is None:
-                        print(" REPLACEMENT  bl=%d" % get_buffer_level())
+                        print(" REPLACEMENT  bl=%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))
                     else:
                         print(
                             " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
@@ -400,7 +403,7 @@ def process_download_loop():
                                 download_metric.time,
                                 download_metric.time_to_first_bit,
                                 download_metric.time - download_metric.time_to_first_bit,
-                                get_buffer_level(),
+                                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
                             end="",
                         )
@@ -416,7 +419,7 @@ def process_download_loop():
                         gs.manifest.bitrates[download_metric.quality],
                         effective_downloaded,
                         effective_download_time,
-                        get_buffer_level(),
+                        get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                         0,
                         gs.is_bola
                     )
@@ -442,7 +445,7 @@ def process_download_loop():
                 # Append extra logging details.
                 if replace is None:
                     if download_metric.abandon_to_quality is None:
-                        print("buffer_level=%d" % get_buffer_level(), end="")
+                        print("buffer_level=%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), end="")
                     else:
                         print(
                             " ABANDONED to %d - %d/%d bits in %d=%d+%d ttfb+ttdl  bl=%d"
@@ -453,13 +456,13 @@ def process_download_loop():
                                 download_metric.time,
                                 download_metric.time_to_first_bit,
                                 download_metric.time - download_metric.time_to_first_bit,
-                                get_buffer_level(),
+                                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
                             end="",
                         )
                 else:
                     if download_metric.abandon_to_quality is None:
-                        print(" REPLACEMENT  bl=%d" % get_buffer_level(), end="")
+                        print(" REPLACEMENT  bl=%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), end="")
                     else:
                         print(
                             " REPLACMENT ABANDONED after %d=%d+%d ttfb+ttdl  bl=%d"
@@ -467,7 +470,7 @@ def process_download_loop():
                                 download_metric.time,
                                 download_metric.time_to_first_bit,
                                 download_metric.time - download_metric.time_to_first_bit,
-                                get_buffer_level(),
+                                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
                             end="",
                         )
@@ -487,7 +490,7 @@ def process_download_loop():
                     end="",
                 )
         if gs.verbose:
-            print("->%d" % get_buffer_level(), end="")
+            print("->%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), end="")
 
         # Update buffer with new download.
         if replace is None:
@@ -498,7 +501,7 @@ def process_download_loop():
                 gs.abandoned_to_quality = download_metric.abandon_to_quality
         else:
             if download_metric.abandon_to_quality is None:
-                if get_buffer_level() + gs.manifest.segment_time * replace >= 0:
+                if get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time * replace >= 0:
                     old_seg_idx, _ = gs.buffer_contents[replace]
                     gs.buffer_contents[replace] = (old_seg_idx, quality)
                 else:
@@ -507,16 +510,16 @@ def process_download_loop():
                 pass
 
         if gs.verbose:
-            print("->%d" % get_buffer_level())
+            print("->%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))
         if gs.graph:
             if gs.segment_rebuffer_time > 0:
                 print(
                     "buffer_level=%d rebuffer_time=%d is_bola=%s"
-                    % (get_buffer_level(), gs.segment_rebuffer_time, gs.is_bola)
+                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, gs.is_bola)
                 )
                 gs.segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(), 0, gs.is_bola))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, gs.is_bola))
 
         gs.abr.report_download(download_metric, replace is not None)
 
@@ -1100,7 +1103,7 @@ if __name__ == "__main__":
                 download_metric.time,
                 download_metric.time_to_first_bit,
                 download_metric.time - download_metric.time_to_first_bit,
-                get_buffer_level(),
+                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
             )
         )
     if gs.graph:
@@ -1131,7 +1134,7 @@ if __name__ == "__main__":
                 gs.manifest.bitrates[download_metric.quality],
                 download_metric.downloaded,
                 download_metric.time,
-                get_buffer_level(),
+                get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                 0,
                 gs.is_bola,
             )
@@ -1143,7 +1146,7 @@ if __name__ == "__main__":
     while gs.next_segment < len(gs.manifest.segments):
         process_download_loop()
 
-    playout_buffer()
+    gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, deplete_buffer)
 
     if gs.verbose:
         # multiply by to_time_average to get per/chunk average
