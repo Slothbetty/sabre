@@ -31,6 +31,8 @@ from importlib.machinery import SourceFileLoader
 from collections import namedtuple
 from enum import Enum
 
+from global_state import gs
+
 # Units used throughout:
 #     size     : bits
 #     time     : ms
@@ -81,24 +83,17 @@ DownloadProgress = namedtuple(
 
 def get_buffer_level():
     """Returns the current buffer level."""
-    global manifest
-    global buffer_contents
-    global buffer_fcc # Note: buffer first content chunk: use to track remaining portion of the first segment in the playback buffer.
-
-    return manifest.segment_time * len(buffer_contents) - buffer_fcc
+    return gs.manifest.segment_time * len(gs.buffer_contents) - gs.buffer_fcc
 
 
 def interrupted_by_seek(delta):
     """[Jinhui] Add a function comment here.
     """
 
-    global next_segment, buffer_contents, buffer_fcc, total_play_time
-    global rampup_origin, rampup_time, abr, verbose, seek_events, last_seek_time
-
     # Check for a pending seek event.
-    if seek_events:
+    if gs.seek_events:
         # Convert the next scheduled seek time to milliseconds.
-        seek_when_ms = seek_events[0]["seek_when"] * 1000
+        seek_when_ms = gs.seek_events[0]["seek_when"] * 1000
 
 
         """ [Jinhui] In the implementation below, the meanings of time are mixed:
@@ -110,12 +105,12 @@ def interrupted_by_seek(delta):
         """
 
         # If adding delta would cross the seek event time, process the seek.
-        if total_play_time < seek_when_ms and total_play_time + delta >= seek_when_ms:
+        if gs.total_play_time < seek_when_ms and gs.total_play_time + delta >= seek_when_ms:
             # Directly update the play time to the scheduled seek time.
-            total_play_time = seek_when_ms
+            gs.total_play_time = seek_when_ms
 
             # Get the seek event and convert seek_to into milliseconds.
-            event = seek_events.pop(0)
+            event = gs.seek_events.pop(0)
             seek_to = event["seek_to"]
             seek_to_ms = seek_to * 1000
 
@@ -124,8 +119,8 @@ def interrupted_by_seek(delta):
 
             # Determine the segment index nearest to the requested seek time (seek_to_ms).
             # We split each segment in half: if seek_to_ms is in the first half, round down;
-            # if it’s in the second half, round up.
-            seg_time = manifest.segment_time  # duration of each segment in milliseconds
+            # if it's in the second half, round up.
+            seg_time = gs.manifest.segment_time  # duration of each segment in milliseconds
 
             # Compute the zero‐based index by flooring the division.
             floor_idx = math.floor(seek_to_ms / seg_time)
@@ -143,45 +138,45 @@ def interrupted_by_seek(delta):
                 # If target is in the second half, advance to the next segment.
                 new_segment = floor_idx + 1
 
-            last_seek_time = total_play_time
+            gs.last_seek_time = gs.total_play_time
 
-            if verbose:
+            if gs.verbose:
                 print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-                      (total_play_time, seek_to, new_segment))
+                      (gs.total_play_time, seek_to, new_segment))
 
             # Compute the segment index corresponding to the first element in the buffer.
             # next_segment always equals: buffer_base + len(buffer_contents)
-            buffer_base = next_segment - len(buffer_contents)
+            buffer_base = gs.next_segment - len(gs.buffer_contents)
 
             # If the current buffered segments span content past the new playback position,
             # keep the segments that are beyond 'new_segment'.
-            if buffer_contents and new_segment >= buffer_base and new_segment < next_segment:
+            if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
                 # Calculate how many segments to drop.
                 skip_count = new_segment - buffer_base
-                buffer_contents = buffer_contents[skip_count:]
+                gs.buffer_contents = gs.buffer_contents[skip_count:]
             else:
                 # Otherwise, if no buffered segment is relevant, clear the buffer.
-                buffer_contents.clear()
-                next_segment = new_segment
+                gs.buffer_contents.clear()
+                gs.next_segment = new_segment
 
-            # At this point, calculate how much of the first segment is already “used up”:
+            # At this point, calculate how much of the first segment is already "used up":
             # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
             # Otherwise, we jumped to the very start of a segment.
             if new_segment == floor_idx:
                 # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
-                buffer_fcc = seek_to_ms - (floor_idx * seg_time)
+                gs.buffer_fcc = seek_to_ms - (floor_idx * seg_time)
             else:
                 # Seek landed at a segment boundary: no partial chunk has been consumed.
-                buffer_fcc = 0
+                gs.buffer_fcc = 0
             # Notify ABR of the seek event (using seek time in milliseconds).
-            abr.report_seek(seek_to_ms)
+            gs.abr.report_seek(seek_to_ms)
             # Reset rampup variables.
-            rampup_origin = total_play_time
-            rampup_time = None
+            gs.rampup_origin = gs.total_play_time
+            gs.rampup_time = None
             return True  # Indicate that a seek was processed.
 
     # If no seek event occurs in this delta, simply increment total_play_time.
-    total_play_time += delta
+    gs.total_play_time += delta
     return False
 
 def deplete_buffer(time):
@@ -189,199 +184,177 @@ def deplete_buffer(time):
     Process the playback buffer for the given amount of time.
     Returns True if depleting the buffer completes normally, or False if a seek event is detected and processed.
     """
-    global manifest, buffer_contents, buffer_fcc, rebuffer_event_count, rebuffer_time
-    global played_utility, played_bitrate, total_bitrate_change, total_log_bitrate_change, last_played
-    global rampup_origin, rampup_time, rampup_threshold, sustainable_quality, segment_rebuffer_time
-    global pending_quality_up, seek_events
-
     # Handles rebuffering when the buffer is empty
-    if len(buffer_contents) == 0:
-        rebuffer_time += time
+    if len(gs.buffer_contents) == 0:
+        gs.rebuffer_time += time
         if interrupted_by_seek(time):
             return False  # Seek event triggered: abort depleting further.
-        rebuffer_event_count += 1
-        segment_rebuffer_time = time
+        gs.rebuffer_event_count += 1
+        gs.segment_rebuffer_time = time
         return True
 
-    if buffer_fcc > 0:
+    if gs.buffer_fcc > 0:
         # Play the remaining fraction of the first chunk.
-        if time + buffer_fcc < manifest.segment_time:
-            buffer_fcc += time
+        if time + gs.buffer_fcc < gs.manifest.segment_time:
+            gs.buffer_fcc += time
             if interrupted_by_seek(time):
                 return False
             return True
-        dt = manifest.segment_time - buffer_fcc
+        dt = gs.manifest.segment_time - gs.buffer_fcc
         time -= dt
         if interrupted_by_seek(dt):
             return False
-        buffer_contents.pop(0)
-        buffer_fcc = 0
+        gs.buffer_contents.pop(0)
+        gs.buffer_fcc = 0
 
     # Process full segments.
-    while time > 0 and len(buffer_contents) > 0:
-        (_seg_idx, quality) = buffer_contents[0]
-        played_utility += manifest.utilities[quality]
-        played_bitrate += manifest.bitrates[quality]
-        if last_played is not None and quality != last_played:
-            total_bitrate_change += abs(manifest.bitrates[quality] - manifest.bitrates[last_played])
-            total_log_bitrate_change += abs(math.log(manifest.bitrates[quality] / manifest.bitrates[last_played]))
-        last_played = quality
+    while time > 0 and len(gs.buffer_contents) > 0:
+        (_seg_idx, quality) = gs.buffer_contents[0]
+        gs.played_utility += gs.manifest.utilities[quality]
+        gs.played_bitrate += gs.manifest.bitrates[quality]
+        if gs.last_played is not None and quality != gs.last_played:
+            gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
+            gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+        gs.last_played = quality
 
-        if rampup_time is None:
-            rt = sustainable_quality if rampup_threshold is None else rampup_threshold
+        if gs.rampup_time is None:
+            rt = gs.sustainable_quality if gs.rampup_threshold is None else gs.rampup_threshold
             if quality >= rt:
-                rampup_time = total_play_time - rampup_origin
+                gs.rampup_time = gs.total_play_time - gs.rampup_origin
 
         # Process pending quality-up events.
-        for p in pending_quality_up:
+        for p in gs.pending_quality_up:
             if len(p) == 2 and quality >= p[1]:
-                p.append(total_play_time)
+                p.append(gs.total_play_time)
 
-        if time >= manifest.segment_time:
-            buffer_contents.pop(0)
-            if interrupted_by_seek(manifest.segment_time):
+        if time >= gs.manifest.segment_time:
+            gs.buffer_contents.pop(0)
+            if interrupted_by_seek(gs.manifest.segment_time):
                 return False
-            time -= manifest.segment_time
+            time -= gs.manifest.segment_time
         else:
-            buffer_fcc = time
+            gs.buffer_fcc = time
             if interrupted_by_seek(time):
                 return False
             time = 0
 
     if time > 0:
-        rebuffer_time += time
+        gs.rebuffer_time += time
         if interrupted_by_seek(time):
             return False
-        rebuffer_event_count += 1
-        segment_rebuffer_time = time
+        gs.rebuffer_event_count += 1
+        gs.segment_rebuffer_time = time
 
-    process_quality_up(total_play_time)
+    process_quality_up(gs.total_play_time)
     return True  # Completed without interruption.
 
 def playout_buffer():
     """Play out all the bufferred chunks. """
-    global buffer_contents
-    global buffer_fcc
-
     deplete_buffer(get_buffer_level())
 
     # make sure no rounding error
-    del buffer_contents[:]
-    buffer_fcc = 0
+    del gs.buffer_contents[:]
+    gs.buffer_fcc = 0
 
 
 # The process_quality_up function processes pending quality upgrade requests that are older than a certain cutoff time.
 # It calculates the reaction time for each processed request and accumulates this time in a global counter.
 # The reaction time is either the maximum buffer size or a calculated value based on the request details.
 def process_quality_up(now):
-    global max_buffer_size
-    global pending_quality_up
-    global total_reaction_time
-
     # check which switches can be processed
 
-    # print("now=%d, max_buffer_size=%d" % (now, max_buffer_size))
-    cutoff = now - max_buffer_size
+    # print("now=%d, max_buffer_size=%d" % (now, gs.max_buffer_size))
+    cutoff = now - gs.max_buffer_size
     # print("cutoff=%d" % cutoff)
-    # print("pending_quality_up=%s" % pending_quality_up)
-    while len(pending_quality_up) > 0 and pending_quality_up[0][0] < cutoff:
-        p = pending_quality_up.pop(0)
+    # print("pending_quality_up=%s" % gs.pending_quality_up)
+    while len(gs.pending_quality_up) > 0 and gs.pending_quality_up[0][0] < cutoff:
+        p = gs.pending_quality_up.pop(0)
         if len(p) == 2:
-            reaction = max_buffer_size
+            reaction = gs.max_buffer_size
         else:
-            reaction = min(max_buffer_size, p[2] - p[0])
+            reaction = min(gs.max_buffer_size, p[2] - p[0])
         # print('\n[%d] reaction time: %d' % (now, reaction))
         # print(p)
-        total_reaction_time += reaction
+        gs.total_reaction_time += reaction
 
 
 def advertize_new_network_quality(quality, previous_quality):
-    global max_buffer_size
-    global network_total_time
-    global pending_quality_up
-    global buffer_contents
-
     # bookkeeping to track reaction time to increased bandwidth
 
     # process any previous quality up switches that have "matured"
-    process_quality_up(network_total_time)
+    process_quality_up(gs.network_total_time)
 
     # mark any pending switch up done if new quality switches back below its quality
-    for p in pending_quality_up:
+    for p in gs.pending_quality_up:
         if len(p) == 2 and p[1] > quality:
-            p.append(network_total_time)
-    # pending_quality_up = [p for p in pending_quality_up if p[1] >= quality]
+            p.append(gs.network_total_time)
+    # gs.pending_quality_up = [p for p in gs.pending_quality_up if p[1] >= quality]
 
     # filter out switches which are not upwards (three separate checks)
     if quality <= previous_quality:
         return
-    for (_idx, q) in buffer_contents:
+    for (_idx, q) in gs.buffer_contents:
         if quality <= q:
             return
-    for p in pending_quality_up:
+    for p in gs.pending_quality_up:
         if quality <= p[1]:
             return
 
     # valid quality up switch
-    pending_quality_up.append([network_total_time, quality])
+    gs.pending_quality_up.append([gs.network_total_time, quality])
 
 def process_download_loop():
-    global next_segment, abandoned_to_quality, buffer_contents, total_play_time
-    global segment_rebuffer_time, throughput, overestimate_count, overestimate_average
-    global goodestimate_count, goodestimate_average, estimate_average, throughput_history
-    global manifest, buffer_size, network, abr, replacer, args, is_bola, verbose, graph
-
-    while next_segment < len(manifest.segments):
+    while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
-        full_delay = get_buffer_level() + manifest.segment_time - buffer_size
+        full_delay = get_buffer_level() + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
             if not deplete_buffer(full_delay):
                 continue  # A seek event was triggered; restart loop.
-            network.delay(full_delay)
-            abr.report_delay(full_delay)
-            if verbose:
+            gs.network.delay(full_delay)
+            gs.abr.report_delay(full_delay)
+            if gs.verbose:
                 print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level()))
 
         # Determine quality and delay; handle potential replacement.
-        if abandoned_to_quality is None:
-            quality, delay = abr.get_quality_delay(next_segment)
-            replace = replacer.check_replace(quality)
+        if gs.abandoned_to_quality is None:
+            quality, delay = gs.abr.get_quality_delay(gs.next_segment)
+            replace = gs.replacer.check_replace(quality)
         else:
-            quality, delay = abandoned_to_quality, 0
+            quality, delay = gs.abandoned_to_quality, 0
             replace = None
-            abandoned_to_quality = None
+            gs.abandoned_to_quality = None
 
         if replace is not None:
             delay = 0
-            current_segment = next_segment + replace
-            check_abandon = replacer.check_abandon
+            current_segment = gs.next_segment + replace
+            check_abandon = gs.replacer.check_abandon
         else:
-            current_segment = next_segment
-            check_abandon = abr.check_abandon
-        if args.no_abandon:
+            current_segment = gs.next_segment
+            check_abandon = gs.abr.check_abandon
+        if gs.args.no_abandon:
             check_abandon = None
 
-        size = manifest.segments[current_segment][quality]
+        size = gs.manifest.segments[current_segment][quality]
 
         if delay > 0:
             if not deplete_buffer(delay):
                 continue  # Seek occurred, restart the loop.
-            network.delay(delay)
-            if verbose:
+            gs.network.delay(delay)
+            if gs.verbose:
                 print("abr delay %d bl=%d" % (delay, get_buffer_level()))
 
-        download_metric = network.download(size, current_segment, quality, get_buffer_level(), check_abandon)
+        download_metric = gs.network.download(size, current_segment, quality, get_buffer_level(), check_abandon)
 
-        start_time = round(total_play_time)
+        start_time = round(gs.total_play_time)
         success = deplete_buffer(download_metric.time)
-        end_time = round(total_play_time)
+        end_time = round(gs.total_play_time)
         if not success:
             # A seek occurred during depleting the buffer.
-            effective_end = last_seek_time
+            effective_end = gs.last_seek_time
             effective_download_time = effective_end - start_time
             if download_metric.time > 0:
                 effective_downloaded = int(download_metric.downloaded * effective_download_time / download_metric.time)
-            if verbose:
+            if gs.verbose:
                 print(
                     "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
                     % (
@@ -429,26 +402,26 @@ def process_download_loop():
                             ),
                             end="",
                         )
-            if graph:
+            if gs.graph:
                 print(
                     "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
                     % (
                         current_segment,
                         effective_end,
-                        network.trace[network.index].bandwidth,
-                        network.trace[network.index].latency,
+                        gs.network.trace[gs.network.index].bandwidth,
+                        gs.network.trace[gs.network.index].latency,
                         download_metric.quality,
-                        manifest.bitrates[download_metric.quality],
+                        gs.manifest.bitrates[download_metric.quality],
                         effective_downloaded,
                         effective_download_time,
                         get_buffer_level(),
                         0,
-                        is_bola
+                        gs.is_bola
                     )
                 )
             continue  # After a seek, restart the loop.
         else:
-            if verbose:
+            if gs.verbose:
                 print(
                     "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d "
                     % (
@@ -496,70 +469,70 @@ def process_download_loop():
                             ),
                             end="",
                         )
-            if graph:
+            if gs.graph:
                 print(
                     "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
                     % (
                         current_segment,
                         end_time,
-                        network.trace[network.index].bandwidth,
-                        network.trace[network.index].latency,
+                        gs.network.trace[gs.network.index].bandwidth,
+                        gs.network.trace[gs.network.index].latency,
                         download_metric.quality,
-                        manifest.bitrates[download_metric.quality],
+                        gs.manifest.bitrates[download_metric.quality],
                         download_metric.downloaded,
                         download_metric.time,
                     ),
                     end="",
                 )
-        if verbose:
+        if gs.verbose:
             print("->%d" % get_buffer_level(), end="")
 
         # Update buffer with new download.
         if replace is None:
             if download_metric.abandon_to_quality is None:
-                buffer_contents.append((next_segment, quality))
-                next_segment += 1
+                gs.buffer_contents.append((gs.next_segment, quality))
+                gs.next_segment += 1
             else:
-                abandoned_to_quality = download_metric.abandon_to_quality
+                gs.abandoned_to_quality = download_metric.abandon_to_quality
         else:
             if download_metric.abandon_to_quality is None:
-                if get_buffer_level() + manifest.segment_time * replace >= 0:
-                    old_seg_idx, _ = buffer_contents[replace]
-                    buffer_contents[replace] = (old_seg_idx, quality)
+                if get_buffer_level() + gs.manifest.segment_time * replace >= 0:
+                    old_seg_idx, _ = gs.buffer_contents[replace]
+                    gs.buffer_contents[replace] = (old_seg_idx, quality)
                 else:
                     print("WARNING: too late to replace")
             else:
                 pass
 
-        if verbose:
+        if gs.verbose:
             print("->%d" % get_buffer_level())
-        if graph:
-            if segment_rebuffer_time > 0:
+        if gs.graph:
+            if gs.segment_rebuffer_time > 0:
                 print(
                     "buffer_level=%d rebuffer_time=%d is_bola=%s"
-                    % (get_buffer_level(), segment_rebuffer_time, is_bola)
+                    % (get_buffer_level(), gs.segment_rebuffer_time, gs.is_bola)
                 )
-                segment_rebuffer_time = 0
+                gs.segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(), 0, is_bola))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(), 0, gs.is_bola))
 
-        abr.report_download(download_metric, replace is not None)
+        gs.abr.report_download(download_metric, replace is not None)
 
         # Calculate throughput and latency.
         download_time = download_metric.time - download_metric.time_to_first_bit
         t = download_metric.downloaded / download_time
         l = download_metric.time_to_first_bit
 
-        if throughput > t:
-            overestimate_count += 1
-            overestimate_average += (throughput - t - overestimate_average) / overestimate_count
+        if gs.throughput > t:
+            gs.overestimate_count += 1
+            gs.overestimate_average += (gs.throughput - t - gs.overestimate_average) / gs.overestimate_count
         else:
-            goodestimate_count += 1
-            goodestimate_average += (t - throughput - goodestimate_average) / goodestimate_count
-        estimate_average += (throughput - t - estimate_average) / (overestimate_count + goodestimate_count)
+            gs.goodestimate_count += 1
+            gs.goodestimate_average += (t - gs.throughput - gs.goodestimate_average) / gs.goodestimate_count
+        gs.estimate_average += (gs.throughput - t - gs.estimate_average) / (gs.overestimate_count + gs.goodestimate_count)
 
         if download_metric.abandon_to_quality is None:
-            throughput_history.push(download_time, t, l)
+            gs.throughput_history.push(download_time, t, l)
 
 class NetworkModel:
 
@@ -571,62 +544,53 @@ class NetworkModel:
         # Purpose: sustainable_quality represents the highest quality level of video that can be sustained given the current network conditions.
         # Initialization: It is initially set to None and then reset to 0 at the beginning of each network period calculation.
         # Calculation: It is determined by iterating through the available bitrates and comparing them to the effective_bandwidth.
-        global sustainable_quality
-        global network_total_time
-
-        sustainable_quality = 0
-        network_total_time = 0
+        gs.sustainable_quality = 0
+        gs.network_total_time = 0
         self.trace = network_trace
         self.index = -1
         self.time_to_next = 0
         self.next_network_period()
 
     def next_network_period(self):
-        global manifest
-        global sustainable_quality
-        global network_total_time
-
         self.index += 1
         if self.index == len(self.trace):
             self.index = 0
         self.time_to_next = self.trace[self.index].time
 
         # calculate effective bandwidth by removing the latency factor from the current bandwidth
-        latency_factor = 1 - self.trace[self.index].latency / manifest.segment_time
+        latency_factor = 1 - self.trace[self.index].latency / gs.manifest.segment_time
         effective_bandwidth = self.trace[self.index].bandwidth * latency_factor
 
-        previous_sustainable_quality = sustainable_quality
-        sustainable_quality = 0
-        for i in range(1, len(manifest.bitrates)):
-            if manifest.bitrates[i] > effective_bandwidth:
+        previous_sustainable_quality = gs.sustainable_quality
+        gs.sustainable_quality = 0
+        for i in range(1, len(gs.manifest.bitrates)):
+            if gs.manifest.bitrates[i] > effective_bandwidth:
                 break
             # sustainable_quality is the highest quality level that can be sustained given the current network conditions
             # it is the index of the bitrate in the manifest.bitrates list
-            sustainable_quality = i
+            gs.sustainable_quality = i
         if (
-            sustainable_quality != previous_sustainable_quality
+            gs.sustainable_quality != previous_sustainable_quality
             and previous_sustainable_quality != None
         ):
             advertize_new_network_quality(
-                sustainable_quality, previous_sustainable_quality
+                gs.sustainable_quality, previous_sustainable_quality
             )
 
-        if verbose:
+        if gs.verbose:
             print(
                 "[%d] Network: bandwidth->%d, lantency->%d (sustainable_quality=%d: bitrate=%d)"
                 % (
-                    network_total_time,
+                    gs.network_total_time,
                     self.trace[self.index].bandwidth,
                     self.trace[self.index].latency,
-                    sustainable_quality,
-                    manifest.bitrates[sustainable_quality],
+                    gs.sustainable_quality,
+                    gs.manifest.bitrates[gs.sustainable_quality],
                 )
             )
 
     # apply latency delay for the given number of units and return delay time
     def do_latency_delay(self, delay_units):
-        global network_total_time
-
         total_delay = 0
         while delay_units > 0:
             current_latency = self.trace[self.index].latency
@@ -634,20 +598,19 @@ class NetworkModel:
             # print("%d, %d" % (time, self.time_to_next), end="\n")
             if time <= self.time_to_next:
                 total_delay += time
-                network_total_time += time
+                gs.network_total_time += time
                 self.time_to_next -= time
                 delay_units = 0
             else:
                 # time > self.time_to_next implies current_latency > 0
                 total_delay += self.time_to_next
-                network_total_time += self.time_to_next
+                gs.network_total_time += self.time_to_next
                 delay_units -= self.time_to_next / current_latency
                 self.next_network_period()
         return total_delay
 
     # return download time
     def do_download(self, size):
-        global network_total_time
         total_download_time = 0
         while size > 0:
             current_bandwidth = self.trace[self.index].bandwidth
@@ -655,18 +618,17 @@ class NetworkModel:
                 # current_bandwidth > 0
                 time = size / current_bandwidth
                 total_download_time += time
-                network_total_time += time
+                gs.network_total_time += time
                 self.time_to_next -= time
                 size = 0
             else:
                 total_download_time += self.time_to_next
-                network_total_time += self.time_to_next
+                gs.network_total_time += self.time_to_next
                 size -= self.time_to_next * current_bandwidth
                 self.next_network_period()
         return total_download_time
 
     def do_minimal_latency_delay(self, delay_units, min_time):
-        global network_total_time
         total_delay_units = 0
         total_delay_time = 0
         while delay_units > 0 and min_time > 0:
@@ -675,17 +637,17 @@ class NetworkModel:
             if time <= min_time and time <= self.time_to_next:
                 units = delay_units
                 self.time_to_next -= time
-                network_total_time += time
+                gs.network_total_time += time
             elif min_time <= self.time_to_next:
                 # time > 0 implies current_latency > 0
                 time = min_time
                 units = time / current_latency
                 self.time_to_next -= time
-                network_total_time += time
+                gs.network_total_time += time
             else:
                 time = self.time_to_next
                 units = time / current_latency
-                network_total_time += time
+                gs.network_total_time += time
                 self.next_network_period()
             total_delay_units += units
             total_delay_time += time
@@ -694,7 +656,6 @@ class NetworkModel:
         return (total_delay_units, total_delay_time)
 
     def do_minimal_download(self, size, min_size, min_time):
-        global network_total_time
         total_size = 0
         total_time = 0
         while size > 0 and (min_size > 0 or min_time > 0):
@@ -706,7 +667,7 @@ class NetworkModel:
                     bits = size
                     time = bits / current_bandwidth
                     self.time_to_next -= time
-                    network_total_time += time
+                    gs.network_total_time += time
                 elif min_bits <= bits_to_next:
                     bits = min_bits
                     time = bits / current_bandwidth
@@ -714,22 +675,22 @@ class NetworkModel:
                     min_size = 0
                     min_time = 0
                     self.time_to_next -= time
-                    network_total_time += time
+                    gs.network_total_time += time
                 else:
                     bits = bits_to_next
                     time = self.time_to_next
-                    network_total_time += time
+                    gs.network_total_time += time
                     self.next_network_period()
             else:  # current_bandwidth == 0
                 bits = 0
                 if min_size > 0 or min_time > self.time_to_next:
                     time = self.time_to_next
-                    network_total_time += time
+                    gs.network_total_time += time
                     self.next_network_period()
                 else:
                     time = min_time
                     self.time_to_next -= time
-                    network_total_time += time
+                    gs.network_total_time += time
             total_size += bits
             total_time += time
             size -= bits
@@ -738,13 +699,12 @@ class NetworkModel:
         return (total_size, total_time)
 
     def delay(self, time):
-        global network_total_time
         while time > self.time_to_next:
             time -= self.time_to_next
-            network_total_time += self.time_to_next
+            gs.network_total_time += self.time_to_next
             self.next_network_period()
         self.time_to_next -= time
-        network_total_time += time
+        gs.network_total_time += time
 
     # The download method simulates the downloading of a video segment, handling latency, download progress,
     # and potential abandonment based on buffer levels and a provided callback function.
@@ -830,7 +790,7 @@ class NetworkModel:
                     dp, max(0, buffer_level - total_download_time)
                 )
                 if abandon_quality != None:
-                    if verbose:
+                    if gs.verbose:
                         print(
                             "[%d] abandoning: quality=%d->abandon_quality=%d"
                             % (idx, quality, abandon_quality)
@@ -867,12 +827,10 @@ class SessionInfo:
         pass
 
     def get_throughput(self):
-        global throughput
-        return throughput
+        return gs.throughput
 
     def get_buffer_contents(self):
-        global buffer_contents
-        return buffer_contents[:]
+        return gs.buffer_contents[:]
 
 
 session_info = SessionInfo()
@@ -904,16 +862,12 @@ class Abr:
         return None
 
     def quality_from_throughput(self, tput): # Note: This function calculates the quality level based on the throughput.
-        global manifest
-        global throughput
-        global latency
-
-        p = manifest.segment_time
+        p = gs.manifest.segment_time
 
         quality = 0
         while (
-            quality + 1 < len(manifest.bitrates)
-            and latency + p * manifest.bitrates[quality + 1] / tput <= p
+            quality + 1 < len(gs.manifest.bitrates)
+            and gs.latency + p * gs.manifest.bitrates[quality + 1] / tput <= p
         ):
             quality += 1
         return quality
@@ -940,25 +894,19 @@ class SlidingWindow(ThroughputHistory):
     max_store = 20
 
     def __init__(self, config):
-        global throughput
-        global latency
-
         if "window_size" in config and config["window_size"] != None:
             self.window_size = config["window_size"]
         else:
             self.window_size = SlidingWindow.default_window_size
 
         # TODO: init somewhere else?
-        throughput = None
-        latency = None
+        gs.throughput = None
+        gs.latency = None
 
         self.last_throughputs = []
         self.last_latencies = []
 
     def push(self, time, tput, lat):
-        global throughput
-        global latency
-
         self.last_throughputs += [tput]
         self.last_throughputs = self.last_throughputs[-SlidingWindow.max_store :]
 
@@ -974,8 +922,8 @@ class SlidingWindow(ThroughputHistory):
             sample = self.last_latencies[-ws:]
             l = sum(sample) / len(sample)
             lat = l if lat == None else max(lat, l)  # conservative max
-        throughput = tput
-        latency = lat
+        gs.throughput = tput
+        gs.latency = lat
 
 
 average_list["sliding"] = SlidingWindow
@@ -987,19 +935,16 @@ class Ewma(ThroughputHistory):
     default_half_life = [8000, 3000]
 
     def __init__(self, config):
-        global throughput
-        global latency
-
         # TODO: init somewhere else?
-        throughput = None
-        latency = None
+        gs.throughput = None
+        gs.latency = None
 
         if "half_life" in config and config["half_life"] != None:
             self.half_life = [h * 1000 for h in config["half_life"]]
         else:
             self.half_life = Ewma.default_half_life
 
-        self.latency_half_life = [h / manifest.segment_time for h in self.half_life]
+        self.latency_half_life = [h / gs.manifest.segment_time for h in self.half_life]
 
         self.throughput = [0] * len(self.half_life)
         self.weight_throughput = 0
@@ -1007,9 +952,6 @@ class Ewma(ThroughputHistory):
         self.weight_latency = 0
 
     def push(self, time, tput, lat):
-        global throughput
-        global latency
-
         for i in range(len(self.half_life)):
             alpha = math.pow(0.5, time / self.half_life[i])
             self.throughput[i] = alpha * self.throughput[i] + (1 - alpha) * tput
@@ -1030,8 +972,8 @@ class Ewma(ThroughputHistory):
             )
             l = self.latency[i] / zero_factor
             lat = l if lat == None else max(lat, l)  # conservative case is max
-        throughput = tput
-        latency = lat
+        gs.throughput = tput
+        gs.latency = lat
 
 
 average_list["ewma"] = Ewma
@@ -1041,33 +983,30 @@ average_default = "ewma"
 class Bola(Abr):
 
     def __init__(self, config):
-        global verbose
-        global manifest
-
-        utility_offset = -math.log(manifest.bitrates[0])  # so utilities[0] = 0
-        self.utilities = [math.log(b) + utility_offset for b in manifest.bitrates]
+        utility_offset = -math.log(gs.manifest.bitrates[0])  # so utilities[0] = 0
+        self.utilities = [math.log(b) + utility_offset for b in gs.manifest.bitrates]
 
         self.gp = config["gp"]
         self.buffer_size = config["buffer_size"]
         self.abr_osc = config["abr_osc"]
         self.abr_basic = config["abr_basic"]
-        self.Vp = (self.buffer_size - manifest.segment_time) / (
+        self.Vp = (self.buffer_size - gs.manifest.segment_time) / (
             self.utilities[-1] + self.gp
         )
 
         self.last_seek_index = 0  # TODO: need to update when multiple seeks
         self.last_quality = 0
 
-        if verbose:
-            for q in range(len(manifest.bitrates)):
-                b = manifest.bitrates[q]
+        if gs.verbose:
+            for q in range(len(gs.manifest.bitrates)):
+                b = gs.manifest.bitrates[q]
                 u = self.utilities[q]
                 l = self.Vp * (self.gp + u)
                 if q == 0:
                     print("%d %d" % (q, l))
                 else:
                     qq = q - 1
-                    bb = manifest.bitrates[qq]
+                    bb = gs.manifest.bitrates[qq]
                     uu = self.utilities[qq]
                     ll = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
                     print("%d %d    <- %d %d" % (q, l, qq, ll))
@@ -1076,26 +1015,23 @@ class Bola(Abr):
         level = get_buffer_level()
         quality = 0
         score = None
-        for q in range(len(manifest.bitrates)):
-            s = (self.Vp * (self.utilities[q] + self.gp) - level) / manifest.bitrates[q]
+        for q in range(len(gs.manifest.bitrates)):
+            s = (self.Vp * (self.utilities[q] + self.gp) - level) / gs.manifest.bitrates[q]
             if score == None or s > score:
                 quality = q
                 score = s
         return quality
 
     def get_quality_delay(self, segment_index):
-        global manifest
-        global throughput
-
         if not self.abr_basic:
             t = min(
                 segment_index - self.last_seek_index,
-                len(manifest.segments) - segment_index,
+                len(gs.manifest.segments) - segment_index,
             )
             t = max(t / 2, 3)
-            t = t * manifest.segment_time
+            t = t * gs.manifest.segment_time
             buffer_size = min(self.buffer_size, t)
-            self.Vp = (buffer_size - manifest.segment_time) / (
+            self.Vp = (buffer_size - gs.manifest.segment_time) / (
                 self.utilities[-1] + self.gp
             )
 
@@ -1103,7 +1039,7 @@ class Bola(Abr):
         delay = 0
 
         if quality > self.last_quality:
-            quality_t = self.quality_from_throughput(throughput)
+            quality_t = self.quality_from_throughput(gs.throughput)
             if quality <= quality_t:
                 delay = 0
             elif self.last_quality > quality_t:
@@ -1116,14 +1052,14 @@ class Bola(Abr):
                 else:
                     quality = quality_t
                     # now need to calculate delay
-                    b = manifest.bitrates[quality]
+                    b = gs.manifest.bitrates[quality]
                     u = self.utilities[quality]
-                    # bb = manifest.bitrates[quality + 1]
+                    # bb = gs.manifest.bitrates[quality + 1]
                     # uu = self.utilities[quality + 1]
                     # l = self.Vp * (self.gp + (bb * u - b * uu) / (bb - b))
                     l = self.Vp * (self.gp + u)  ##########
                     delay = max(0, get_buffer_level() - l)
-                    if quality == len(manifest.bitrates) - 1:
+                    if quality == len(gs.manifest.bitrates) - 1:
                         delay = 0
                     # delay = 0 ###########
 
@@ -1131,9 +1067,8 @@ class Bola(Abr):
         return (quality, delay)
 
     def report_seek(self, where):
-        global manifest
         # Compute the segment index corresponding to the new playback position.
-        self.last_seek_index = math.floor(where / manifest.segment_time)
+        self.last_seek_index = math.floor(where / gs.manifest.segment_time)
         # Seek Update Note:
         # Reset the last chosen quality to a safe starting point.
         # Doesn't affect the simluation result, due to the buffer level is cleaned up.
@@ -1141,8 +1076,6 @@ class Bola(Abr):
         self.last_quality = self.get_first_quality()
 
     def check_abandon(self, progress, buffer_level):
-        global manifest
-
         if self.abr_basic:
             return None
 
@@ -1160,8 +1093,8 @@ class Bola(Abr):
         for q in range(progress.quality):
             other_size = (
                 progress.size
-                * manifest.bitrates[q]
-                / manifest.bitrates[progress.quality]
+                * gs.manifest.bitrates[q]
+                / gs.manifest.bitrates[progress.quality]
             )
             other_score = (
                 self.Vp * (self.gp + self.utilities[q]) - buffer_level
@@ -1192,44 +1125,41 @@ class BolaEnh(Abr):
         STEADY = 2
 
     def __init__(self, config):
-        global verbose
-        global manifest
-
         config_buffer_size = config["buffer_size"]
         self.abr_osc = config["abr_osc"]
         self.no_ibr = config["no_ibr"]
 
-        utility_offset = 1 - math.log(manifest.bitrates[0])  # so utilities[0] = 1
-        self.utilities = [math.log(b) + utility_offset for b in manifest.bitrates]
+        utility_offset = 1 - math.log(gs.manifest.bitrates[0])  # so utilities[0] = 1
+        self.utilities = [math.log(b) + utility_offset for b in gs.manifest.bitrates]
 
         if self.no_ibr:
             self.gp = config["gp"] - 1  # to match BOLA Basic
             buffer = config["buffer_size"]
-            self.Vp = (buffer - manifest.segment_time) / (self.utilities[-1] + self.gp)
+            self.Vp = (buffer - gs.manifest.segment_time) / (self.utilities[-1] + self.gp)
         else:
             buffer = BolaEnh.minimum_buffer
-            buffer += BolaEnh.minimum_buffer_per_level * len(manifest.bitrates)
+            buffer += BolaEnh.minimum_buffer_per_level * len(gs.manifest.bitrates)
             buffer = max(buffer, config_buffer_size)
             self.gp = (self.utilities[-1] - 1) / (buffer / BolaEnh.minimum_buffer - 1)
             self.Vp = BolaEnh.minimum_buffer / self.gp
             # equivalently:
-            # self.Vp = (buffer - BolaEnh.minimum_buffer) / (math.log(manifest.bitrates[-1] / manifest.bitrates[0]))
+            # self.Vp = (buffer - BolaEnh.minimum_buffer) / (math.log(gs.manifest.bitrates[-1] / gs.manifest.bitrates[0]))
             # self.gp = BolaEnh.minimum_buffer / self.Vp
 
         self.state = BolaEnh.State.STARTUP
         self.placeholder = 0
         self.last_quality = 0
 
-        if verbose:
-            for q in range(len(manifest.bitrates)):
-                b = manifest.bitrates[q]
+        if gs.verbose:
+            for q in range(len(gs.manifest.bitrates)):
+                b = gs.manifest.bitrates[q]
                 u = self.utilities[q]
                 l = self.Vp * (self.gp + u)
                 if q == 0:
                     print("%d %d" % (q, l))
                 else:
                     qq = q - 1
-                    bb = manifest.bitrates[qq]
+                    bb = gs.manifest.bitrates[qq]
                     uu = self.utilities[qq]
                     ll = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
                     print("%d %d    <- %d %d" % (q, l, qq, ll))
@@ -1239,8 +1169,8 @@ class BolaEnh(Abr):
             level = get_buffer_level()
         quality = 0
         score = None
-        for q in range(len(manifest.bitrates)):
-            s = (self.Vp * (self.utilities[q] + self.gp) - level) / manifest.bitrates[q]
+        for q in range(len(gs.manifest.bitrates)):
+            s = (self.Vp * (self.utilities[q] + self.gp) - level) / gs.manifest.bitrates[q]
             if score == None or s > score:
                 quality = q
                 score = s
@@ -1250,9 +1180,7 @@ class BolaEnh(Abr):
         return self.quality_from_buffer(get_buffer_level() + self.placeholder)
 
     def min_buffer_for_quality(self, quality):
-        global manifest
-
-        bitrate = manifest.bitrates[quality]
+        bitrate = gs.manifest.bitrates[quality]
         utility = self.utilities[quality]
 
         level = 0
@@ -1261,7 +1189,7 @@ class BolaEnh(Abr):
             # BOLA should prefer bitrates[quality]
             # (unless bitrates[q] has higher utility)
             if self.utilities[q] < self.utilities[quality]:
-                b = manifest.bitrates[q]
+                b = gs.manifest.bitrates[q]
                 u = self.utilities[q]
                 l = self.Vp * (self.gp + (bitrate * u - b * utility) / (bitrate - b))
                 level = max(level, l)
@@ -1271,24 +1199,20 @@ class BolaEnh(Abr):
         return self.Vp * (self.utilities[quality] + self.gp)
 
     def get_quality_delay(self, segment_index):
-        global buffer_contents
-        global buffer_fcc
-        global throughput
-
         buffer_level = get_buffer_level()
 
         if self.state == BolaEnh.State.STARTUP:
-            if throughput == None:
+            if gs.throughput == None:
                 return (self.last_quality, 0)
             self.state = BolaEnh.State.STEADY
             self.ibr_safety = BolaEnh.low_buffer_safety_factor_init
-            quality = self.quality_from_throughput(throughput)
+            quality = self.quality_from_throughput(gs.throughput)
             self.placeholder = self.min_buffer_for_quality(quality) - buffer_level
             self.placeholder = max(0, self.placeholder)
             return (quality, 0)
 
         quality = self.quality_from_buffer_placeholder()
-        quality_t = self.quality_from_throughput(throughput)
+        quality_t = self.quality_from_throughput(gs.throughput)
         if quality > self.last_quality and quality > quality_t:
             quality = max(self.last_quality, quality_t)
             if not self.abr_osc:
@@ -1298,10 +1222,10 @@ class BolaEnh(Abr):
 
         if quality > 0:
             q = quality
-            b = manifest.bitrates[q]
+            b = gs.manifest.bitrates[q]
             u = self.utilities[q]
             qq = q - 1
-            bb = manifest.bitrates[qq]
+            bb = gs.manifest.bitrates[qq]
             uu = self.utilities[qq]
             # max_level = self.Vp * (self.gp + (b * uu - bb * u) / (b - bb))
 
@@ -1316,16 +1240,16 @@ class BolaEnh(Abr):
         else:
             delay = 0
 
-        if quality == len(manifest.bitrates) - 1:
+        if quality == len(gs.manifest.bitrates) - 1:
             delay = 0
 
         # insufficient buffer rule
         if not self.no_ibr:
-            safe_size = self.ibr_safety * (buffer_level - latency) * throughput
+            safe_size = self.ibr_safety * (buffer_level - gs.latency) * gs.throughput
             self.ibr_safety *= BolaEnh.low_buffer_safety_factor_init
             self.ibr_safety = max(self.ibr_safety, BolaEnh.low_buffer_safety_factor)
             for q in range(quality):
-                if manifest.bitrates[q + 1] * manifest.segment_time > safe_size:
+                if gs.manifest.bitrates[q + 1] * gs.manifest.segment_time > safe_size:
                     # print('InsufficientBufferRule %d -> %d' % (quality, q))
                     quality = q
                     delay = 0
@@ -1341,14 +1265,13 @@ class BolaEnh(Abr):
         self.placeholder += delay
 
     def report_download(self, metrics, is_replacment):
-        global manifest
         self.last_quality = metrics.quality
         level = get_buffer_level()
 
         if metrics.abandon_to_quality == None:
 
             if is_replacment:
-                self.placeholder += manifest.segment_time
+                self.placeholder += gs.manifest.segment_time
             else:
                 # make sure placeholder is not too large relative to download
                 level_was = level + metrics.time
@@ -1381,11 +1304,9 @@ class BolaEnh(Abr):
         # Reset the last chosen quality to a safe starting quality.
         self.last_quality = self.get_first_quality()
         # Record the new playback segment index (assuming segment_time is in ms).
-        self.last_seek_index = math.floor(where / manifest.segment_time)
+        self.last_seek_index = math.floor(where / gs.manifest.segment_time)
 
     def check_abandon(self, progress, buffer_level):
-        global manifest
-
         remain = progress.size - progress.downloaded
         if progress.downloaded <= 0 or remain <= 0:
             return None
@@ -1403,8 +1324,8 @@ class BolaEnh(Abr):
         for q in range(progress.quality):
             other_size = (
                 progress.size
-                * manifest.bitrates[q]
-                / manifest.bitrates[progress.quality]
+                * gs.manifest.bitrates[q]
+                / gs.manifest.bitrates[progress.quality]
             )
             other_score = (self.Vp * (self.gp + self.utilities[q]) - bl) / other_size
             if other_size < sz and other_score > score:
@@ -1436,21 +1357,19 @@ class ThroughputRule(Abr):
         self.no_ibr = config["no_ibr"]
 
     def get_quality_delay(self, segment_index):
-        global manifest
-
         quality = self.quality_from_throughput(
-            throughput * ThroughputRule.safety_factor
+            gs.throughput * ThroughputRule.safety_factor
         )
 
         if not self.no_ibr:
             # insufficient buffer rule
-            safe_size = self.ibr_safety * (get_buffer_level() - latency) * throughput
+            safe_size = self.ibr_safety * (get_buffer_level() - gs.latency) * gs.throughput
             self.ibr_safety *= ThroughputRule.low_buffer_safety_factor_init
             self.ibr_safety = max(
                 self.ibr_safety, ThroughputRule.low_buffer_safety_factor
             )
             for q in range(quality):
-                if manifest.bitrates[q + 1] * manifest.segment_time > safe_size:
+                if gs.manifest.bitrates[q + 1] * gs.manifest.segment_time > safe_size:
                     quality = q
                     break
 
@@ -1895,65 +1814,67 @@ if __name__ == "__main__":
     )
     args = parser.parse_args()
 
-    verbose = args.verbose
-    graph = args.graph
+    # Initialize GlobalState
+    gs.args = args
+    gs.verbose = args.verbose
+    gs.graph = args.graph
 
-    buffer_contents = []    # buffer contents as in [chunk_quality_1, chunk_quality_2, ]
-    buffer_fcc = 0
-    pending_quality_up = []
-    reaction_metrics = []
+    gs.buffer_contents = []    # buffer contents as in [chunk_quality_1, chunk_quality_2, ]
+    gs.buffer_fcc = 0
+    gs.pending_quality_up = []
+    gs.reaction_metrics = []
 
-    rebuffer_event_count = 0
-    rebuffer_time = 0
-    segment_rebuffer_time = 0
-    played_utility = 0
-    played_bitrate = 0
-    total_play_time = 0
-    total_bitrate_change = 0
-    total_log_bitrate_change = 0
-    total_reaction_time = 0
-    last_played = None
+    gs.rebuffer_event_count = 0
+    gs.rebuffer_time = 0
+    gs.segment_rebuffer_time = 0
+    gs.played_utility = 0
+    gs.played_bitrate = 0
+    gs.total_play_time = 0
+    gs.total_bitrate_change = 0
+    gs.total_log_bitrate_change = 0
+    gs.total_reaction_time = 0
+    gs.last_played = None
 
-    overestimate_count = 0
-    overestimate_average = 0
-    goodestimate_count = 0
-    goodestimate_average = 0
-    estimate_average = 0
+    gs.overestimate_count = 0
+    gs.overestimate_average = 0
+    gs.goodestimate_count = 0
+    gs.goodestimate_average = 0
+    gs.estimate_average = 0
 
-    rampup_origin = 0
-    rampup_time = None
-    rampup_threshold = args.rampup_threshold
+    gs.rampup_origin = 0
+    gs.rampup_time = None
+    gs.rampup_threshold = args.rampup_threshold
 
-    max_buffer_size = args.max_buffer * 1000
+    gs.max_buffer_size = args.max_buffer * 1000
 
-    manifest = load_json(args.movie)
-    bitrates = manifest["bitrates_kbps"]
+    manifest_data = load_json(args.movie)
+    bitrates = manifest_data["bitrates_kbps"]
 
     utility_offset = 0 - math.log(bitrates[0])
     utilities = [math.log(b) + utility_offset for b in bitrates]
     # If a seek configuration file is provided, load it.
-    seek_events = []
+    gs.seek_events = []
     if args.seek_config:
         with open(args.seek_config) as f:
             seek_config = json.load(f)
         # Expecting a key "seeks" which is a list of { "seek_when": <seconds>, "seek_to": <seconds> }
         if "seeks" in seek_config:
             # Global list of pending seeks, sorted by seek_when
-            seek_events = sorted(seek_config["seeks"], key=lambda x: x["seek_when"])
+            gs.seek_events = sorted(seek_config["seeks"], key=lambda x: x["seek_when"])
 
     if args.movie_length != None:
-        l1 = len(manifest["segment_sizes_bits"])
-        l2 = math.ceil(args.movie_length * 1000 / manifest["segment_duration_ms"])
-        manifest["segment_sizes_bits"] *= math.ceil(l2 / l1)
-        manifest["segment_sizes_bits"] = manifest["segment_sizes_bits"][0:l2]
-    manifest = ManifestInfo(
-        segment_time=manifest["segment_duration_ms"],
+        l1 = len(manifest_data["segment_sizes_bits"])
+        l2 = math.ceil(args.movie_length * 1000 / manifest_data["segment_duration_ms"])
+        manifest_data["segment_sizes_bits"] *= math.ceil(l2 / l1)
+        manifest_data["segment_sizes_bits"] = manifest_data["segment_sizes_bits"][0:l2]
+    gs.manifest = ManifestInfo(
+        segment_time=manifest_data["segment_duration_ms"],
         bitrates=bitrates,
         utilities=utilities,
-        segments=manifest["segment_sizes_bits"],
+        segments=manifest_data["segment_sizes_bits"],
     )
-    SessionInfo.manifest = manifest
-    is_bola = False
+    SessionInfo.manifest = gs.manifest
+    gs.is_bola = False
 
     network_trace = load_json(args.network)
     network_trace = [
@@ -1966,11 +1887,11 @@ if __name__ == "__main__":
     ]
 
     # default max buffer size is 25 seconds
-    buffer_size = args.max_buffer * 1000
+    gs.buffer_size = args.max_buffer * 1000
     gamma_p = args.gamma_p
 
     config = {
-        "buffer_size": buffer_size,
+        "buffer_size": gs.buffer_size,
         "gp": gamma_p,
         "abr_osc": args.abr_osc,
         "abr_basic": args.abr_basic,
@@ -1978,37 +1899,37 @@ if __name__ == "__main__":
     }
 
     if args.abr[-3:] == ".py":
-        abr = AbrInput(args.abr, config)
+        gs.abr = AbrInput(args.abr, config)
     else:
         abr_list[args.abr].use_abr_o = args.abr_osc
         abr_list[args.abr].use_abr_u = not args.abr_osc
-        abr = abr_list[args.abr](config)
-    network = NetworkModel(network_trace)
+        gs.abr = abr_list[args.abr](config)
+    gs.network = NetworkModel(network_trace)
     if args.replace[-3:] == ".py":
-        replacer = ReplacementInput(args.replace)
+        gs.replacer = ReplacementInput(args.replace)
     if args.replace == "left":
-        replacer = Replace(0)
+        gs.replacer = Replace(0)
     elif args.replace == "right":
-        replacer = Replace(1)
+        gs.replacer = Replace(1)
     else:
-        replacer = NoReplace()
+        gs.replacer = NoReplace()
 
     config = {"window_size": args.window_size, "half_life": args.half_life}
-    throughput_history = average_list[args.moving_average](config)
+    gs.throughput_history = average_list[args.moving_average](config)
 
     # download first segment
-    quality = abr.get_first_quality()
-    size = manifest.segments[0][quality]
-    download_metric = network.download(size, 0, quality, 0)
+    quality = gs.abr.get_first_quality()
+    size = gs.manifest.segments[0][quality]
+    download_metric = gs.network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
-    startup_time = download_time
-    buffer_contents.append((0, download_metric.quality))
+    gs.startup_time = download_time
+    gs.buffer_contents.append((0, download_metric.quality))
     t = download_metric.size / download_time
     l = download_metric.time_to_first_bit
-    throughput_history.push(download_time, t, l)
-    total_play_time += download_metric.time
+    gs.throughput_history.push(download_time, t, l)
+    gs.total_play_time += download_metric.time
 
-    if verbose:
+    if gs.verbose:
         print(
             "[%d-%d]  %d: quality=%d download_size=%d/%d download_time=%d=%d+%d buffer_level=0->0->%d"
             % (
@@ -2024,21 +1945,21 @@ if __name__ == "__main__":
                 get_buffer_level(),
             )
         )
-    if graph:
+    if gs.graph:
         print(
             "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
             % (
                 0,
                 0,
-                network.trace[network.index].bandwidth,
-                network.trace[network.index].latency,
+                gs.network.trace[gs.network.index].bandwidth,
+                gs.network.trace[gs.network.index].latency,
                 download_metric.quality,
-                manifest.bitrates[download_metric.quality],
+                gs.manifest.bitrates[download_metric.quality],
                 0,
                 0,
                 0,
                 0,
-                is_bola,
+                gs.is_bola,
             )
         )
         print(
@@ -2046,84 +1967,84 @@ if __name__ == "__main__":
             % (
                 0,
                 download_metric.time,
-                network.trace[network.index].bandwidth,
-                network.trace[network.index].latency,
+                gs.network.trace[gs.network.index].bandwidth,
+                gs.network.trace[gs.network.index].latency,
                 download_metric.quality,
-                manifest.bitrates[download_metric.quality],
+                gs.manifest.bitrates[download_metric.quality],
                 download_metric.downloaded,
                 download_metric.time,
                 get_buffer_level(),
                 0,
-                is_bola,
+                gs.is_bola,
             )
         )
 
     # download rest of segments
-    next_segment = 1
-    abandoned_to_quality = None
-    while next_segment < len(manifest.segments):
+    gs.next_segment = 1
+    gs.abandoned_to_quality = None
+    while gs.next_segment < len(gs.manifest.segments):
         process_download_loop()
 
     playout_buffer()
 
-    if verbose:
+    if gs.verbose:
         # multiply by to_time_average to get per/chunk average
-        to_time_average = 1 / (total_play_time / manifest.segment_time)
-        count = len(manifest.segments)
-        time = count * manifest.segment_time + rebuffer_time + startup_time
-        print("buffer size: %d" % buffer_size)
-        print("total played utility: %f" % played_utility)
-        print("time average played utility: %f" % (played_utility * to_time_average))
-        print("total played bitrate: %f" % played_bitrate)
-        print("time average played bitrate: %f" % (played_bitrate * to_time_average))
-        print("total play time: %f" % (total_play_time / 1000))
-        print("total play time chunks: %f" % (total_play_time / manifest.segment_time))
-        print("total rebuffer: %f" % (rebuffer_time / 1000))
-        print("rebuffer ratio: %f" % (rebuffer_time / total_play_time))
-        print("time average rebuffer: %f" % (rebuffer_time / 1000 * to_time_average))
-        print("total rebuffer events: %f" % rebuffer_event_count)
+        to_time_average = 1 / (gs.total_play_time / gs.manifest.segment_time)
+        count = len(gs.manifest.segments)
+        time = count * gs.manifest.segment_time + gs.rebuffer_time + gs.startup_time
+        print("buffer size: %d" % gs.buffer_size)
+        print("total played utility: %f" % gs.played_utility)
+        print("time average played utility: %f" % (gs.played_utility * to_time_average))
+        print("total played bitrate: %f" % gs.played_bitrate)
+        print("time average played bitrate: %f" % (gs.played_bitrate * to_time_average))
+        print("total play time: %f" % (gs.total_play_time / 1000))
+        print("total play time chunks: %f" % (gs.total_play_time / gs.manifest.segment_time))
+        print("total rebuffer: %f" % (gs.rebuffer_time / 1000))
+        print("rebuffer ratio: %f" % (gs.rebuffer_time / gs.total_play_time))
+        print("time average rebuffer: %f" % (gs.rebuffer_time / 1000 * to_time_average))
+        print("total rebuffer events: %f" % gs.rebuffer_event_count)
         print(
             "time average rebuffer events: %f"
-            % (rebuffer_event_count * to_time_average)
+            % (gs.rebuffer_event_count * to_time_average)
         )
-        print("total bitrate change: %f" % total_bitrate_change)
+        print("total bitrate change: %f" % gs.total_bitrate_change)
         print(
-            "time average bitrate change: %f" % (total_bitrate_change * to_time_average)
+            "time average bitrate change: %f" % (gs.total_bitrate_change * to_time_average)
         )
-        print("total log bitrate change: %f" % total_log_bitrate_change)
+        print("total log bitrate change: %f" % gs.total_log_bitrate_change)
         print(
             "time average log bitrate change: %f"
-            % (total_log_bitrate_change * to_time_average)
+            % (gs.total_log_bitrate_change * to_time_average)
         )
         print(
             "time average score: %f"
             % (
                 to_time_average
                 * (
-                    played_utility
-                    - args.gamma_p * rebuffer_time / manifest.segment_time
+                    gs.played_utility
+                    - gs.args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
                 )
             )
         )
-        if overestimate_count == 0:
+        if gs.overestimate_count == 0:
             print("over estimate count: 0")
             print("over estimate: 0")
         else:
-            print("over estimate count: %d" % overestimate_count)
-            print("over estimate: %f" % overestimate_average)
-        if goodestimate_count == 0:
+            print("over estimate count: %d" % gs.overestimate_count)
+            print("over estimate: %f" % gs.overestimate_average)
+        if gs.goodestimate_count == 0:
             print("leq estimate count: 0")
             print("leq estimate: 0")
         else:
-            print("leq estimate count: %d" % goodestimate_count)
-            print("leq estimate: %f" % goodestimate_average)
-        print("estimate: %f" % estimate_average)
-        if rampup_time == None:
+            print("leq estimate count: %d" % gs.goodestimate_count)
+            print("leq estimate: %f" % gs.goodestimate_average)
+        print("estimate: %f" % gs.estimate_average)
+        if gs.rampup_time == None:
             print(
                 "rampup time: %f"
-                % (len(manifest.segments) * manifest.segment_time / 1000)
+                % (len(gs.manifest.segments) * gs.manifest.segment_time / 1000)
             )
         else:
-            print("rampup time: %f" % (rampup_time / 1000))
-        print("total reaction time: %f" % (total_reaction_time / 1000))
-        print("network total time: %f" % (network_total_time/1000))
+            print("rampup time: %f" % (gs.rampup_time / 1000))
+        print("total reaction time: %f" % (gs.total_reaction_time / 1000))
+        print("network total time: %f" % (gs.network_total_time/1000))
