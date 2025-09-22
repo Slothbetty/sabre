@@ -29,9 +29,9 @@ from enum import Enum
 from global_state import gs
 
 
-def get_buffer_level():
+def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
-    return gs.manifest.segment_time * len(gs.buffer_contents) - gs.buffer_fcc
+    return segment_time * len(buffer_contents) - buffer_fcc
 
 
 class ThroughputHistory:
@@ -233,7 +233,7 @@ class Bola(Abr):
                     print("%d %d    <- %d %d" % (q, l, qq, ll))
 
     def quality_from_buffer(self): # Note: This function calculates the quality level based on the buffer level.
-        level = get_buffer_level()
+        level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
         quality = 0
         score = None
         for q in range(len(gs.manifest.bitrates)):
@@ -279,7 +279,7 @@ class Bola(Abr):
                     # uu = self.utilities[quality + 1]
                     # l = self.Vp * (self.gp + (bb * u - b * uu) / (bb - b))
                     l = self.Vp * (self.gp + u)  ##########
-                    delay = max(0, get_buffer_level() - l)
+                    delay = max(0, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) - l)
                     if quality == len(gs.manifest.bitrates) - 1:
                         delay = 0
                     # delay = 0 ###########
@@ -387,7 +387,7 @@ class BolaEnh(Abr):
 
     def quality_from_buffer(self, level):
         if level == None:
-            level = get_buffer_level()
+            level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
         quality = 0
         score = None
         for q in range(len(gs.manifest.bitrates)):
@@ -398,7 +398,7 @@ class BolaEnh(Abr):
         return quality
 
     def quality_from_buffer_placeholder(self):
-        return self.quality_from_buffer(get_buffer_level() + self.placeholder)
+        return self.quality_from_buffer(get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + self.placeholder)
 
     def min_buffer_for_quality(self, quality):
         bitrate = gs.manifest.bitrates[quality]
@@ -420,7 +420,7 @@ class BolaEnh(Abr):
         return self.Vp * (self.utilities[quality] + self.gp)
 
     def get_quality_delay(self, segment_index):
-        buffer_level = get_buffer_level()
+        buffer_level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
 
         if self.state == BolaEnh.State.STARTUP:
             if gs.throughput == None:
@@ -487,7 +487,7 @@ class BolaEnh(Abr):
 
     def report_download(self, metrics, is_replacment):
         self.last_quality = metrics.quality
-        level = get_buffer_level()
+        level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
 
         if metrics.abandon_to_quality == None:
 
@@ -584,7 +584,7 @@ class ThroughputRule(Abr):
 
         if not self.no_ibr:
             # insufficient buffer rule
-            safe_size = self.ibr_safety * (get_buffer_level() - gs.latency) * gs.throughput
+            safe_size = self.ibr_safety * (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) - gs.latency) * gs.throughput
             self.ibr_safety *= ThroughputRule.low_buffer_safety_factor_init
             self.ibr_safety = max(
                 self.ibr_safety, ThroughputRule.low_buffer_safety_factor
@@ -641,7 +641,7 @@ class Dynamic(Abr):
         # self.is_bola = False
 
     def get_quality_delay(self, segment_index):
-        level = get_buffer_level()
+        level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
 
         b = self.bola.get_quality_delay(segment_index)
         t = self.tput.get_quality_delay(segment_index)
@@ -701,7 +701,7 @@ class DynamicDash(Abr):
         self.is_bola = False
 
     def get_quality_delay(self, segment_index):
-        level = get_buffer_level()
+        level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
         if self.is_bola and level < self.low_threshold:
             self.is_bola = False
         elif not self.is_bola and level > self.high_threshold:
