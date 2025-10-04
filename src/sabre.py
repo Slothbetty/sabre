@@ -92,8 +92,91 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
+def process_seek_event(pos_seek_to_ms):
+    """
+    Process a seek event by updating buffer contents and position.
+    
+    This function handles the complex logic of seeking to a specific playback position,
+    including determining the correct segment index, updating buffer contents, and
+    calculating the appropriate buffer_fcc value.
+    
+    Args:
+        pos_seek_to_ms (float): The target seek position in milliseconds (playback time)
+    """
+    # Determine the segment index nearest to the requested seek time (pos_seek_to_ms).
+    # We split each segment in half: if pos_seek_to_ms is in the first half, round down;
+    # if it's in the second half, round up.
+    seg_time = gs.manifest.segment_time  # duration of each segment in milliseconds
+
+    # Compute the zero‐based index by flooring the division.
+    floor_idx = math.floor(pos_seek_to_ms / seg_time)
+
+    # Calculate the timestamp of the start of the floor_idx segment.
+    prev_boundary = floor_idx * seg_time
+
+    # How many milliseconds past the start of that segment the seek target is.
+    delta = pos_seek_to_ms - prev_boundary
+
+    if delta < (seg_time / 2):
+        # If target is in the first half of the segment, stay on floor_idx.
+        new_segment = floor_idx
+    else:
+        # If target is in the second half, advance to the next segment.
+        new_segment = floor_idx + 1
+
+    gs.last_seek_time = gs.total_play_time
+
+    if gs.verbose:
+        print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+              (gs.total_play_time, pos_seek_to_ms / 1000, new_segment))
+
+    # Compute the segment index corresponding to the first element in the buffer.
+    # next_segment always equals: buffer_base + len(buffer_contents)
+    buffer_base = gs.next_segment - len(gs.buffer_contents)
+
+    # If the current buffered segments span content past the new playback position,
+    # keep the segments that are beyond 'new_segment'.
+    if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
+        # Calculate how many segments to drop.
+        skip_count = new_segment - buffer_base
+        gs.buffer_contents = gs.buffer_contents[skip_count:]
+    else:
+        # Otherwise, if no buffered segment is relevant, clear the buffer.
+        gs.buffer_contents.clear()
+        gs.next_segment = new_segment
+
+    # At this point, calculate how much of the first segment is already "used up":
+    # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
+    # Otherwise, we jumped to the very start of a segment.
+    if new_segment == floor_idx:
+        # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
+        gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
+    else:
+        # Seek landed at a segment boundary: no partial chunk has been consumed.
+        gs.buffer_fcc = 0
+    # Notify ABR of the seek event (using seek time in milliseconds).
+    gs.abr.report_seek(pos_seek_to_ms)
+    # Reset rampup variables.
+    gs.rampup_origin = gs.total_play_time
+    gs.rampup_time = None
+
+
 def interrupted_by_seek(delta):
-    """[Jinhui] Add a function comment here.
+    """
+    Check if playback should be interrupted by a seek event during the given time delta.
+    
+    This function processes seek events that are scheduled to occur during the playback
+    of a time delta. If a seek event is found to occur within the delta, it:
+    1. Updates the total play time to the seek event time
+    2. Processes the seek by updating buffer contents and position
+    3. Notifies the ABR algorithm of the seek event
+    4. Resets rampup tracking variables
+    
+    Args:
+        delta (float): The time delta in milliseconds to check for seek events
+        
+    Returns:
+        bool: True if a seek event was processed, False otherwise
     """
 
     # Check for a pending seek event.
@@ -115,70 +198,13 @@ def interrupted_by_seek(delta):
             # Directly update the play time to the scheduled seek time.
             gs.total_play_time = seek_when_ms
 
-            # Get the seek event and convert seek_to into milliseconds.
+            # Get the seek event and convert pos_seek_to into milliseconds.
             event = gs.seek_events.pop(0)
-            seek_to = event["seek_to"]
-            seek_to_ms = seek_to * 1000
+            pos_seek_to = event["seek_to"]
+            pos_seek_to_ms = pos_seek_to * 1000
 
-            """ [Jinhui] Code/Comment below is too tedious, please
-            refactor this by extracting the code below into a function. """
-
-            # Determine the segment index nearest to the requested seek time (seek_to_ms).
-            # We split each segment in half: if seek_to_ms is in the first half, round down;
-            # if it's in the second half, round up.
-            seg_time = gs.manifest.segment_time  # duration of each segment in milliseconds
-
-            # Compute the zero‐based index by flooring the division.
-            floor_idx = math.floor(seek_to_ms / seg_time)
-
-            # Calculate the timestamp of the start of the floor_idx segment.
-            prev_boundary = floor_idx * seg_time
-
-            # How many milliseconds past the start of that segment the seek target is.
-            delta = seek_to_ms - prev_boundary
-
-            if delta < (seg_time / 2):
-                # If target is in the first half of the segment, stay on floor_idx.
-                new_segment = floor_idx
-            else:
-                # If target is in the second half, advance to the next segment.
-                new_segment = floor_idx + 1
-
-            gs.last_seek_time = gs.total_play_time
-
-            if gs.verbose:
-                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-                      (gs.total_play_time, seek_to, new_segment))
-
-            # Compute the segment index corresponding to the first element in the buffer.
-            # next_segment always equals: buffer_base + len(buffer_contents)
-            buffer_base = gs.next_segment - len(gs.buffer_contents)
-
-            # If the current buffered segments span content past the new playback position,
-            # keep the segments that are beyond 'new_segment'.
-            if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
-                # Calculate how many segments to drop.
-                skip_count = new_segment - buffer_base
-                gs.buffer_contents = gs.buffer_contents[skip_count:]
-            else:
-                # Otherwise, if no buffered segment is relevant, clear the buffer.
-                gs.buffer_contents.clear()
-                gs.next_segment = new_segment
-
-            # At this point, calculate how much of the first segment is already "used up":
-            # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
-            # Otherwise, we jumped to the very start of a segment.
-            if new_segment == floor_idx:
-                # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
-                gs.buffer_fcc = seek_to_ms - (floor_idx * seg_time)
-            else:
-                # Seek landed at a segment boundary: no partial chunk has been consumed.
-                gs.buffer_fcc = 0
-            # Notify ABR of the seek event (using seek time in milliseconds).
-            gs.abr.report_seek(seek_to_ms)
-            # Reset rampup variables.
-            gs.rampup_origin = gs.total_play_time
-            gs.rampup_time = None
+            # Process the seek event using the extracted function.
+            process_seek_event(pos_seek_to_ms)
             return True  # Indicate that a seek was processed.
 
     # If no seek event occurs in this delta, simply increment total_play_time.
