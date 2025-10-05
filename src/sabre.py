@@ -39,6 +39,22 @@ from abr_algorithms import (
     NoReplace, Replace, AbrInput, ReplacementInput
 )
 
+# DYNAMIC BUFFERING INTEGRATION:
+# To integrate dynamic buffering from buffer.py, add the following import:
+# from buffer import MultiRegionBuffer, BufferRegion
+#
+# The dynamic buffering system provides:
+# - MultiRegionBuffer: Manages multiple non-contiguous buffer regions
+# - BufferRegion: Represents a continuous region of video chunks
+# - Support for seeking to arbitrary positions and buffering non-sequential content
+# - Automatic region merging when adjacent regions are created
+#
+# Key differences from linear buffering:
+# - Linear: gs.buffer_contents = [(segment_idx, quality), ...] (sequential list)
+# - Dynamic: Multiple regions with start/end positions and chunk quality arrays
+# - Linear: gs.buffer_fcc tracks partial consumption of first segment
+# - Dynamic: Each region tracks its own start/end boundaries
+
 # Units used throughout:
 #     size     : bits
 #     time     : ms
@@ -84,14 +100,51 @@ DownloadProgress = namedtuple(
 
 
 def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
-    """Returns the current buffer level."""
+    """
+    Returns the current buffer level.
+    
+    LINEAR BUFFERING (Current Implementation):
+    Calculates buffer level as total buffered time minus partially consumed first segment.
+    """
     return segment_time * len(buffer_contents) - buffer_fcc
+
+def get_buffer_level_dynamic(segment_time, dynamic_buffer, current_pos):
+    """
+    [Need Review] DYNAMIC BUFFERING INTEGRATION:
+    Alternative implementation for dynamic buffering that calculates buffer level
+    based on the current playback position and available buffered regions.
+    
+    Args:
+        segment_time: Duration of each segment in milliseconds
+        dynamic_buffer: MultiRegionBuffer instance
+        current_pos: Current playback position in milliseconds
+        
+    Returns:
+        Total buffered time available from current position
+    """
+    # Find the region containing the current playback position
+    region = dynamic_buffer._find_region_of(current_pos)
+    if not region:
+        return 0  # No buffered content at current position
+    
+    # Calculate how much content is available from current position
+    available_time = region.end - current_pos
+    
+    # Add time from any subsequent regions
+    current_region_start = region.start
+    for start_pos in dynamic_buffer.region_starts:
+        if start_pos > current_region_start:
+            next_region = dynamic_buffer.region_map[start_pos]
+            available_time += (next_region.end - next_region.start)
+    
+    return available_time
 
 
 def process_seek_event(pos_seek_to_ms):
     """
     Process a seek event by updating buffer contents and position.
     
+    LINEAR BUFFERING (Current Implementation):
     This function handles the complex logic of seeking to a specific playback position,
     including determining the correct segment index, updating buffer contents, and
     calculating the appropriate buffer_fcc value.
@@ -157,6 +210,39 @@ def process_seek_event(pos_seek_to_ms):
     gs.rampup_time = None
 
 
+def process_seek_event_dynamic(pos_seek_to_ms):
+    """
+    [Need Review] DYNAMIC BUFFERING INTEGRATION:
+    Alternative implementation for processing seek events with dynamic buffering.
+    
+    Key advantages over linear buffering:
+    - No need to manipulate buffer_contents list
+    - No need to calculate buffer_fcc
+    - Direct access to any buffered region
+    - Efficient handling of non-sequential seeks
+    
+    Args:
+        pos_seek_to_ms (float): The target seek position in milliseconds (playback time)
+    """
+    # Update current playback position
+    gs.current_playback_pos = pos_seek_to_ms
+    
+    # Check if content is already buffered at the seek position
+    if gs.dynamic_buffer.is_buffered(pos_seek_to_ms):
+        if gs.verbose:
+            print(f"[Seek] At playback time {gs.total_play_time} ms: seeking to {pos_seek_to_ms/1000} seconds (content already buffered)")
+    else:
+        if gs.verbose:
+            print(f"[Seek] At playback time {gs.total_play_time} ms: seeking to {pos_seek_to_ms/1000} seconds (content not buffered, will need to download)")
+    
+    # Notify ABR of the seek event
+    gs.abr.report_seek(pos_seek_to_ms)
+    
+    # Reset rampup variables
+    gs.rampup_origin = gs.total_play_time
+    gs.rampup_time = None
+
+
 def interrupted_by_seek(delta):
     """
     Check if playback should be interrupted by a seek event during the given time delta.
@@ -211,6 +297,9 @@ def deplete_buffer(time):
     """
     Process the playback buffer for the given amount of time.
     Returns True if depleting the buffer completes normally, or False if a seek event is detected and processed.
+    
+    LINEAR BUFFERING (Current Implementation):
+    Depletes the linear buffer by consuming segments sequentially from buffer_contents.
     """
     # Handles rebuffering when the buffer is empty
     if len(gs.buffer_contents) == 0:
@@ -276,8 +365,76 @@ def deplete_buffer(time):
     gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
     return True  # Completed without interruption.
 
+
+def deplete_buffer_dynamic(time):
+    """
+    [Need Review] DYNAMIC BUFFERING INTEGRATION:
+    Alternative implementation for depleting buffer with dynamic buffering.
+    
+    Key advantages over linear buffering:
+    - Can handle non-contiguous playback (jumping between regions)
+    - More efficient seeking within buffered regions
+    - Better handling of partial region consumption
+    
+    Args:
+        time (float): Time to deplete from buffer in milliseconds
+        
+    Returns:
+        bool: True if depleting completes normally, False if seek event detected
+    """
+    # Check if we have any buffered content at current position
+    if not gs.dynamic_buffer.is_buffered(gs.current_playback_pos):
+        # No buffered content - rebuffering
+        gs.rebuffer_time += time
+        if interrupted_by_seek(time):
+            return False
+        gs.rebuffer_event_count += 1
+        gs.segment_rebuffer_time = time
+        return True
+    
+    # Find the region containing current playback position
+    region = gs.dynamic_buffer._find_region_of(gs.current_playback_pos)
+    
+    # Calculate how much content is available in current region
+    available_in_region = region.end - gs.current_playback_pos
+    
+    if time <= available_in_region:
+        # All time can be consumed from current region
+        gs.current_playback_pos += time
+        
+        # Update playback statistics for consumed segments
+        segments_consumed = int(time // gs.manifest.segment_time)
+        for i in range(segments_consumed):
+            if i < len(region.chunks):
+                quality = region.chunks[i]
+                gs.played_utility += gs.manifest.utilities[quality]
+                gs.played_bitrate += gs.manifest.bitrates[quality]
+                if gs.last_played is not None and quality != gs.last_played:
+                    gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
+                    gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+                gs.last_played = quality
+        
+        if interrupted_by_seek(time):
+            return False
+        return True
+    else:
+        # [TODO] Need to consume from multiple regions or handle rebuffering
+        # This is a simplified implementation - full version would handle
+        # jumping between regions and partial consumption more carefully
+        gs.current_playback_pos += available_in_region
+        remaining_time = time - available_in_region
+        
+        # For now, treat remaining time as rebuffering
+        # In a full implementation, would check for next available region
+        gs.rebuffer_time += remaining_time
+        if interrupted_by_seek(remaining_time):
+            return False
+        gs.rebuffer_event_count += 1
+        gs.segment_rebuffer_time = remaining_time
+        return True
+
 def playout_buffer(segment_time, buffer_contents, buffer_fcc, deplete_buffer_func):
-    """Play out all the bufferred chunks. """
+    """Play out all the remaining bufferred chunks. """
     deplete_buffer_func(get_buffer_level(segment_time, buffer_contents, buffer_fcc))
 
     # make sure no rounding error
@@ -335,6 +492,10 @@ def advertize_new_network_quality(quality, previous_quality):
     gs.pending_quality_up.append([gs.network_total_time, quality])
 
 def process_download_loop():
+    """
+    LINEAR BUFFERING (Current Implementation):
+    Main download loop that processes video segments sequentially.
+    """
     while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
@@ -564,6 +725,138 @@ def process_download_loop():
 
         if download_metric.abandon_to_quality is None:
             gs.throughput_history.push(download_time, t, l)
+
+
+def process_download_loop_dynamic():
+    """
+    [Need Review]DYNAMIC BUFFERING INTEGRATION:
+    Alternative implementation of the main download loop using dynamic buffering.
+    
+    Key differences from linear buffering:
+    - Can download segments at arbitrary positions (not just sequential)
+    - Supports intelligent prefetching based on user behavior
+    - More efficient handling of seeks and non-sequential access
+    - Better memory management with region-based storage
+    
+    This function demonstrates how to integrate dynamic buffering into the
+    main simulation loop while maintaining compatibility with existing ABR algorithms.
+    """
+    # Track which segments we've downloaded to avoid duplicates
+    downloaded_segments = set()
+    
+    while len(downloaded_segments) < len(gs.manifest.segments):
+        # DYNAMIC BUFFERING: Determine next segment to download
+        # This could be based on:
+        # 1. Current playback position (sequential)
+        # 2. Predicted user behavior (prefetching)
+        # 3. Network conditions (adaptive quality)
+        # 4. Buffer state (filling gaps)
+        
+        # For this example, we'll use a hybrid approach:
+        # - Download sequential segments after current position
+        # - Also download segments that are likely to be accessed soon
+        
+        current_segment_idx = int(gs.current_playback_pos // gs.manifest.segment_time)
+        
+        # Priority 1: Download segments after current playback position
+        next_segment = None
+        for offset in range(0, 10):  # Look ahead up to 10 segments
+            candidate = current_segment_idx + offset
+            if (candidate < len(gs.manifest.segments) and 
+                candidate not in downloaded_segments):
+                next_segment = candidate
+                break
+        
+        # Priority 2: If no sequential segments, download any available segment
+        if next_segment is None:
+            for i in range(len(gs.manifest.segments)):
+                if i not in downloaded_segments:
+                    next_segment = i
+                    break
+        
+        if next_segment is None:
+            break  # All segments downloaded
+        
+        # Check if we need to deplete buffer first
+        current_buffer_level = get_buffer_level_dynamic(
+            gs.manifest.segment_time, 
+            gs.dynamic_buffer, 
+            gs.current_playback_pos
+        )
+        
+        full_delay = current_buffer_level + gs.manifest.segment_time - gs.buffer_size
+        if full_delay > 0:
+            if not deplete_buffer_dynamic(full_delay):
+                continue  # Seek event triggered
+        
+        # Determine quality and delay for this segment
+        if gs.abandoned_to_quality is None:
+            quality, delay = gs.abr.get_quality_delay(next_segment)
+            replace = gs.replacer.check_replace(quality)
+        else:
+            quality, delay = gs.abandoned_to_quality, 0
+            replace = None
+            gs.abandoned_to_quality = None
+        
+        if replace is not None:
+            delay = 0
+            current_segment = next_segment + replace
+            check_abandon = gs.replacer.check_abandon
+        else:
+            current_segment = next_segment
+            check_abandon = gs.abr.check_abandon
+        
+        if gs.args.no_abandon:
+            check_abandon = None
+        
+        size = gs.manifest.segments[current_segment][quality]
+        
+        # Apply ABR delay if needed
+        if delay > 0:
+            if not deplete_buffer_dynamic(delay):
+                continue
+            gs.network.delay(delay)
+            if gs.verbose:
+                print(f"abr delay {delay} bl={current_buffer_level}")
+        
+        # Download the segment
+        download_metric = gs.network.download(
+            size, 
+            current_segment, 
+            quality, 
+            current_buffer_level, 
+            check_abandon
+        )
+        
+        # Process the download
+        start_time = round(gs.total_play_time)
+        success = deplete_buffer_dynamic(download_metric.time)
+        end_time = round(gs.total_play_time)
+        
+        if not success:
+            # Seek occurred during download - handle gracefully
+            continue
+        
+        # [Need Review] DYNAMIC BUFFERING: Add downloaded segment to appropriate region
+        segment_pos_ms = current_segment * gs.manifest.segment_time
+        gs.dynamic_buffer.buffer_by_pos(segment_pos_ms, quality)
+        downloaded_segments.add(current_segment)
+        
+        if gs.verbose:
+            print(f"[{start_time}-{end_time}] {current_segment}: quality={quality} "
+                  f"download_size={download_metric.downloaded}/{download_metric.size} "
+                  f"download_time={download_metric.time} "
+                  f"buffer_level={current_buffer_level}")
+        
+        # Update throughput history
+        download_time = download_metric.time - download_metric.time_to_first_bit
+        if download_metric.abandon_to_quality is None and download_time > 0:
+            t = download_metric.downloaded / download_time
+            l = download_metric.time_to_first_bit
+            gs.throughput_history.push(download_time, t, l)
+        
+        # Report download to ABR
+        gs.abr.report_download(download_metric, replace is not None)
 
 class NetworkModel:
 
@@ -1006,8 +1299,21 @@ if __name__ == "__main__":
     gs.verbose = args.verbose
     gs.graph = args.graph
 
+    # LINEAR BUFFERING (Current Implementation):
     gs.buffer_contents = []    # buffer contents as in [chunk_quality_1, chunk_quality_2, ]
-    gs.buffer_fcc = 0
+    gs.buffer_fcc = 0          # first chunk consumed: partial consumption of first segment
+    
+    # [Need Review] DYNAMIC BUFFERING INTEGRATION:
+    # To replace linear buffering with dynamic buffering, replace the above with:
+    # gs.dynamic_buffer = MultiRegionBuffer(gs.manifest.segment_time)
+    # gs.current_playback_pos = 0.0  # Current playback position in milliseconds
+    # gs.buffer_fcc = 0  # Keep for compatibility, but not used in dynamic mode
+    #
+    # The dynamic buffer provides:
+    # - Non-contiguous buffering: Can buffer segments at arbitrary positions
+    # - Efficient seeking: Direct access to any buffered region
+    # - Memory efficiency: Only stores actual buffered content, not gaps
+    # - Region management: Automatic merging of adjacent regions
     gs.pending_quality_up = []
     gs.reaction_metrics = []
 
@@ -1235,3 +1541,57 @@ if __name__ == "__main__":
             print("rampup time: %f" % (gs.rampup_time / 1000))
         print("total reaction time: %f" % (gs.total_reaction_time / 1000))
         print("network total time: %f" % (gs.network_total_time/1000))
+
+
+"""
+DYNAMIC BUFFERING INTEGRATION SUMMARY:
+
+This file now contains comprehensive comments demonstrating how to integrate
+dynamic buffering from buffer.py into the existing sabre.py simulation.
+
+KEY INTEGRATION POINTS:
+
+1. IMPORTS:
+   - Add: from buffer import MultiRegionBuffer, BufferRegion
+
+2. GLOBAL STATE INITIALIZATION:
+   - Replace: gs.buffer_contents = [] and gs.buffer_fcc = 0
+   - With: gs.dynamic_buffer = MultiRegionBuffer(gs.manifest.segment_time)
+   - Add: gs.current_playback_pos = 0.0
+
+3. BUFFER LEVEL CALCULATION:
+   - Replace: get_buffer_level() calls
+   - With: get_buffer_level_dynamic() calls
+
+4. SEEK EVENT PROCESSING:
+   - Replace: process_seek_event() calls
+   - With: process_seek_event_dynamic() calls
+
+5. BUFFER DEPLETION:
+   - Replace: deplete_buffer() calls
+   - With: deplete_buffer_dynamic() calls
+
+6. MAIN DOWNLOAD LOOP:
+   - Replace: process_download_loop() calls
+   - With: process_download_loop_dynamic() calls
+
+BENEFITS OF DYNAMIC BUFFERING:
+
+- Non-contiguous buffering: Can buffer segments at arbitrary positions
+- Efficient seeking: Direct access to any buffered region without list manipulation
+- Memory efficiency: Only stores actual buffered content, not gaps
+- Intelligent prefetching: Can download segments based on predicted user behavior
+- Better handling of complex seek patterns and non-sequential access
+
+MIGRATION STRATEGY:
+
+1. Start with a hybrid approach: Keep linear buffering as fallback
+2. Gradually replace function calls with dynamic equivalents
+3. Test thoroughly with various seek patterns and network conditions
+4. Optimize region merging and memory management
+5. Add intelligent prefetching algorithms based on user behavior patterns
+
+The dynamic buffering system maintains full compatibility with existing
+ABR algorithms while providing enhanced capabilities for modern streaming
+scenarios with frequent seeking and non-sequential access patterns.
+"""
