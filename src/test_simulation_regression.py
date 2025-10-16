@@ -80,6 +80,8 @@ class SimulationRegressionTest:
         # If hashes differ, do line-by-line comparison
         return self._detailed_comparison(current_file, baseline_file)
     
+    # [TODO] Use python difflib to compare the results, instead of line-by-line comparison.
+    # remove metric comparison.
     def _detailed_comparison(self, current_file, baseline_file):
         """Perform detailed line-by-line comparison."""
         with open(current_file, 'r') as f:

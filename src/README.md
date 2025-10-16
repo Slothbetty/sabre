@@ -33,13 +33,13 @@ Ensure simulation results remain consistent after code changes:
 
 1. **Generate baseline results(Run Once):**
    ```bash
-   python test_simulation.py --generate-baseline
+   python test_simulation_regression.py --generate-baseline
    ```
    Remember to generate new baseline_simulation_results.txt whenever there are changes in movie.json, network.json or seeks.json.
 
 2. **Run regression test:**
    ```bash
-   python test_simulation.py
+   python test_simulation_regression.py
    ```
 
 The test will compare current simulation results with the baseline and report any differences.

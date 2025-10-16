@@ -110,6 +110,7 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
 
 def get_buffer_level_dynamic(segment_time, dynamic_buffer, current_pos):
     """
+    [TODO] only use current region, instead of all the regions.
     [Need Review] DYNAMIC BUFFERING INTEGRATION:
     Alternative implementation for dynamic buffering that calculates buffer level
     based on the current playback position and available buffered regions.
@@ -141,6 +142,10 @@ def get_buffer_level_dynamic(segment_time, dynamic_buffer, current_pos):
 
 
 def process_seek_event(pos_seek_to_ms):
+    """
+    [TODO] Separate the function into meaningful parts, and update the comments accordingly.
+    each part will be independent functions, they are not calling too many same parameters.
+    """
     """
     Process a seek event by updating buffer contents and position.
     
@@ -1559,6 +1564,9 @@ KEY INTEGRATION POINTS:
    - With: gs.dynamic_buffer = MultiRegionBuffer(gs.manifest.segment_time)
    - Add: gs.current_playback_pos = 0.0
 
+[TODO] Add description of:
+what is the old behavior, and what is the new behavior.
+why we need to change it into new behavior, so that we can review it later and improve it.
 3. BUFFER LEVEL CALCULATION:
    - Replace: get_buffer_level() calls
    - With: get_buffer_level_dynamic() calls
