@@ -149,11 +149,14 @@ class SimulationRegressionTest:
             if new_baseline_file.exists():
                 new_baseline_file.unlink()
     
-    def _generate_new_baseline(self, output_file):
-        """Generate a new baseline file with current simulation results."""
-        # Get timestamp and branch info
-        timestamp = datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
-        branch = self.get_git_branch()
+    # [TODO] Use python difflib to compare the results, instead of line-by-line comparison.
+    # remove metric comparison.
+    def _detailed_comparison(self, current_file, baseline_file):
+        """Perform detailed line-by-line comparison."""
+        with open(current_file, 'r') as f:
+            current_lines = f.readlines()
+        with open(baseline_file, 'r') as f:
+            baseline_lines = f.readlines()
         
         # Create header for the new baseline file
         header = f"""# Baseline Simulation Results
