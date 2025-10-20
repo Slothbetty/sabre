@@ -338,7 +338,7 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     gs.pending_quality_up.append([gs.network_total_time, quality])
 
-def process_download_loop(abr, replacer, is_bola):
+def process_download_loop(abr, replacer, graph, args):
     while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
@@ -366,7 +366,7 @@ def process_download_loop(abr, replacer, is_bola):
         else:
             current_segment = gs.next_segment
             check_abandon = abr.check_abandon
-        if gs.args.no_abandon:
+        if args.no_abandon:
             check_abandon = None
 
         size = gs.manifest.segments[current_segment][quality]
@@ -437,7 +437,7 @@ def process_download_loop(abr, replacer, is_bola):
                             ),
                             end="",
                         )
-            if gs.graph:
+            if graph:
                 print(
                     "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
                     % (
@@ -451,7 +451,7 @@ def process_download_loop(abr, replacer, is_bola):
                         effective_download_time,
                         get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                         0,
-                        is_bola
+                        gs.is_bola
                     )
                 )
             continue  # After a seek, restart the loop.
@@ -504,7 +504,7 @@ def process_download_loop(abr, replacer, is_bola):
                             ),
                             end="",
                         )
-            if gs.graph:
+            if graph:
                 print(
                     "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d "
                     % (
@@ -541,15 +541,15 @@ def process_download_loop(abr, replacer, is_bola):
 
         if gs.verbose:
             print("->%d" % get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))
-        if gs.graph:
+        if graph:
             if gs.segment_rebuffer_time > 0:
                 print(
                     "buffer_level=%d rebuffer_time=%d is_bola=%s"
-                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, is_bola)
+                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, gs.is_bola)
                 )
                 gs.segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, is_bola))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, gs.is_bola))
 
         abr.report_download(download_metric, replace is not None)
 
@@ -1006,9 +1006,7 @@ if __name__ == "__main__":
     args = parser.parse_args()
 
     # Initialize GlobalState
-    gs.args = args
     gs.verbose = args.verbose
-    gs.graph = args.graph
 
     gs.buffer_contents = []    # buffer contents as in [chunk_quality_1, chunk_quality_2, ]
     gs.buffer_fcc = 0
@@ -1065,7 +1063,6 @@ if __name__ == "__main__":
         segments=manifest_data["segment_sizes_bits"],
     )
     SessionInfo.manifest = gs.manifest
-    is_bola = False
 
     network_trace = load_json(args.network)
     network_trace = [
@@ -1095,6 +1092,10 @@ if __name__ == "__main__":
         abr_list[args.abr].use_abr_o = args.abr_osc
         abr_list[args.abr].use_abr_u = not args.abr_osc
         abr = abr_list[args.abr](config)
+    
+    # Set is_bola based on the ABR algorithm (matching baseline exactly)
+    # Note: is_bola is kept in global state because it's modified by ABR algorithms during execution
+    gs.is_bola = False
     
     gs.network = NetworkModel(network_trace)
     if args.replace[-3:] == ".py":
@@ -1137,7 +1138,7 @@ if __name__ == "__main__":
                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
             )
         )
-    if gs.graph:
+    if args.graph:
         print(
             "%d time=%d network_bandwidth=%d network_latency=%d quality=%d bitrate=%d download_size=%d download_time=%d buffer_level=%d rebuffer_time=%d is_bola=%s"
             % (
@@ -1151,7 +1152,7 @@ if __name__ == "__main__":
                 0,
                 0,
                 0,
-                is_bola,
+                gs.is_bola,
             )
         )
         print(
@@ -1167,7 +1168,7 @@ if __name__ == "__main__":
                 download_metric.time,
                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                 0,
-                is_bola,
+                gs.is_bola,
             )
         )
 
@@ -1175,7 +1176,7 @@ if __name__ == "__main__":
     gs.next_segment = 1
     gs.abandoned_to_quality = None
     while gs.next_segment < len(gs.manifest.segments):
-        process_download_loop(abr, replacer, is_bola)
+        process_download_loop(abr, replacer, args.graph, args)
 
     gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, lambda time: deplete_buffer(time, abr))
 
@@ -1214,7 +1215,7 @@ if __name__ == "__main__":
                 to_time_average
                 * (
                     gs.played_utility
-                    - gs.args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
+                    - args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
                 )
             )
         )
