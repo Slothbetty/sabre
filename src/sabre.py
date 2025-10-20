@@ -92,7 +92,7 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
-def process_seek_event(pos_seek_to_ms):
+def process_seek_event(pos_seek_to_ms, abr):
     """
     Process a seek event by updating buffer contents and position.
     
@@ -155,13 +155,13 @@ def process_seek_event(pos_seek_to_ms):
         # Seek landed at a segment boundary: no partial chunk has been consumed.
         gs.buffer_fcc = 0
     # Notify ABR of the seek event (using seek time in milliseconds).
-    gs.abr.report_seek(pos_seek_to_ms)
+    abr.report_seek(pos_seek_to_ms)
     # Reset rampup variables.
     gs.rampup_origin = gs.total_play_time
     gs.rampup_time = None
 
 
-def interrupted_by_seek(delta):
+def interrupted_by_seek(delta, abr):
     """
     Check if playback should be interrupted by a seek event during the given time delta.
     
@@ -204,14 +204,14 @@ def interrupted_by_seek(delta):
             pos_seek_to_ms = pos_seek_to * 1000
 
             # Process the seek event using the extracted function.
-            process_seek_event(pos_seek_to_ms)
+            process_seek_event(pos_seek_to_ms, abr)
             return True  # Indicate that a seek was processed.
 
     # If no seek event occurs in this delta, simply increment total_play_time.
     gs.total_play_time += delta
     return False
 
-def deplete_buffer(time):
+def deplete_buffer(time, abr):
     """
     Process the playback buffer for the given amount of time.
     Returns True if depleting the buffer completes normally, or False if a seek event is detected and processed.
@@ -219,7 +219,7 @@ def deplete_buffer(time):
     # Handles rebuffering when the buffer is empty
     if len(gs.buffer_contents) == 0:
         gs.rebuffer_time += time
-        if interrupted_by_seek(time):
+        if interrupted_by_seek(time, abr):
             return False  # Seek event triggered: abort depleting further.
         gs.rebuffer_event_count += 1
         gs.segment_rebuffer_time = time
@@ -229,12 +229,12 @@ def deplete_buffer(time):
         # Play the remaining fraction of the first chunk.
         if time + gs.buffer_fcc < gs.manifest.segment_time:
             gs.buffer_fcc += time
-            if interrupted_by_seek(time):
+            if interrupted_by_seek(time, abr):
                 return False
             return True
         dt = gs.manifest.segment_time - gs.buffer_fcc
         time -= dt
-        if interrupted_by_seek(dt):
+        if interrupted_by_seek(dt, abr):
             return False
         gs.buffer_contents.pop(0)
         gs.buffer_fcc = 0
@@ -261,18 +261,18 @@ def deplete_buffer(time):
 
         if time >= gs.manifest.segment_time:
             gs.buffer_contents.pop(0)
-            if interrupted_by_seek(gs.manifest.segment_time):
+            if interrupted_by_seek(gs.manifest.segment_time, abr):
                 return False
             time -= gs.manifest.segment_time
         else:
             gs.buffer_fcc = time
-            if interrupted_by_seek(time):
+            if interrupted_by_seek(time, abr):
                 return False
             time = 0
 
     if time > 0:
         gs.rebuffer_time += time
-        if interrupted_by_seek(time):
+        if interrupted_by_seek(time, abr):
             return False
         gs.rebuffer_event_count += 1
         gs.segment_rebuffer_time = time
@@ -338,22 +338,22 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     gs.pending_quality_up.append([gs.network_total_time, quality])
 
-def process_download_loop():
+def process_download_loop(abr, replacer, is_bola):
     while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
-            if not deplete_buffer(full_delay):
+            if not deplete_buffer(full_delay, abr):
                 continue  # A seek event was triggered; restart loop.
             gs.network.delay(full_delay)
-            gs.abr.report_delay(full_delay)
+            abr.report_delay(full_delay)
             if gs.verbose:
                 print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
 
         # Determine quality and delay; handle potential replacement.
         if gs.abandoned_to_quality is None:
-            quality, delay = gs.abr.get_quality_delay(gs.next_segment)
-            replace = gs.replacer.check_replace(quality)
+            quality, delay = abr.get_quality_delay(gs.next_segment)
+            replace = replacer.check_replace(quality)
         else:
             quality, delay = gs.abandoned_to_quality, 0
             replace = None
@@ -362,17 +362,17 @@ def process_download_loop():
         if replace is not None:
             delay = 0
             current_segment = gs.next_segment + replace
-            check_abandon = gs.replacer.check_abandon
+            check_abandon = replacer.check_abandon
         else:
             current_segment = gs.next_segment
-            check_abandon = gs.abr.check_abandon
+            check_abandon = abr.check_abandon
         if gs.args.no_abandon:
             check_abandon = None
 
         size = gs.manifest.segments[current_segment][quality]
 
         if delay > 0:
-            if not deplete_buffer(delay):
+            if not deplete_buffer(delay, abr):
                 continue  # Seek occurred, restart the loop.
             gs.network.delay(delay)
             if gs.verbose:
@@ -381,7 +381,7 @@ def process_download_loop():
         download_metric = gs.network.download(size, current_segment, quality, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), check_abandon)
 
         start_time = round(gs.total_play_time)
-        success = deplete_buffer(download_metric.time)
+        success = deplete_buffer(download_metric.time, abr)
         end_time = round(gs.total_play_time)
         if not success:
             # A seek occurred during depleting the buffer.
@@ -451,7 +451,7 @@ def process_download_loop():
                         effective_download_time,
                         get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                         0,
-                        gs.is_bola
+                        is_bola
                     )
                 )
             continue  # After a seek, restart the loop.
@@ -545,13 +545,13 @@ def process_download_loop():
             if gs.segment_rebuffer_time > 0:
                 print(
                     "buffer_level=%d rebuffer_time=%d is_bola=%s"
-                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, gs.is_bola)
+                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, is_bola)
                 )
                 gs.segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, gs.is_bola))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, is_bola))
 
-        gs.abr.report_download(download_metric, replace is not None)
+        abr.report_download(download_metric, replace is not None)
 
         # Calculate throughput and latency.
         download_time = download_metric.time - download_metric.time_to_first_bit
@@ -1065,7 +1065,7 @@ if __name__ == "__main__":
         segments=manifest_data["segment_sizes_bits"],
     )
     SessionInfo.manifest = gs.manifest
-    gs.is_bola = False
+    is_bola = False
 
     network_trace = load_json(args.network)
     network_trace = [
@@ -1090,26 +1090,27 @@ if __name__ == "__main__":
     }
 
     if args.abr[-3:] == ".py":
-        gs.abr = AbrInput(args.abr, config)
+        abr = AbrInput(args.abr, config)
     else:
         abr_list[args.abr].use_abr_o = args.abr_osc
         abr_list[args.abr].use_abr_u = not args.abr_osc
-        gs.abr = abr_list[args.abr](config)
+        abr = abr_list[args.abr](config)
+    
     gs.network = NetworkModel(network_trace)
     if args.replace[-3:] == ".py":
-        gs.replacer = ReplacementInput(args.replace)
+        replacer = ReplacementInput(args.replace)
     if args.replace == "left":
-        gs.replacer = Replace(0)
+        replacer = Replace(0)
     elif args.replace == "right":
-        gs.replacer = Replace(1)
+        replacer = Replace(1)
     else:
-        gs.replacer = NoReplace()
+        replacer = NoReplace()
 
     config = {"window_size": args.window_size, "half_life": args.half_life}
     gs.throughput_history = average_list[args.moving_average](config)
 
     # download first segment
-    quality = gs.abr.get_first_quality()
+    quality = abr.get_first_quality()
     size = gs.manifest.segments[0][quality]
     download_metric = gs.network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
@@ -1150,7 +1151,7 @@ if __name__ == "__main__":
                 0,
                 0,
                 0,
-                gs.is_bola,
+                is_bola,
             )
         )
         print(
@@ -1166,7 +1167,7 @@ if __name__ == "__main__":
                 download_metric.time,
                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                 0,
-                gs.is_bola,
+                is_bola,
             )
         )
 
@@ -1174,9 +1175,9 @@ if __name__ == "__main__":
     gs.next_segment = 1
     gs.abandoned_to_quality = None
     while gs.next_segment < len(gs.manifest.segments):
-        process_download_loop()
+        process_download_loop(abr, replacer, is_bola)
 
-    gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, deplete_buffer)
+    gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, lambda time: deplete_buffer(time, abr))
 
     if gs.verbose:
         # multiply by to_time_average to get per/chunk average

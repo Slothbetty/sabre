@@ -41,10 +41,7 @@ class GlobalState:
             self.network_total_time = 0
             self.sustainable_quality = 0
             
-            # ABR and replacement
-            self.abr = None
-            self.replacer = None
-            self.is_bola = False
+            # ABR and replacement (moved to local variables in sabre.py)
             
             # Statistics and metrics
             self.rebuffer_event_count = 0
