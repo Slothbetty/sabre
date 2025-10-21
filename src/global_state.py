@@ -34,7 +34,6 @@ class GlobalState:
             self.max_buffer_size = 0
             
             # Network and throughput
-            self.network = None
             self.throughput = None
             self.latency = None
             self.throughput_history = None

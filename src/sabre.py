@@ -92,44 +92,22 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
-def process_seek_event(pos_seek_to_ms, abr):
+def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time):
     """
-    Process a seek event by updating buffer contents and position.
+    Update buffer contents and position during a seek event.
     
-    This function handles the complex logic of seeking to a specific playback position,
-    including determining the correct segment index, updating buffer contents, and
-    calculating the appropriate buffer_fcc value.
+    This function handles the buffer management logic when a seek occurs:
+    1. Computes the buffer base index
+    2. Determines which buffered segments to keep or clear
+    3. Updates the buffer position and partial segment consumption
     
     Args:
-        pos_seek_to_ms (float): The target seek position in milliseconds (playback time)
+        gs: Global state object containing buffer information
+        new_segment (int): The target segment index for the seek
+        floor_idx (int): The floor index of the seek position
+        pos_seek_to_ms (float): The seek position in milliseconds
+        seg_time (float): Duration of each segment in milliseconds
     """
-    # Determine the segment index nearest to the requested seek time (pos_seek_to_ms).
-    # We split each segment in half: if pos_seek_to_ms is in the first half, round down;
-    # if it's in the second half, round up.
-    seg_time = gs.manifest.segment_time  # duration of each segment in milliseconds
-
-    # Compute the zero‐based index by flooring the division.
-    floor_idx = math.floor(pos_seek_to_ms / seg_time)
-
-    # Calculate the timestamp of the start of the floor_idx segment.
-    prev_boundary = floor_idx * seg_time
-
-    # How many milliseconds past the start of that segment the seek target is.
-    delta = pos_seek_to_ms - prev_boundary
-
-    if delta < (seg_time / 2):
-        # If target is in the first half of the segment, stay on floor_idx.
-        new_segment = floor_idx
-    else:
-        # If target is in the second half, advance to the next segment.
-        new_segment = floor_idx + 1
-
-    gs.last_seek_time = gs.total_play_time
-
-    if gs.verbose:
-        print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-              (gs.total_play_time, pos_seek_to_ms / 1000, new_segment))
-
     # Compute the segment index corresponding to the first element in the buffer.
     # next_segment always equals: buffer_base + len(buffer_contents)
     buffer_base = gs.next_segment - len(gs.buffer_contents)
@@ -154,11 +132,6 @@ def process_seek_event(pos_seek_to_ms, abr):
     else:
         # Seek landed at a segment boundary: no partial chunk has been consumed.
         gs.buffer_fcc = 0
-    # Notify ABR of the seek event (using seek time in milliseconds).
-    abr.report_seek(pos_seek_to_ms)
-    # Reset rampup variables.
-    gs.rampup_origin = gs.total_play_time
-    gs.rampup_time = None
 
 
 def interrupted_by_seek(delta, abr):
@@ -203,8 +176,41 @@ def interrupted_by_seek(delta, abr):
             pos_seek_to = event["seek_to"]
             pos_seek_to_ms = pos_seek_to * 1000
 
-            # Process the seek event using the extracted function.
-            process_seek_event(pos_seek_to_ms, abr)
+            # Determine the segment index nearest to the requested seek time (pos_seek_to_ms).
+            # We split each segment in half: if pos_seek_to_ms is in the first half, round down;
+            # if it's in the second half, round up.
+            seg_time = gs.manifest.segment_time  # duration of each segment in milliseconds
+
+            # Compute the zero‐based index by flooring the division.
+            floor_idx = math.floor(pos_seek_to_ms / seg_time)
+
+            # Calculate the timestamp of the start of the floor_idx segment.
+            prev_boundary = floor_idx * seg_time
+
+            # How many milliseconds past the start of that segment the seek target is.
+            delta = pos_seek_to_ms - prev_boundary
+
+            if delta < (seg_time / 2):
+                # If target is in the first half of the segment, stay on floor_idx.
+                new_segment = floor_idx
+            else:
+                # If target is in the second half, advance to the next segment.
+                new_segment = floor_idx + 1
+
+            gs.last_seek_time = gs.total_play_time
+
+            if gs.verbose:
+                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
+                    (gs.total_play_time, pos_seek_to_ms / 1000, new_segment))
+
+            # Update buffer during seek
+            update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time)
+                
+            # Notify ABR of the seek event (using seek time in milliseconds).
+            abr.report_seek(pos_seek_to_ms)
+            # Reset rampup variables.
+            gs.rampup_origin = gs.total_play_time
+            gs.rampup_time = None
             return True  # Indicate that a seek was processed.
 
     # If no seek event occurs in this delta, simply increment total_play_time.
@@ -338,14 +344,14 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     gs.pending_quality_up.append([gs.network_total_time, quality])
 
-def process_download_loop(abr, replacer, graph, args):
+def process_download_loop(abr, replacer, graph, args, network):
     while gs.next_segment < len(gs.manifest.segments):
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
             if not deplete_buffer(full_delay, abr):
                 continue  # A seek event was triggered; restart loop.
-            gs.network.delay(full_delay)
+            network.delay(full_delay)
             abr.report_delay(full_delay)
             if gs.verbose:
                 print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
@@ -374,11 +380,11 @@ def process_download_loop(abr, replacer, graph, args):
         if delay > 0:
             if not deplete_buffer(delay, abr):
                 continue  # Seek occurred, restart the loop.
-            gs.network.delay(delay)
+            network.delay(delay)
             if gs.verbose:
                 print("abr delay %d bl=%d" % (delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
 
-        download_metric = gs.network.download(size, current_segment, quality, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), check_abandon)
+        download_metric = network.download(size, current_segment, quality, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), check_abandon)
 
         start_time = round(gs.total_play_time)
         success = deplete_buffer(download_metric.time, abr)
@@ -443,8 +449,8 @@ def process_download_loop(abr, replacer, graph, args):
                     % (
                         current_segment,
                         effective_end,
-                        gs.network.trace[gs.network.index].bandwidth,
-                        gs.network.trace[gs.network.index].latency,
+                        network.trace[network.index].bandwidth,
+                        network.trace[network.index].latency,
                         download_metric.quality,
                         gs.manifest.bitrates[download_metric.quality],
                         effective_downloaded,
@@ -510,8 +516,8 @@ def process_download_loop(abr, replacer, graph, args):
                     % (
                         current_segment,
                         end_time,
-                        gs.network.trace[gs.network.index].bandwidth,
-                        gs.network.trace[gs.network.index].latency,
+                        network.trace[network.index].bandwidth,
+                        network.trace[network.index].latency,
                         download_metric.quality,
                         gs.manifest.bitrates[download_metric.quality],
                         download_metric.downloaded,
@@ -1097,7 +1103,7 @@ if __name__ == "__main__":
     # Note: is_bola is kept in global state because it's modified by ABR algorithms during execution
     gs.is_bola = False
     
-    gs.network = NetworkModel(network_trace)
+    network = NetworkModel(network_trace)
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
     if args.replace == "left":
@@ -1113,7 +1119,7 @@ if __name__ == "__main__":
     # download first segment
     quality = abr.get_first_quality()
     size = gs.manifest.segments[0][quality]
-    download_metric = gs.network.download(size, 0, quality, 0)
+    download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     gs.startup_time = download_time
     gs.buffer_contents.append((0, download_metric.quality))
@@ -1144,8 +1150,8 @@ if __name__ == "__main__":
             % (
                 0,
                 0,
-                gs.network.trace[gs.network.index].bandwidth,
-                gs.network.trace[gs.network.index].latency,
+                network.trace[network.index].bandwidth,
+                network.trace[network.index].latency,
                 download_metric.quality,
                 gs.manifest.bitrates[download_metric.quality],
                 0,
@@ -1160,8 +1166,8 @@ if __name__ == "__main__":
             % (
                 0,
                 download_metric.time,
-                gs.network.trace[gs.network.index].bandwidth,
-                gs.network.trace[gs.network.index].latency,
+                network.trace[network.index].bandwidth,
+                network.trace[network.index].latency,
                 download_metric.quality,
                 gs.manifest.bitrates[download_metric.quality],
                 download_metric.downloaded,
@@ -1176,7 +1182,7 @@ if __name__ == "__main__":
     gs.next_segment = 1
     gs.abandoned_to_quality = None
     while gs.next_segment < len(gs.manifest.segments):
-        process_download_loop(abr, replacer, args.graph, args)
+        process_download_loop(abr, replacer, args.graph, args, network)
 
     gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, lambda time: deplete_buffer(time, abr))
 
