@@ -46,6 +46,10 @@ from enum import Enum
 #     rebuffer event count
 #     rebuffer total time
 #     session info
+#     is_bola flag for Dynamic/DynamicDash algorithms
+
+# Global variable for tracking BOLA algorithm usage
+is_bola = False
 
 """
 [Jinhui] Coding style TODOs:
@@ -1499,7 +1503,6 @@ class Dynamic(Abr):
         self.tput = ThroughputRule(config)
 
         is_bola = False
-        # self.is_bola = False
 
     def get_quality_delay(self, segment_index):
         global is_bola
@@ -1518,6 +1521,7 @@ class Dynamic(Abr):
         return b if is_bola else t
 
     def get_first_quality(self):
+        global is_bola
         if is_bola:
             return self.bola.get_first_quality()
         else:
@@ -1528,12 +1532,14 @@ class Dynamic(Abr):
         self.tput.report_delay(delay)
 
     def report_download(self, metrics, is_replacment):
+        global is_bola
         self.bola.report_download(metrics, is_replacment)
         self.tput.report_download(metrics, is_replacment)
         if is_replacment:
             is_bola = False
 
     def check_abandon(self, progress, buffer_level):
+        global is_bola
         if False and is_bola:
             return self.bola.check_abandon(progress, buffer_level)
         else:
@@ -1552,6 +1558,7 @@ class DynamicDash(Abr):
 
     def __init__(self, config):
         global manifest
+        global is_bola
 
         self.bola = BolaEnh(config)
         self.tput = ThroughputRule(config)
@@ -1562,22 +1569,24 @@ class DynamicDash(Abr):
         self.low_threshold = 5000
         self.high_threshold = 10000
         ######################## TODO
-        self.is_bola = False
+        is_bola = False
 
     def get_quality_delay(self, segment_index):
+        global is_bola
         level = get_buffer_level()
-        if self.is_bola and level < self.low_threshold:
-            self.is_bola = False
-        elif not self.is_bola and level > self.high_threshold:
-            self.is_bola = True
+        if is_bola and level < self.low_threshold:
+            is_bola = False
+        elif not is_bola and level > self.high_threshold:
+            is_bola = True
 
-        if self.is_bola:
+        if is_bola:
             return self.bola.get_quality_delay(segment_index)
         else:
             return self.tput.get_quality_delay(segment_index)
 
     def get_first_quality(self):
-        if self.is_bola:
+        global is_bola
+        if is_bola:
             return self.bola.get_first_quality()
         else:
             return self.tput.get_first_quality()
@@ -1591,7 +1600,8 @@ class DynamicDash(Abr):
         self.tput.report_download(metrics, is_replacment)
 
     def check_abandon(self, progress, buffer_level):
-        if self.is_bola:
+        global is_bola
+        if is_bola:
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)
