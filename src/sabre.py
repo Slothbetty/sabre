@@ -92,6 +92,19 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
+def get_is_bola_value(abr):
+    """
+    Get the current is_bola value based on the ABR algorithm type.
+    - Dynamic class uses self.is_bola
+    - DynamicDash class uses self.is_bola
+    - Other algorithms don't use is_bola (return False)
+    """
+    if isinstance(abr, (Dynamic, DynamicDash)):
+        return abr.is_bola
+    else:
+        return False
+
+
 def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time):
     """
     Update buffer contents and position during a seek event.
@@ -457,7 +470,7 @@ def process_download_loop(abr, replacer, graph, args, network):
                         effective_download_time,
                         get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                         0,
-                        gs.is_bola
+                        get_is_bola_value(abr)
                     )
                 )
             continue  # After a seek, restart the loop.
@@ -551,11 +564,11 @@ def process_download_loop(abr, replacer, graph, args, network):
             if gs.segment_rebuffer_time > 0:
                 print(
                     "buffer_level=%d rebuffer_time=%d is_bola=%s"
-                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, gs.is_bola)
+                    % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), gs.segment_rebuffer_time, get_is_bola_value(abr))
                 )
                 gs.segment_rebuffer_time = 0
             else:
-                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, gs.is_bola))
+                print("buffer_level=%d rebuffer_time=%d is_bola=%s" % (get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc), 0, get_is_bola_value(abr)))
 
         abr.report_download(download_metric, replace is not None)
 
@@ -1099,10 +1112,6 @@ if __name__ == "__main__":
         abr_list[args.abr].use_abr_u = not args.abr_osc
         abr = abr_list[args.abr](config)
     
-    # Set is_bola based on the ABR algorithm (matching baseline exactly)
-    # Note: is_bola is kept in global state because it's modified by ABR algorithms during execution
-    gs.is_bola = False
-    
     network = NetworkModel(network_trace)
     if args.replace[-3:] == ".py":
         replacer = ReplacementInput(args.replace)
@@ -1158,7 +1167,7 @@ if __name__ == "__main__":
                 0,
                 0,
                 0,
-                gs.is_bola,
+                get_is_bola_value(abr),
             )
         )
         print(
@@ -1174,7 +1183,7 @@ if __name__ == "__main__":
                 download_metric.time,
                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                 0,
-                gs.is_bola,
+                get_is_bola_value(abr),
             )
         )
 

@@ -637,8 +637,7 @@ class Dynamic(Abr):
         self.bola = Bola(config)
         self.tput = ThroughputRule(config)
 
-        gs.is_bola = False
-        # self.is_bola = False
+        self.is_bola = False
 
     def get_quality_delay(self, segment_index):
         level = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
@@ -646,17 +645,17 @@ class Dynamic(Abr):
         b = self.bola.get_quality_delay(segment_index)
         t = self.tput.get_quality_delay(segment_index)
 
-        if gs.is_bola:
+        if self.is_bola:
             if level < Dynamic.low_buffer_threshold and b[0] < t[0]:
-                gs.is_bola = False
+                self.is_bola = False
         else:
             if level > Dynamic.low_buffer_threshold and b[0] >= t[0]:
-                gs.is_bola = True
+                self.is_bola = True
 
-        return b if gs.is_bola else t
+        return b if self.is_bola else t
 
     def get_first_quality(self):
-        if gs.is_bola:
+        if self.is_bola:
             return self.bola.get_first_quality()
         else:
             return self.tput.get_first_quality()
@@ -669,10 +668,10 @@ class Dynamic(Abr):
         self.bola.report_download(metrics, is_replacment)
         self.tput.report_download(metrics, is_replacment)
         if is_replacment:
-            gs.is_bola = False
+            self.is_bola = False
 
     def check_abandon(self, progress, buffer_level):
-        if False and gs.is_bola:
+        if False and self.is_bola:
             return self.bola.check_abandon(progress, buffer_level)
         else:
             return self.tput.check_abandon(progress, buffer_level)

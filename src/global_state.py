@@ -40,8 +40,6 @@ class GlobalState:
             self.network_total_time = 0
             self.sustainable_quality = 0
             
-            # is_bola kept here because it's modified by ABR algorithms during execution
-            self.is_bola = False
             
             # Statistics and metrics
             self.rebuffer_event_count = 0
