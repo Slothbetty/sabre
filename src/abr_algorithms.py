@@ -31,6 +31,9 @@ from global_state import gs
 
 def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
+    # If multi_region_buffer exists, use it; otherwise fall back to linear buffering
+    if gs.multi_region_buffer is not None:
+        return gs.multi_region_buffer.get_buffer_level()
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
@@ -51,6 +54,18 @@ class SessionInfo:
         return gs.throughput
 
     def get_buffer_contents(self):
+        # If multi_region_buffer exists, return chunks from buffer; otherwise return buffer_contents
+        if gs.multi_region_buffer is not None:
+            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+            # Convert to same format as buffer_contents: list of (segment_index, quality) tuples
+            # For compatibility, we'll return chunks with dummy segment indices
+            # This is mainly used for replacement logic
+            result = []
+            current_pos = gs.current_playback_pos
+            for i, quality in enumerate(playable_chunks):
+                seg_idx = int((current_pos + i * gs.manifest.segment_time) / gs.manifest.segment_time)
+                result.append((seg_idx, quality))
+            return result
         return gs.buffer_contents[:]
 
 
