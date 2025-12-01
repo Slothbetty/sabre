@@ -33,7 +33,8 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
     # If multi_region_buffer exists, use it; otherwise fall back to linear buffering
     if gs.multi_region_buffer is not None:
-        return gs.multi_region_buffer.get_buffer_level()
+        # Pass buffer_fcc parameter to match linear buffering behavior
+        return gs.multi_region_buffer.get_buffer_level(buffer_fcc)
     return segment_time * len(buffer_contents) - buffer_fcc
 
 
@@ -791,35 +792,44 @@ class Replace(Replacement):
     def check_replace(self, quality):
         self.replacing = None
 
+        # Get buffer contents - use multi_region_buffer if available
+        if gs.multi_region_buffer is not None:
+            # Use MultiRegionBuffer to get playable chunks
+            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+            buffer_list = playable_chunks  # List of quality values
+        else:
+            # Fallback to buffer_contents (for compatibility when multi_region_buffer not enabled)
+            buffer_list = [q for (_seg_idx, q) in gs.buffer_contents]
+
         if self.strategy == 0:
 
             skip = math.ceil(1.5 + gs.buffer_fcc / gs.manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, gs.buffer_fcc))
-            for i in range(skip, len(gs.buffer_contents)):
-                (_seg_idx, q_i) = gs.buffer_contents[i]
+            for i in range(skip, len(buffer_list)):
+                q_i = buffer_list[i]
                 if q_i < quality:
-                    self.replacing = i - len(gs.buffer_contents)
+                    self.replacing = i - len(buffer_list)
                     break
 
             # if self.replacing == None:
-            #    print('no repl:  0/%d' % len(gs.buffer_contents))
+            #    print('no repl:  0/%d' % len(buffer_list))
             # else:
-            #    print('replace: %d/%d' % (self.replacing, len(gs.buffer_contents)))
+            #    print('replace: %d/%d' % (self.replacing, len(buffer_list)))
 
         elif self.strategy == 1:
 
             skip = math.ceil(1.5 + gs.buffer_fcc / gs.manifest.segment_time)
             # print('skip = %d  fcc = %d' % (skip, gs.buffer_fcc))
-            for i in range(len(gs.buffer_contents) - 1, skip - 1, -1):
-                (_seg_idx, q_i) = gs.buffer_contents[i]
+            for i in range(len(buffer_list) - 1, skip - 1, -1):
+                q_i = buffer_list[i]
                 if q_i < quality:
-                    self.replacing = i - len(gs.buffer_contents)
+                    self.replacing = i - len(buffer_list)
                     break
 
             # if self.replacing == None:
-            #    print('no repl:  0/%d' % len(gs.buffer_contents))
+            #    print('no repl:  0/%d' % len(buffer_list))
             # else:
-            #    print('replace: %d/%d' % (self.replacing, len(gs.buffer_contents)))
+            #    print('replace: %d/%d' % (self.replacing, len(buffer_list)))
 
         else:
             pass

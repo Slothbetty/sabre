@@ -5,9 +5,6 @@ This module contains the GlobalState singleton class that manages all global sta
 variables for the SABRE adaptive bitrate streaming simulation.
 """
 
-from buffer import MultiRegionBuffer
-
-
 class GlobalState:
     """
     Singleton class to hold all global state variables.

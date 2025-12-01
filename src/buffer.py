@@ -1,15 +1,12 @@
 from __future__ import annotations
 import math
+import sys
 import typing
 from bisect import bisect_right
 from enum import Enum
 
 # Import gs for compatibility methods
-try:
-    from global_state import gs
-except ImportError:
-    # Handle case where gs is not available (e.g., during import)
-    gs = None
+from global_state import gs
 
 
 class BufferRegion:
@@ -190,66 +187,91 @@ class MultiRegionBuffer:
         if not region.exists(pos):
             return None
         return region
-
-    def is_buffered(self, pos: float):
-        """Returns if the closest chunk to `pos` is buffered.
-        """
-        return self._find_region_of(pos) is not None
     
-    # Compatibility methods (previously in BufferWrapper)
     
-    def get_buffer_level(self):
-        """Only count contiguous playable content - CRITICAL for ABR compatibility."""
-        if gs is None:
-            return 0
-        playable_chunks = self.get_contiguous_chunks_from_current_position()
-        return self.chunk_duration * len(playable_chunks) - gs.buffer_fcc
+    def get_all_chunks(self):
+        """Get all chunks from all regions. For sequential downloads, returns chunks in order."""
+        all_chunks = []
+        # Filter to only include starts that exist in region_map
+        valid_starts = [s for s in self.region_starts if s in self.region_map]
+        valid_starts = sorted(valid_starts)
+        
+        for start in valid_starts:
+            if start in self.region_map:
+                region = self.region_map[start]
+                if region and region.chunks:
+                    all_chunks.extend(region.chunks)
+        
+        return all_chunks
+    
+    def get_buffer_level(self, buffer_fcc=None):
+        """Calculate buffer level. For sequential downloads, matches linear buffering behavior.
+        Counts remaining chunks in buffer (chunks are removed via pop_chunk() during playback,
+        just like buffer_contents.pop(0) in linear buffering).
+        
+        Uses get_contiguous_chunks_from_current_position() for both sequential downloads and seeks
+        to correctly count chunks from current playback position forward."""
+        # Use provided buffer_fcc parameter, or fall back to gs.buffer_fcc if available
+        if buffer_fcc is None:
+            buffer_fcc = gs.buffer_fcc if gs else 0
+        
+        # Get contiguous chunks from current playback position
+        # This correctly handles both sequential downloads and seeks
+        contiguous_chunks = self.get_contiguous_chunks_from_current_position()
+        total_chunks = len(contiguous_chunks)
+        
+        # Calculate buffer level
+        buffer_level = self.chunk_duration * total_chunks - buffer_fcc
+        
+        # Clamp to 0 to prevent negative buffer levels (shouldn't happen, but safety check)
+        buffer_level = max(0, buffer_level)
+        
+        # For sequential downloads, this should match linear buffering exactly:
+        # buffer_level = chunk_duration * total_chunks - buffer_fcc
+        return buffer_level
     
     def get_contiguous_chunks_from_current_position(self):
-        """Find region containing current playback position, return contiguous chunks forward.
-        Also includes chunks from adjacent contiguous regions."""
+        """Return contiguous chunks from current playback position forward.
+        Includes chunks from the region containing current_playback_pos and all subsequent
+        contiguous regions."""
         if gs is None:
             return []
         
-        # Find the region containing current playback position
+        # Find region containing current playback position
         region = self._find_region_of(gs.current_playback_pos)
         if not region:
-            # If no region at exact position, try to find the closest region after current position
-            valid_starts = [s for s in self.region_starts if s in self.region_map]
-            valid_starts = sorted([s for s in valid_starts if s >= gs.current_playback_pos])
-            if valid_starts:
-                region = self.region_map[valid_starts[0]]
-            else:
-                return []
+            return []
         
-        # Calculate start index within the region
-        if gs.current_playback_pos < region.start:
-            start_idx = 0
-        else:
-            start_idx = int((gs.current_playback_pos - region.start) / self.chunk_duration)
+        # Calculate chunk index containing current_playback_pos
+        # region.start <= current_playback_pos < region.end (guaranteed by _find_region_of)
+        chunk_offset = (gs.current_playback_pos - region.start) / self.chunk_duration
+        start_idx = max(0, int(math.floor(chunk_offset)))
+        start_idx = min(start_idx, len(region.chunks))
         
-        # Collect chunks from this region
-        chunks = region.chunks[start_idx:] if start_idx < len(region.chunks) else []
+        # Collect chunks from current region starting at start_idx
+        chunks = region.chunks[start_idx:]
         
-        # Collect chunks from adjacent contiguous regions
+        # Collect chunks from subsequent contiguous regions
         valid_starts = sorted([s for s in self.region_starts if s in self.region_map])
-        current_start = region.start
+        if region.start not in valid_starts:
+            return chunks
         
-        # Find this region's index
-        if current_start in valid_starts:
-            idx = valid_starts.index(current_start)
-            # Check subsequent regions for contiguous chunks
-            for i in range(idx + 1, len(valid_starts)):
-                next_start = valid_starts[i]
-                next_region = self.region_map[next_start]
-                
-                # Check if regions are contiguous (current ends where next starts)
-                if region.end is not None and abs(region.end - next_start) < 0.001:
-                    chunks.extend(next_region.chunks)
-                    region = next_region  # Update for next iteration
-                else:
-                    # Not contiguous, stop
-                    break
+        current_region = region
+        region_idx = valid_starts.index(region.start)
+        
+        for i in range(region_idx + 1, len(valid_starts)):
+            next_start = valid_starts[i]
+            if next_start not in self.region_map:
+                break
+            
+            next_region = self.region_map[next_start]
+            
+            # Check if regions are contiguous
+            if current_region.end is not None and abs(current_region.end - next_start) < 0.001:
+                chunks.extend(next_region.chunks)
+                current_region = next_region
+            else:
+                break
         
         return chunks
     
@@ -257,46 +279,22 @@ class MultiRegionBuffer:
         """Add chunk, convert segment_index to ms position."""
         pos_ms = segment_index * self.chunk_duration
         self.buffer_by_pos(pos_ms, quality)
-        self.cleanup_and_merge()
-        # Rebuild buffer_contents from all regions for compatibility
-        # This ensures replacement logic works correctly
-        self._sync_buffer_contents()
-    
-    def _sync_buffer_contents(self):
-        """Sync buffer_contents with MultiRegionBuffer regions for compatibility."""
-        if gs is None or not hasattr(gs, 'buffer_contents'):
-            return
-        
-        # Update buffer_contents - keep only sequential chunks from current position forward
-        # This matches the playable chunks logic
-        playable_chunks = self.get_contiguous_chunks_from_current_position()
-        if playable_chunks:
-            # Find the starting segment index from current playback position
-            region = self._find_region_of(gs.current_playback_pos)
-            if region:
-                start_idx = int((gs.current_playback_pos - region.start) / self.chunk_duration)
-                start_seg_idx = int(region.start / self.chunk_duration) + start_idx
-                gs.buffer_contents = [(start_seg_idx + i, q) for i, q in enumerate(playable_chunks)]
-            else:
-                gs.buffer_contents = []
-        else:
-            gs.buffer_contents = []
-    
-    def cleanup_and_merge(self):
-        """Maintain buffer health by merging adjacent regions when they become contiguous."""
         self.merge_adjacent_regions()
     
     def merge_adjacent_regions(self):
         """Merge regions that are adjacent (no gap between them)."""
-        if len(self.region_starts) < 2:
-            return
+        # Filter out any starts that don't have corresponding regions in the map, or regions with no chunks
+        valid_starts = []
+        for start in self.region_starts:
+            if start in self.region_map:
+                region = self.region_map[start]
+                if region and region.chunks:  # Only include regions with chunks
+                    valid_starts.append(start)
         
-        # Filter out any starts that don't have corresponding regions in the map
-        valid_starts = [start for start in self.region_starts if start in self.region_map]
+        # Update region_starts to remove stale/empty entries
+        self.region_starts = valid_starts
         
         if len(valid_starts) < 2:
-            # Update region_starts to match valid regions
-            self.region_starts = valid_starts
             return
         
         # Sort regions by start position
@@ -312,6 +310,11 @@ class MultiRegionBuffer:
                 continue
                 
             current_region = self.region_map[current_start]
+            
+            # Skip empty regions
+            if not current_region or not current_region.chunks:
+                i += 1
+                continue
             
             # Check if we can merge with next region
             if i + 1 < len(sorted_starts):
@@ -346,47 +349,74 @@ class MultiRegionBuffer:
         self.region_map = merged_map
     
     def pop_chunk(self):
-        """Remove first chunk from current playback position."""
-        if gs is None:
+        """Remove first chunk from buffer. For sequential downloads, matches linear buffering behavior.
+        Removes the first chunk from the first region (like buffer_contents.pop(0))."""
+        # Clean up any stale entries in region_starts first
+        self.region_starts = [s for s in self.region_starts if s in self.region_map]
+        
+        # For sequential downloads, always remove the first chunk from the first region
+        # This matches linear buffering: buffer_contents.pop(0)
+        valid_starts = sorted([s for s in self.region_starts if s in self.region_map])
+        if not valid_starts:
             return
-        region = self._find_region_of(gs.current_playback_pos)
+        
+        # Get the first region (lowest start position)
+        first_start = valid_starts[0]
+        region = self.region_map[first_start]
+        
         if not region or not region.chunks:
             return
         
-        # Calculate chunk index within region
-        start_idx = int((gs.current_playback_pos - region.start) / self.chunk_duration)
+        # Remove the first chunk (index 0) - matches buffer_contents.pop(0)
+        old_start = region.start
+        region.chunks.pop(0)
         
-        if start_idx < len(region.chunks):
-            # Remove the chunk
-            old_start = region.start
-            region.chunks.pop(start_idx)
-            
-            # Update region start if we removed the first chunk
-            if start_idx == 0:
-                new_start = region.start + self.chunk_duration
-                # Update region_map key if start changed
-                if old_start in self.region_map:
-                    del self.region_map[old_start]
-                if old_start in self.region_starts:
-                    self.region_starts.remove(old_start)
-                region.start = new_start
+        # Update region start since we removed the first chunk
+        new_start = region.start + self.chunk_duration
+        
+        # Update region_map key if start changed
+        # First, remove old key
+        if old_start in self.region_map:
+            del self.region_map[old_start]
+        if old_start in self.region_starts:
+            self.region_starts.remove(old_start)
+        
+        # Update region start
+        region.start = new_start
+        
+        # Recalculate region end based on new start and remaining chunks
+        # end = start + len(chunks) * chunk_duration
+        if region.chunks:
+            region.end = region.start + len(region.chunks) * self.chunk_duration
+        else:
+            region.end = None
+        
+        # Check if region is empty (no chunks left) BEFORE updating region_map
+        if len(region.chunks) == 0:
+            # Region is empty, don't add it back to region_map
+            # old_start already removed above, so we're done
+            return  # Early return since region is gone
+        
+        # Region still has chunks, update region_map with new key
+        # Only add if new_start doesn't already exist (shouldn't happen in sequential downloads, but safety check)
+        if new_start not in self.region_map:
+            if new_start not in self.region_starts:
                 self.region_starts.append(new_start)
-                self.region_starts.sort()
+            self.region_starts.sort()
+            self.region_map[new_start] = region
+        else:
+            # new_start already exists - this shouldn't happen in sequential downloads
+            # but if it does, merge chunks into existing region
+            existing_region = self.region_map[new_start]
+            if existing_region and existing_region.chunks:
+                # Merge chunks
+                existing_region.chunks.extend(region.chunks)
+                if region.end is not None and existing_region.end is not None:
+                    existing_region.end = max(existing_region.end, region.end)
+            else:
+                # Replace with our region
                 self.region_map[new_start] = region
-            
-            # Update region end
-            if region.end is not None:
-                region.end -= self.chunk_duration
-                if region.end <= region.start or len(region.chunks) == 0:
-                    # Region is empty, remove it
-                    if region.start in self.region_starts:
-                        self.region_starts.remove(region.start)
-                    if region.start in self.region_map:
-                        del self.region_map[region.start]
-            
-            # Update buffer_fcc
-            gs.buffer_fcc = 0
-            
-            # Sync buffer_contents after popping
-            self._sync_buffer_contents()
+                if new_start not in self.region_starts:
+                    self.region_starts.append(new_start)
+                self.region_starts.sort()
 
