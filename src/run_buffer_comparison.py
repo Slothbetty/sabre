@@ -127,15 +127,17 @@ def run_simulation(use_buffer_py, config):
         cmd.append('--use-buffer-py')
     
     print(f"Running simulation {'WITH' if use_buffer_py else 'WITHOUT'} buffer.py...")
+    # Capture stdout for parsing, but let stderr go through so debug output is visible
     result = subprocess.run(
         cmd,
         cwd=script_dir,
-        capture_output=True,
+        stdout=subprocess.PIPE,  # Capture stdout for parsing
+        stderr=None,  # Don't capture stderr - let it print to console
         text=True
     )
     
     if result.returncode != 0:
-        print(f"Error: Simulation failed:\n{result.stderr}", file=sys.stderr)
+        print(f"Error: Simulation failed:\n{result.stdout}", file=sys.stderr)
         return None
     
     metrics = parse_simulation_output(result.stdout)

@@ -92,8 +92,11 @@ def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
     # If multi_region_buffer exists, use it; otherwise fall back to linear buffering
     if gs.multi_region_buffer is not None:
-        return gs.multi_region_buffer.get_buffer_level()
-    return segment_time * len(buffer_contents) - buffer_fcc
+        # Use the buffer_fcc parameter for consistency with linear buffering
+        return gs.multi_region_buffer.get_buffer_level(buffer_fcc)
+    # Linear buffering
+    buffer_level = segment_time * len(buffer_contents) - buffer_fcc
+    return buffer_level
 
 
 def get_is_bola_value(abr):
@@ -146,8 +149,6 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
                 gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
             else:
                 gs.buffer_fcc = 0
-            # Sync buffer_contents after seek
-            gs.multi_region_buffer._sync_buffer_contents()
         else:
             # Seek outside buffered regions: preserve segments ahead if forward seek
             playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
@@ -164,11 +165,9 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
             gs.next_segment = new_segment
         
         gs.buffer_fcc = 0
-        # Sync buffer_contents after clearing buffer
-        gs.multi_region_buffer._sync_buffer_contents()
         
         # Cleanup: merge adjacent regions
-        gs.multi_region_buffer.cleanup_and_merge()
+        gs.multi_region_buffer.merge_adjacent_regions()
     else:
         # Original linear buffering logic
         # Compute the segment index corresponding to the first element in the buffer.
@@ -287,8 +286,10 @@ def deplete_buffer(time, abr):
     """
     # Use MultiRegionBuffer if available
     if gs.multi_region_buffer is not None:
-        # Get current buffer contents
-        playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+        # For sequential downloads, use get_all_chunks() to get all playable chunks
+        # (get_contiguous_chunks_from_current_position() skips chunks when start_idx > 0,
+        #  but for sequential downloads, all chunks are playable)
+        playable_chunks = gs.multi_region_buffer.get_all_chunks()
         
         # Handles rebuffering when the buffer is empty
         if len(playable_chunks) == 0:
@@ -318,7 +319,13 @@ def deplete_buffer(time, abr):
             gs.buffer_fcc = 0
 
         # Process full segments.
-        while time > 0 and len(playable_chunks) > 0:
+        # Refresh playable_chunks at the start of each iteration to match linear buffering behavior
+        # (gs.buffer_contents is accessed directly in linear path, so we need to refresh here too)
+        while time > 0:
+            playable_chunks = gs.multi_region_buffer.get_all_chunks()
+            if len(playable_chunks) == 0:
+                break
+                
             quality = playable_chunks[0]
             gs.played_utility += gs.manifest.utilities[quality]
             gs.played_bitrate += gs.manifest.bitrates[quality]
@@ -339,6 +346,7 @@ def deplete_buffer(time, abr):
 
             if time >= gs.manifest.segment_time:
                 gs.multi_region_buffer.pop_chunk()
+                gs.buffer_fcc = 0  # Reset buffer_fcc after popping full chunk
                 gs.current_playback_pos += gs.manifest.segment_time
                 if interrupted_by_seek(gs.manifest.segment_time, abr):
                     return False
@@ -349,9 +357,6 @@ def deplete_buffer(time, abr):
                 if interrupted_by_seek(time, abr):
                     return False
                 time = 0
-            
-            # Refresh playable chunks after popping
-            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
 
         if time > 0:
             gs.rebuffer_time += time
@@ -410,6 +415,7 @@ def deplete_buffer(time, abr):
 
             if time >= gs.manifest.segment_time:
                 gs.buffer_contents.pop(0)
+                gs.buffer_fcc = 0
                 if interrupted_by_seek(gs.manifest.segment_time, abr):
                     return False
                 time -= gs.manifest.segment_time
@@ -711,8 +717,6 @@ def process_download_loop(abr, replacer, graph, args, network):
                             chunk_idx = int((replace_pos_ms - region.start) / gs.manifest.segment_time)
                             if chunk_idx < len(region.chunks):
                                 region.chunks[chunk_idx] = quality
-                        # Sync buffer_contents after replacement
-                        gs.multi_region_buffer._sync_buffer_contents()
                     else:
                         old_seg_idx, _ = gs.buffer_contents[replace]
                         gs.buffer_contents[replace] = (old_seg_idx, quality)
