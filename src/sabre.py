@@ -286,10 +286,8 @@ def deplete_buffer(time, abr):
     """
     # Use MultiRegionBuffer if available
     if gs.multi_region_buffer is not None:
-        # For sequential downloads, use get_all_chunks() to get all playable chunks
-        # (get_contiguous_chunks_from_current_position() skips chunks when start_idx > 0,
-        #  but for sequential downloads, all chunks are playable)
-        playable_chunks = gs.multi_region_buffer.get_all_chunks()
+        # Get contiguous chunks from current playback position forward
+        playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
         
         # Handles rebuffering when the buffer is empty
         if len(playable_chunks) == 0:
@@ -345,9 +343,9 @@ def deplete_buffer(time, abr):
                     p.append(gs.total_play_time)
 
             if time >= gs.manifest.segment_time:
+                gs.current_playback_pos += gs.manifest.segment_time
                 gs.multi_region_buffer.pop_chunk()
                 gs.buffer_fcc = 0  # Reset buffer_fcc after popping full chunk
-                gs.current_playback_pos += gs.manifest.segment_time
                 if interrupted_by_seek(gs.manifest.segment_time, abr):
                     return False
                 time -= gs.manifest.segment_time

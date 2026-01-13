@@ -347,76 +347,67 @@ class MultiRegionBuffer:
         # Update MultiRegionBuffer with merged regions
         self.region_starts = merged_starts
         self.region_map = merged_map
-    
+
     def pop_chunk(self):
-        """Remove first chunk from buffer. For sequential downloads, matches linear buffering behavior.
-        Removes the first chunk from the first region (like buffer_contents.pop(0))."""
-        # Clean up any stale entries in region_starts first
-        self.region_starts = [s for s in self.region_starts if s in self.region_map]
-        
-        # For sequential downloads, always remove the first chunk from the first region
-        # This matches linear buffering: buffer_contents.pop(0)
-        valid_starts = sorted([s for s in self.region_starts if s in self.region_map])
-        if not valid_starts:
-            return
-        
-        # Get the first region (lowest start position)
-        first_start = valid_starts[0]
-        region = self.region_map[first_start]
-        
-        if not region or not region.chunks:
-            return
-        
-        # Remove the first chunk (index 0) - matches buffer_contents.pop(0)
-        old_start = region.start
-        region.chunks.pop(0)
-        
-        # Update region start since we removed the first chunk
-        new_start = region.start + self.chunk_duration
-        
-        # Update region_map key if start changed
-        # First, remove old key
-        if old_start in self.region_map:
-            del self.region_map[old_start]
-        if old_start in self.region_starts:
-            self.region_starts.remove(old_start)
-        
-        # Update region start
-        region.start = new_start
-        
-        # Recalculate region end based on new start and remaining chunks
-        # end = start + len(chunks) * chunk_duration
-        if region.chunks:
-            region.end = region.start + len(region.chunks) * self.chunk_duration
-        else:
-            region.end = None
-        
-        # Check if region is empty (no chunks left) BEFORE updating region_map
-        if len(region.chunks) == 0:
-            # Region is empty, don't add it back to region_map
-            # old_start already removed above, so we're done
-            return  # Early return since region is gone
-        
-        # Region still has chunks, update region_map with new key
-        # Only add if new_start doesn't already exist (shouldn't happen in sequential downloads, but safety check)
-        if new_start not in self.region_map:
-            if new_start not in self.region_starts:
-                self.region_starts.append(new_start)
-            self.region_starts.sort()
-            self.region_map[new_start] = region
-        else:
-            # new_start already exists - this shouldn't happen in sequential downloads
-            # but if it does, merge chunks into existing region
-            existing_region = self.region_map[new_start]
-            if existing_region and existing_region.chunks:
-                # Merge chunks
-                existing_region.chunks.extend(region.chunks)
-                if region.end is not None and existing_region.end is not None:
-                    existing_region.end = max(existing_region.end, region.end)
+            """Remove first chunk (index 0) from current playback position region."""
+            if gs is None:
+                return
+            # Clean up any stale entries in region_starts first
+            self.region_starts = [s for s in self.region_starts if s in self.region_map]
+            
+            region = self._find_region_of(gs.current_playback_pos)
+            if not region or not region.chunks:
+                return
+            
+            # Remove the first chunk (index 0) - matches buffer_contents.pop(0)
+            old_start = region.start
+            region.chunks.pop(0)
+            
+            # Update region start since we removed the first chunk
+            new_start = region.start + self.chunk_duration
+            
+            # Update region_map key if start changed
+            # First, remove old key
+            if old_start in self.region_map:
+                del self.region_map[old_start]
+            if old_start in self.region_starts:
+                self.region_starts.remove(old_start)
+            
+            # Update region start
+            region.start = new_start
+            
+            # Recalculate region end based on new start and remaining chunks
+            # end = start + len(chunks) * chunk_duration
+            if region.chunks:
+                region.end = region.start + len(region.chunks) * self.chunk_duration
             else:
-                # Replace with our region
-                self.region_map[new_start] = region
+                region.end = None
+            
+            # Check if region is empty (no chunks left) BEFORE updating region_map
+            if len(region.chunks) == 0:
+                # Region is empty, don't add it back to region_map
+                # old_start already removed above, so we're done
+                return  # Early return since region is gone
+            
+            # Region still has chunks, update region_map with new key
+            # Only add if new_start doesn't already exist (shouldn't happen in sequential downloads, but safety check)
+            if new_start not in self.region_map:
                 if new_start not in self.region_starts:
                     self.region_starts.append(new_start)
                 self.region_starts.sort()
-
+                self.region_map[new_start] = region
+            else:
+                # new_start already exists - this shouldn't happen in sequential downloads
+                # but if it does, merge chunks into existing region
+                existing_region = self.region_map[new_start]
+                if existing_region and existing_region.chunks:
+                    # Merge chunks
+                    existing_region.chunks.extend(region.chunks)
+                    if region.end is not None and existing_region.end is not None:
+                        existing_region.end = max(existing_region.end, region.end)
+                else:
+                    # Replace with our region
+                    self.region_map[new_start] = region
+                    if new_start not in self.region_starts:
+                        self.region_starts.append(new_start)
+                    self.region_starts.sort()
