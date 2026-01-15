@@ -9,6 +9,7 @@ import sys
 import subprocess
 import tempfile
 import datetime
+import difflib
 from pathlib import Path
 
 try:
@@ -195,33 +196,46 @@ class SimulationRegressionTest:
                         temp_file.unlink()
     
 
-    
     def _compare_baseline_files(self, new_baseline_file, original_baseline_file):
-        """Compare baseline files ignoring timestamp differences."""
+        """Compare baseline files using difflib, ignoring timestamp differences."""
         with open(new_baseline_file, 'r') as f:
             new_lines = f.readlines()
         with open(original_baseline_file, 'r') as f:
             original_lines = f.readlines()
         
-        if len(new_lines) != len(original_lines):
-            return False, f"Line count differs: new={len(new_lines)}, original={len(original_lines)}"
+        # Filter out timestamp and git branch lines for comparison
+        def filter_lines(lines):
+            filtered = []
+            for i, line in enumerate(lines):
+                # Skip timestamp and git branch lines
+                if i == 1 and "# Generated on:" in line:
+                    continue
+                if i == 2 and "# Git branch:" in line:
+                    continue
+                filtered.append(line)
+            return filtered
         
-        differences = []
-        for i, (new_line, original_line) in enumerate(zip(new_lines, original_lines)):
-            # Skip timestamp and git branch lines in comparison
-            if i == 1 and ("# Generated on:" in new_line and "# Generated on:" in original_line):
-                continue
-            if i == 2 and ("# Git branch:" in new_line and "# Git branch:" in original_line):
-                continue
-            
-            if new_line.strip() != original_line.strip():
-                differences.append(f"Line {i+1}: '{new_line.strip()}' vs '{original_line.strip()}'")
-                if len(differences) >= 10:  # Limit to first 10 differences
-                    differences.append("... (more differences)")
-                    break
+        filtered_new_lines = filter_lines(new_lines)
+        filtered_original_lines = filter_lines(original_lines)
+        
+        # Use difflib to find differences
+        differ = difflib.unified_diff(
+            filtered_original_lines,
+            filtered_new_lines,
+            fromfile='original_baseline',
+            tofile='new_baseline',
+            lineterm=''
+        )
+        
+        differences = list(differ)
         
         if differences:
-            return False, f"Found {len(differences)} differences:\n" + "\n".join(differences)
+            # Limit output to first 20 lines of diff
+            diff_output = '\n'.join(differences[:20])
+            if len(differences) > 20:
+                diff_output += '\n... (more differences)'
+            
+            return False, f"Found differences between baseline files:\n{diff_output}"
         
         return True, "Baseline files match (ignoring timestamps and git branches)"
     

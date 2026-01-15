@@ -1,0 +1,44 @@
+{
+  "test_configurations": [
+    {
+      "name": "basic_bolae_test",
+      "description": "Basic BOLA-E test with seeks",
+      "parameters": {
+        "network": "network.json",
+        "movie": "movie.json",
+        "seek_config": "seeks.json",
+        "abr": "bolae",
+        "verbose": true,
+        "graph": false
+      }
+    },
+    {
+      "name": "bola_test",
+      "description": "BOLA algorithm test",
+      "parameters": {
+        "network": "network.json",
+        "movie": "movie.json",
+        "seek_config": "seeks.json",
+        "abr": "bola",
+        "verbose": true,
+        "graph": false
+      }
+    },
+    {
+      "name": "throughput_test",
+      "description": "Throughput-based ABR test",
+      "parameters": {
+        "network": "network.json",
+        "movie": "movie.json",
+        "seek_config": "seeks.json",
+        "abr": "throughput",
+        "verbose": true,
+        "graph": false
+      }
+    }
+  ],
+  "tolerance": {
+    "floating_point": 1e-6,
+    "max_differences": 10
+  }
+}
