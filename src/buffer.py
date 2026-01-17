@@ -1,8 +1,12 @@
+from __future__ import annotations
 import math
+import sys
 import typing
 from bisect import bisect_right
 from enum import Enum
-from __future__ import annotations
+
+# Import gs for compatibility methods
+from global_state import gs
 
 
 class BufferRegion:
@@ -38,6 +42,8 @@ class BufferRegion:
 
     def exists(self, pos: float) -> bool:
         """Returns if chunk at `pos` exists in this region. """
+        if self.end is None:
+            return False  # Region has no chunks yet
         return pos >= self.start and pos < self.end
 
     def try_merge(self, region: BufferRegion) -> bool:
@@ -47,6 +53,9 @@ class BufferRegion:
         the new chunks; otherwise if region and current region are not
         overlapped, nothing is changed. Returns if the merge is successful.
         """
+        # Handle None end values
+        if self.end is None or region.end is None:
+            return False
         if self.end < region.start or self.start > region.end:
             return False
         assert abs(region.start - self.start) // self.chunk_duration == \
@@ -95,51 +104,310 @@ class MultiRegionBuffer:
         region = self._find_region_of(pos)
         if region:
             region.add_chunk(quality)
-            i_region = bisect_right(self.region_starts, pos) - 1
-            assert 0 <= i_region < len(self.region_starts)
-            if i_region < len(self.region_starts) - 1:
-                next_start = self.region_starts[i_region + 1]
-                next_region = self.region_map[next_start]
-                region.try_merge(next_region)
+            # Filter valid starts before checking next region
+            valid_starts = [s for s in self.region_starts if s in self.region_map]
+            i_region = bisect_right(valid_starts, pos) - 1
+            if 0 <= i_region < len(valid_starts) and i_region < len(valid_starts) - 1:
+                next_start = valid_starts[i_region + 1]
+                if next_start in self.region_map:
+                    next_region = self.region_map[next_start]
+                    region.try_merge(next_region)
             print(f'Add into existing region: {region.start} - {region.end} s')
 
         else:
-            # TODO: double check the chunk boundary remainder
-            start = pos // self.chunk_duration * self.chunk_duration
-            region = BufferRegion(start, self.chunk_duration)
-            self.region_starts.append(start)
-            self.region_starts.sort()
-            self.region_map[start] = region
-            print(f'Start a new region: {region.start} - {region.end} s')
+            # Check if there's a region that ends exactly at this position (adjacent)
+            # This handles sequential downloads
+            valid_starts = [s for s in self.region_starts if s in self.region_map]
+            found_adjacent = False
+            for start in valid_starts:
+                adj_region = self.region_map[start]
+                print(f'adj_region.end:{adj_region.end},pos:{pos}, boundary difference: {abs(adj_region.end - pos)}')
+                if adj_region.end is not None and abs(adj_region.end - pos) < 0.001:
+                    # Found adjacent region - extend it
+                    adj_region.add_chunk(quality)
+                    found_adjacent = True
+                    # Try to merge with next region if exists
+                    valid_starts_sorted = sorted(valid_starts)
+                    if start in valid_starts_sorted:
+                        idx = valid_starts_sorted.index(start)
+                        if idx + 1 < len(valid_starts_sorted):
+                            next_start = valid_starts_sorted[idx + 1]
+                            if next_start in self.region_map:
+                                next_region = self.region_map[next_start]
+                                adj_region.try_merge(next_region)
+                    print(f'Extend adjacent region: {adj_region.start} - {adj_region.end} s')
+                    break
+            
+            if not found_adjacent:
+                # TODO: double check the chunk boundary remainder
+                start = pos // self.chunk_duration * self.chunk_duration
+                region = BufferRegion(start, self.chunk_duration)
+                region.add_chunk(quality)  # Add the chunk to set end
+                self.region_starts.append(start)
+                self.region_starts.sort()
+                self.region_map[start] = region
+                print(f'Start a new region: {region.start} - {region.end} s')
 
     def buffer_by_region(self, i_region: int, quality: float):
         """Buffers a chunk after i-th existing region.
         New buffer region is not supported here on purpose.
         """
-        assert 0 <= i_region < len(self.region_map)
-        region_start = self.region_starts[i_region]
+        # Filter valid starts
+        valid_starts = [s for s in self.region_starts if s in self.region_map]
+        assert 0 <= i_region < len(valid_starts)
+        region_start = valid_starts[i_region]
         region = self.region_map[region_start]
         region.add_chunk(quality)
-        if i_region < len(self.region_map) - 1:
-            next_start = self.region_starts[i_region + 1]
-            next_region = self.region_map[next_start]
-            region.try_merge(next_region)
+        if i_region < len(valid_starts) - 1:
+            next_start = valid_starts[i_region + 1]
+            if next_start in self.region_map:
+                next_region = self.region_map[next_start]
+                region.try_merge(next_region)
         print(f'Add into existing region: {region.start} - {region.end} s')
 
     def _find_region_of(self, pos: float):
         """Finds the region of given `pos`. """
         if not self.region_starts:
             return None
-        i_region = bisect_right(self.region_starts, pos) - 1
-        assert 0 <= i_region < len(self.region_starts)
-        start = self.region_starts[i_region]
+        
+        # Filter out starts that don't exist in region_map (due to merging)
+        valid_starts = [s for s in self.region_starts if s in self.region_map]
+        if not valid_starts:
+            return None
+        
+        i_region = bisect_right(valid_starts, pos) - 1
+        if i_region < 0 or i_region >= len(valid_starts):
+            return None
+        
+        start = valid_starts[i_region]
+        if start not in self.region_map:
+            return None
+            
         region = self.region_map[start]
         if not region.exists(pos):
             return None
         return region
+    
+    
+    def get_all_chunks(self):
+        """Get all chunks from all regions. For sequential downloads, returns chunks in order."""
+        all_chunks = []
+        # Filter to only include starts that exist in region_map
+        valid_starts = [s for s in self.region_starts if s in self.region_map]
+        valid_starts = sorted(valid_starts)
+        
+        for start in valid_starts:
+            if start in self.region_map:
+                region = self.region_map[start]
+                if region and region.chunks:
+                    all_chunks.extend(region.chunks)
+        
+        return all_chunks
+    
+    def get_buffer_level(self, buffer_fcc=None):
+        """Calculate buffer level. For sequential downloads, matches linear buffering behavior.
+        Counts remaining chunks in buffer (chunks are removed via pop_chunk() during playback,
+        just like buffer_contents.pop(0) in linear buffering).
+        
+        Uses get_contiguous_chunks_from_current_position() for both sequential downloads and seeks
+        to correctly count chunks from current playback position forward."""
+        # Use provided buffer_fcc parameter, or fall back to gs.buffer_fcc if available
+        if buffer_fcc is None:
+            buffer_fcc = gs.buffer_fcc if gs else 0
+        
+        # Get contiguous chunks from current playback position
+        # This correctly handles both sequential downloads and seeks
+        contiguous_chunks = self.get_contiguous_chunks_from_current_position()
+        total_chunks = len(contiguous_chunks)
+        
+        # Calculate buffer level
+        buffer_level = self.chunk_duration * total_chunks - buffer_fcc
+        
+        # Clamp to 0 to prevent negative buffer levels (shouldn't happen, but safety check)
+        buffer_level = max(0, buffer_level)
+        
+        # For sequential downloads, this should match linear buffering exactly:
+        # buffer_level = chunk_duration * total_chunks - buffer_fcc
+        return buffer_level
+    
+    def get_contiguous_chunks_from_current_position(self):
+        """Return contiguous chunks from current playback position forward.
+        Includes chunks from the region containing current_playback_pos and all subsequent
+        contiguous regions."""
+        if gs is None:
+            return []
+        
+        # Find region containing current playback position
+        region = self._find_region_of(gs.current_playback_pos)
+        if not region:
+            return []
+        
+        # Calculate chunk index containing current_playback_pos
+        # region.start <= current_playback_pos < region.end (guaranteed by _find_region_of)
+        chunk_offset = (gs.current_playback_pos - region.start) / self.chunk_duration
+        start_idx = max(0, int(math.floor(chunk_offset)))
+        start_idx = min(start_idx, len(region.chunks))
+        
+        # Collect chunks from current region starting at start_idx
+        chunks = region.chunks[start_idx:]
+        
+        # Collect chunks from subsequent contiguous regions
+        valid_starts = sorted([s for s in self.region_starts if s in self.region_map])
+        if region.start not in valid_starts:
+            return chunks
+        
+        current_region = region
+        region_idx = valid_starts.index(region.start)
+        
+        for i in range(region_idx + 1, len(valid_starts)):
+            next_start = valid_starts[i]
+            if next_start not in self.region_map:
+                break
+            
+            next_region = self.region_map[next_start]
+            
+            # Check if regions are contiguous
+            if current_region.end is not None and abs(current_region.end - next_start) < 0.001:
+                chunks.extend(next_region.chunks)
+                current_region = next_region
+            else:
+                break
+        
+        return chunks
+    
+    def add_chunk(self, segment_index, quality):
+        """Add chunk, convert segment_index to ms position."""
+        pos_ms = segment_index * self.chunk_duration
+        self.buffer_by_pos(pos_ms, quality)
+        self.merge_adjacent_regions()
+    
+    def merge_adjacent_regions(self):
+        """Merge regions that are adjacent (no gap between them)."""
+        # Filter out any starts that don't have corresponding regions in the map, or regions with no chunks
+        valid_starts = []
+        for start in self.region_starts:
+            if start in self.region_map:
+                region = self.region_map[start]
+                if region and region.chunks:  # Only include regions with chunks
+                    valid_starts.append(start)
+        
+        # Update region_starts to remove stale/empty entries
+        self.region_starts = valid_starts
+        
+        if len(valid_starts) < 2:
+            return
+        
+        # Sort regions by start position
+        sorted_starts = sorted(valid_starts)
+        merged_starts = []
+        merged_map = {}
+        
+        i = 0
+        while i < len(sorted_starts):
+            current_start = sorted_starts[i]
+            if current_start not in self.region_map:
+                i += 1
+                continue
+                
+            current_region = self.region_map[current_start]
+            
+            # Skip empty regions
+            if not current_region or not current_region.chunks:
+                i += 1
+                continue
+            
+            # Check if we can merge with next region
+            if i + 1 < len(sorted_starts):
+                next_start = sorted_starts[i + 1]
+                if next_start not in self.region_map:
+                    # Next region doesn't exist, keep current and move on
+                    merged_starts.append(current_start)
+                    merged_map[current_start] = current_region
+                    i += 1
+                    continue
+                    
+                next_region = self.region_map[next_start]
+                
+                # Check if regions are adjacent (end of current == start of next)
+                if current_region.end is not None and abs(current_region.end - next_start) < 0.001:
+                    # Merge: extend current region with next region's chunks
+                    if current_region.try_merge(next_region):
+                        # Successfully merged, remove next region from map
+                        if next_start in self.region_map:
+                            del self.region_map[next_start]
+                        # Successfully merged, skip next region
+                        i += 2
+                        continue
+            
+            # Keep current region as-is
+            merged_starts.append(current_start)
+            merged_map[current_start] = current_region
+            i += 1
+        
+        # Update MultiRegionBuffer with merged regions
+        self.region_starts = merged_starts
+        self.region_map = merged_map
 
-    def is_buffered(self, pos: float):
-        """Returns if the closest chunk to `pos` is buffered.
-        """
-        return self._find_region_of(pos) is not None
-
+    def pop_chunk(self):
+            """Remove first chunk (index 0) from current playback position region."""
+            if gs is None:
+                return
+            # Clean up any stale entries in region_starts first
+            self.region_starts = [s for s in self.region_starts if s in self.region_map]
+            
+            region = self._find_region_of(gs.current_playback_pos)
+            if not region or not region.chunks:
+                return
+            
+            # Remove the first chunk (index 0) - matches buffer_contents.pop(0)
+            old_start = region.start
+            region.chunks.pop(0)
+            
+            # Update region start since we removed the first chunk
+            new_start = region.start + self.chunk_duration
+            
+            # Update region_map key if start changed
+            # First, remove old key
+            if old_start in self.region_map:
+                del self.region_map[old_start]
+            if old_start in self.region_starts:
+                self.region_starts.remove(old_start)
+            
+            # Update region start
+            region.start = new_start
+            
+            # Recalculate region end based on new start and remaining chunks
+            # end = start + len(chunks) * chunk_duration
+            if region.chunks:
+                region.end = region.start + len(region.chunks) * self.chunk_duration
+            else:
+                region.end = None
+            
+            # Check if region is empty (no chunks left) BEFORE updating region_map
+            if len(region.chunks) == 0:
+                # Region is empty, don't add it back to region_map
+                # old_start already removed above, so we're done
+                return  # Early return since region is gone
+            
+            # Region still has chunks, update region_map with new key
+            # Only add if new_start doesn't already exist (shouldn't happen in sequential downloads, but safety check)
+            if new_start not in self.region_map:
+                if new_start not in self.region_starts:
+                    self.region_starts.append(new_start)
+                self.region_starts.sort()
+                self.region_map[new_start] = region
+            else:
+                # new_start already exists - this shouldn't happen in sequential downloads
+                # but if it does, merge chunks into existing region
+                existing_region = self.region_map[new_start]
+                if existing_region and existing_region.chunks:
+                    # Merge chunks
+                    existing_region.chunks.extend(region.chunks)
+                    if region.end is not None and existing_region.end is not None:
+                        existing_region.end = max(existing_region.end, region.end)
+                else:
+                    # Replace with our region
+                    self.region_map[new_start] = region
+                    if new_start not in self.region_starts:
+                        self.region_starts.append(new_start)
+                    self.region_starts.sort()

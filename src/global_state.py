@@ -5,7 +5,6 @@ This module contains the GlobalState singleton class that manages all global sta
 variables for the SABRE adaptive bitrate streaming simulation.
 """
 
-
 class GlobalState:
     """
     Singleton class to hold all global state variables.
@@ -25,6 +24,7 @@ class GlobalState:
             self.buffer_contents = []
             self.buffer_fcc = 0
             self.next_segment = 0
+            self.current_playback_pos = 0  # Current playback position in ms (for MultiRegionBuffer)
             self.total_play_time = 0
             self.last_seek_time = 0
             
@@ -79,6 +79,9 @@ class GlobalState:
             
             # Startup time
             self.startup_time = 0
+            
+            # MultiRegionBuffer for dynamic buffering (initialized later when manifest is available)
+            self.multi_region_buffer = None
             
             GlobalState._initialized = True
 
