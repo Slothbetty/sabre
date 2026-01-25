@@ -8,7 +8,6 @@ from enum import Enum
 # Import gs for compatibility methods
 from global_state import gs
 
-
 class BufferRegion:
     """Buffer region: a continuous region of chunks.
     """
@@ -58,9 +57,13 @@ class BufferRegion:
             return False
         if self.end < region.start or self.start > region.end:
             return False
-        assert abs(region.start - self.start) // self.chunk_duration == \
-            abs(region.start - self.start) / self.chunk_duration, \
-            f'Boundary difference must be the multiple of chunk duration.'
+        # Check that boundary difference is a multiple of chunk_duration
+        # With normalized positions, this should always be exact
+        diff = abs(region.start - self.start)
+        n_chunks = round(diff / self.chunk_duration)
+        expected_diff = n_chunks * self.chunk_duration
+        assert diff == expected_diff, \
+            f'Boundary difference must be the multiple of chunk duration. diff={diff}, expected={expected_diff}, chunk_duration={self.chunk_duration}'
 
         # TODO: logging w/ various levels is preferred here
         if self.start < region.start:
@@ -71,6 +74,7 @@ class BufferRegion:
             region.pop_chunk(self.end)
             self.end = region.end
             self.chunks.extend(region.chunks)
+            return True
         else:
             # region -> self case
             if self.start < region.end:
@@ -79,6 +83,7 @@ class BufferRegion:
             region._pop_back_chunk(self.start)
             self.start = region.start
             self.chunks = region.chunks + self.chunks
+            return True
 
 
 class MultiRegionBuffer:
@@ -93,6 +98,11 @@ class MultiRegionBuffer:
         # for all the regions afterwards
         self.region_map = {}        # region map {t: region}
         self.chunk_duration = chunk_duration
+    
+    def _normalize_pos(self, pos: float) -> float:
+        """Normalize position to exact chunk boundary to avoid floating point errors.
+        Rounds to nearest chunk boundary."""
+        return round(pos / self.chunk_duration) * self.chunk_duration
 
     def buffer_by_pos(self, pos: float, quality: float):
         """Buffers a chunk for `pos`. Handles three cases:
@@ -100,6 +110,8 @@ class MultiRegionBuffer:
         2. pos at end of existing region (adjacent) -> extend that region
         3. pos misses all regions -> create new region
         """
+        # Normalize position to avoid floating point errors
+        pos = self._normalize_pos(pos)
         region = self._find_region_of(pos)
         if region:
             region.add_chunk(quality)
@@ -110,7 +122,12 @@ class MultiRegionBuffer:
                 next_start = valid_starts[i_region + 1]
                 if next_start in self.region_map:
                     next_region = self.region_map[next_start]
-                    region.try_merge(next_region)
+                    if region.try_merge(next_region):
+                        # Successfully merged, clean up the merged region
+                        if next_start in self.region_map:
+                            del self.region_map[next_start]
+                        if next_start in self.region_starts:
+                            self.region_starts.remove(next_start)
             print(f'Add into existing region: {region.start} - {region.end} s')
 
         else:
@@ -118,27 +135,35 @@ class MultiRegionBuffer:
             # This handles sequential downloads
             valid_starts = [s for s in self.region_starts if s in self.region_map]
             found_adjacent = False
+            # pos is already normalized above
             for start in valid_starts:
                 adj_region = self.region_map[start]
-                print(f'adj_region.end:{adj_region.end},pos:{pos}, boundary difference: {abs(adj_region.end - pos)}')
-                if adj_region.end is not None and abs(adj_region.end - pos) < 0.001:
-                    # Found adjacent region - extend it
-                    adj_region.add_chunk(quality)
-                    found_adjacent = True
-                    # Try to merge with next region if exists
-                    valid_starts_sorted = sorted(valid_starts)
-                    if start in valid_starts_sorted:
-                        idx = valid_starts_sorted.index(start)
-                        if idx + 1 < len(valid_starts_sorted):
-                            next_start = valid_starts_sorted[idx + 1]
-                            if next_start in self.region_map:
-                                next_region = self.region_map[next_start]
-                                adj_region.try_merge(next_region)
-                    print(f'Extend adjacent region: {adj_region.start} - {adj_region.end} s')
-                    break
+                if adj_region.end is not None:
+                    normalized_end = self._normalize_pos(adj_region.end)
+                    if normalized_end == pos:
+                        # Found adjacent region - extend it
+                        adj_region.add_chunk(quality)
+                        found_adjacent = True
+                        # Try to merge with next region if exists
+                        valid_starts_sorted = sorted(valid_starts)
+                        if start in valid_starts_sorted:
+                            idx = valid_starts_sorted.index(start)
+                            if idx + 1 < len(valid_starts_sorted):
+                                next_start = valid_starts_sorted[idx + 1]
+                                if next_start in self.region_map:
+                                    next_region = self.region_map[next_start]
+                                    if adj_region.try_merge(next_region):
+                                        # Successfully merged, clean up the merged region
+                                        if next_start in self.region_map:
+                                            del self.region_map[next_start]
+                                        if next_start in self.region_starts:
+                                            self.region_starts.remove(next_start)
+                        print(f'Extend adjacent region: {adj_region.start} - {adj_region.end} s')
+                        break
             
             if not found_adjacent:
-                start = pos // self.chunk_duration * self.chunk_duration
+                # pos is already normalized above
+                start = pos
                 region = BufferRegion(start, self.chunk_duration)
                 region.add_chunk(quality)  # Add the chunk to set end
                 self.region_starts.append(start)
@@ -169,6 +194,9 @@ class MultiRegionBuffer:
         Handles boundary cases where pos is exactly at region start or end.
         If pos is at the end of a region, checks for next contiguous region.
         """
+        # Normalize position to avoid floating point errors
+        pos = self._normalize_pos(pos)
+        
         if not self.region_starts:
             return None
         
@@ -186,27 +214,30 @@ class MultiRegionBuffer:
                 if region.exists(pos):
                     return region
         
-        # If not found, check boundary cases
-        # Check if pos matches the start of any region
-        for start in valid_starts:
-            if start in self.region_map and abs(pos - start) < 0.001:
-                return self.region_map[start]
-        
-        # Check if pos is at the end of a region (look for next contiguous region)
+        # TODO: Need to fix the merge logic so that we could remove following boundary check code.
+        # If not found, check boundary case: pos at region end
+        # Note: exists() checks pos < end (not <=), so pos == end won't be found by main search
+        # This handles cases where pos is exactly at a region boundary
         for i, start in enumerate(valid_starts):
             if start in self.region_map:
                 check_region = self.region_map[start]
-                if check_region.end is not None and abs(pos - check_region.end) < 0.001:
-                    # Found region ending at pos, check for next contiguous region
-                    if i + 1 < len(valid_starts):
-                        next_start = valid_starts[i + 1]
-                        if next_start in self.region_map:
-                            next_region = self.region_map[next_start]
-                            if abs(check_region.end - next_start) < 0.001:
-                                return next_region
-                    # If no next contiguous region, return the region ending at pos
-                    # (useful for pop_chunk when finishing a chunk)
-                    return check_region
+                if check_region.end is not None:
+                    # Normalize end to handle any accumulated floating point errors
+                    normalized_end = self._normalize_pos(check_region.end)
+                    if normalized_end == pos:
+                        # Found region ending at pos, check for next contiguous region
+                        if i + 1 < len(valid_starts):
+                            next_start = valid_starts[i + 1]
+                            if next_start in self.region_map:
+                                next_region = self.region_map[next_start]
+                                # Normalize next_start to handle floating point errors
+                                normalized_next_start = self._normalize_pos(next_start)
+                                if normalized_end == normalized_next_start:
+                                    # Regions are contiguous, return the next one
+                                    return next_region
+                        # If no next contiguous region, return the region ending at pos
+                        # (useful for pop_chunk when finishing a chunk)
+                        return check_region
         
         return None
     
@@ -261,9 +292,14 @@ class MultiRegionBuffer:
             if not next_region:
                 break
             
-            if current_region.end is not None and abs(current_region.end - next_start) < 0.001:
-                chunks.extend(next_region.chunks)
-                current_region = next_region
+            if current_region.end is not None:
+                normalized_end = self._normalize_pos(current_region.end)
+                normalized_next_start = self._normalize_pos(next_start)
+                if normalized_end == normalized_next_start:
+                    chunks.extend(next_region.chunks)
+                    current_region = next_region
+                else:
+                    break
             else:
                 break
         
@@ -272,6 +308,7 @@ class MultiRegionBuffer:
     def add_chunk(self, segment_index, quality):
         """Add chunk, convert segment_index to ms position."""
         pos_ms = segment_index * self.chunk_duration
+        pos_ms = self._normalize_pos(pos_ms)  # Normalize to avoid floating point errors
         self.buffer_by_pos(pos_ms, quality)
         self.merge_adjacent_regions()
     
@@ -323,15 +360,22 @@ class MultiRegionBuffer:
                 next_region = self.region_map[next_start]
                 
                 # Check if regions are adjacent (end of current == start of next)
-                if current_region.end is not None and abs(current_region.end - next_start) < 0.001:
-                    # Merge: extend current region with next region's chunks
-                    if current_region.try_merge(next_region):
-                        # Successfully merged, remove next region from map
-                        if next_start in self.region_map:
-                            del self.region_map[next_start]
-                        # Successfully merged, skip next region
-                        i += 2
-                        continue
+                if current_region.end is not None:
+                    normalized_end = self._normalize_pos(current_region.end)
+                    normalized_next_start = self._normalize_pos(next_start)
+                    if normalized_end == normalized_next_start:
+                        # Merge: extend current region with next region's chunks
+                        if current_region.try_merge(next_region):
+                            # Successfully merged, remove next region from map
+                            if next_start in self.region_map:
+                                del self.region_map[next_start]
+                            # After merging, current_region is updated in place
+                            # For adjacent regions, current_region.start doesn't change (self <- region case)
+                            merged_starts.append(current_start)
+                            merged_map[current_start] = current_region
+                            # Successfully merged, skip next region
+                            i += 2
+                            continue
             
             # Keep current region as-is
             merged_starts.append(current_start)

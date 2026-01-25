@@ -1,49 +1,214 @@
-# Step to generate graphs
+# SABRE Simulation Guide
 
-## Generate network.json
-Run network_generator.py to generate network.json by following command
-`python network_generator.py -ne 10 -d 4000 -bm 3000 -bs 1500 -lm 150 -ls 50`
-## Generate graphs for abrs.
-Update the abrArray in generate_abr_comparison.py to choose abr algorithms.
-Run generate_abr_comparison.py to generate graphs for abrs
-`python generate_abr_comparison.py`
-## Run Multiple Seek command
-Create a multiple seek config as following:
-`{
+This guide covers all commands and workflows for running simulations, generating graphs, and testing buffer implementations.
+
+## Table of Contents
+1. [Setup & Prerequisites](#setup--prerequisites)
+2. [Network Configuration](#network-configuration)
+3. [Running Simulations](#running-simulations)
+4. [Buffer Comparison](#buffer-comparison)
+5. [Graph Generation](#graph-generation)
+6. [Testing](#testing)
+
+---
+
+## Setup & Prerequisites
+
+### Install Dependencies
+```bash
+pip install numpy
+```
+
+### Required Files
+- `network.json` - Network trace file (can be generated)
+- `movie.json` - Movie manifest file
+- `seeks.json` - Seek configuration (optional)
+
+---
+
+## Network Configuration
+
+### Generate network.json
+
+Generate network conditions using `network_generator.py`:
+
+```bash
+python network_generator.py -ne 10 -d 4000 -bm 3000 -bs 1500 -lm 150 -ls 50
+```
+
+**Parameters:**
+- `-ne, --num-entries`: Number of network condition entries (default: 10)
+- `-d, --duration`: Total duration in milliseconds (default: 4000)
+- `-bm, --bandwidth-mean`: Mean bandwidth (default: 3000)
+- `-bs, --bandwidth-std`: Bandwidth standard deviation (default: 1500)
+- `-lm, --latency-mean`: Mean latency (default: 150)
+- `-ls, --latency-std`: Latency standard deviation (default: 50)
+
+**Example:**
+```bash
+python network_generator.py -ne 20 -d 6000 -bm 5000 -bs 2000 -lm 100 -ls 30
+```
+
+---
+
+## Running Simulations
+
+### Basic Simulation
+
+Run simulation with default settings:
+```bash
+python sabre.py
+```
+
+### With Verbose Output
+```bash
+python sabre.py -v
+```
+
+### With Seek Configuration
+
+Create a seek config file (`seeks.json`):
+```json
+{
   "seeks": [
     {"seek_when": 15, "seek_to": 18},
     {"seek_when": 40, "seek_to": 43}
   ]
-}`
-Run following command to see multiple seek result
-`python sabre.py -v -sc seeks.json`
+}
+```
 
-## Run with simulate_abr.py
-Run sabre.py with verbose mode and save output to file:
+Run with seeks:
+```bash
+python sabre.py -v -sc seeks.json
+```
+
+### Using simulate_abr.py
+
+Run simulation and save output to file:
 ```bash
 python simulate_abr.py -o output.txt
 ```
+
 With custom seek config:
 ```bash
 python simulate_abr.py -o output.txt -s seeks.json
 ```
 
+**Parameters:**
+- `-o, --output`: Output file path
+- `-s, --seek-config`: Seek configuration file
+
+---
+
+## Buffer Comparison
+
+Compare simulation results with and without `buffer.py` (MultiRegionBuffer).
+
+### Quick Comparison
+
+Compare a single ABR algorithm:
+```bash
+python run_buffer_comparison.py -n network.json -m movie.json -a bola -o comparison_results.json
+```
+
+### Compare Multiple ABR Algorithms
+
+Compare all supported algorithms:
+```bash
+python run_buffer_comparison.py -a all -o comparison_results.json
+```
+
+Compare specific algorithms:
+```bash
+python run_buffer_comparison.py -a bola,bolae,dynamic,dynamicdash,throughput -o comparison_results.json
+```
+
+### With Seek Configuration
+```bash
+python run_buffer_comparison.py -n network.json -m movie.json -a bola -sc seeks.json -o my_comparison.json
+```
+
+**Parameters:**
+- `-n, --network`: Network trace file (default: `network.json`)
+- `-m, --movie`: Movie manifest file (default: `movie.json`)
+- `-a, --abr`: ABR algorithm(s) - single algorithm, comma-separated list, or `all` (default: `bola`)
+- `-sc, --seek-config`: Seek configuration file (optional)
+- `-nm, --network-multiplier`: Network multiplier (default: 1.0)
+- `-o, --output`: Output JSON file (default: `comparison_results.json`)
+
+### View Comparison Results
+
+1. Start the web server:
+   ```bash
+   python serve_viewer.py
+   ```
+
+2. Browser opens automatically to `http://localhost:8000/view_comparison.html`
+
+3. Click **"Load Comparison Data"** and select your JSON file
+
+---
+
+## Graph Generation
+
+### Generate ABR Comparison Graphs
+
+Update the `abrArray` in `generate_abr_comparison.py` to choose ABR algorithms, then run:
+```bash
+python generate_abr_comparison.py
+```
+
+### Generate Individual ABR Graphs
+
+Use `graph_generate.py` for specific algorithms:
+```bash
+python graph_generate.py -a bola
+```
+
+---
+
 ## Testing
+
+### Buffer Comparison Tests
+
+Run comprehensive buffer comparison tests:
+```bash
+python test_buffer_comparison.py
+```
+
+**Options:**
+- `--quick`: Run quick test only
+- `--abr <algorithm>`: Test specific ABR algorithm
+- `-v, --verbose`: Verbose output
+
+**Examples:**
+```bash
+# Quick test
+python test_buffer_comparison.py --quick
+
+# Test specific algorithm
+python test_buffer_comparison.py --abr bola
+
+# Verbose output
+python test_buffer_comparison.py -v
+```
+
 ### Regression Testing
+
 Ensure simulation results remain consistent after code changes:
 
-1. **Generate baseline results(Run Once):**
+1. **Generate baseline results (run once):**
    ```bash
    python test_simulation_regression.py --generate-baseline
    ```
-   Remember to generate new baseline_simulation_results.txt whenever there are changes in movie.json, network.json or seeks.json.
+   **Important:** Generate new `baseline_simulation_results.txt` whenever there are changes in `movie.json`, `network.json`, or `seeks.json`.
 
 2. **Run regression test:**
    ```bash
    python test_simulation_regression.py
    ```
 
-The test will compare current simulation results with the baseline and report any differences.
+The test compares current simulation results with the baseline and reports any differences.
 
 ---
 
