@@ -146,7 +146,7 @@ def run_simulation(use_buffer_py, config):
 
 def main():
     parser = argparse.ArgumentParser(
-        description='Compare simulation results with and without buffer.py'
+        description='Compare simulation results with and without buffer.py for one or more ABR algorithms'
     )
     parser.add_argument(
         '-n', '--network',
@@ -161,7 +161,7 @@ def main():
     parser.add_argument(
         '-a', '--abr',
         default='bola',
-        help='ABR algorithm'
+        help='ABR algorithm(s). Can be a single algorithm (e.g., "bola") or comma-separated list (e.g., "bola,bolae,dynamic,dynamicdash,throughput") or "all" for all supported algorithms'
     )
     parser.add_argument(
         '-sc', '--seek-config',
@@ -176,61 +176,125 @@ def main():
     parser.add_argument(
         '-o', '--output',
         default='comparison_results.json',
-        help='Output JSON file'
+        help='Output JSON file (for single ABR) or output directory (for multiple ABRs)'
     )
     
     args = parser.parse_args()
     
-    config = {
-        'network': args.network,
-        'movie': args.movie,
-        'abr': args.abr,
-        'seek_config': args.seek_config,
-        'network_multiplier': args.network_multiplier
-    }
+    # Supported ABR algorithms
+    supported_abrs = ['bola', 'bolae', 'dynamic', 'dynamicdash', 'throughput']
     
-    # Run both simulations
-    metrics_without = run_simulation(use_buffer_py=False, config=config)
-    metrics_with = run_simulation(use_buffer_py=True, config=config)
+    # Parse ABR argument
+    if args.abr.lower() == 'all':
+        abr_list = supported_abrs
+    elif ',' in args.abr:
+        abr_list = [a.strip() for a in args.abr.split(',')]
+        # Validate
+        invalid = [a for a in abr_list if a not in supported_abrs]
+        if invalid:
+            print(f"Error: Invalid ABR algorithm(s): {invalid}", file=sys.stderr)
+            print(f"Supported algorithms: {', '.join(supported_abrs)}", file=sys.stderr)
+            sys.exit(1)
+    else:
+        abr_list = [args.abr]
+        if args.abr not in supported_abrs:
+            print(f"Warning: '{args.abr}' may not be a supported ABR algorithm.", file=sys.stderr)
+            print(f"Supported algorithms: {', '.join(supported_abrs)}", file=sys.stderr)
     
-    if metrics_without is None or metrics_with is None:
-        print("Error: One or both simulations failed", file=sys.stderr)
-        sys.exit(1)
-    
-    # Prepare comparison data
-    comparison_data = {
-        'config': config,
-        'without_buffer_py': metrics_without,
-        'with_buffer_py': metrics_with
-    }
-    
-    # Write results to JSON file
     script_dir = Path(__file__).parent
-    output_path = script_dir / args.output
-    with open(output_path, 'w') as f:
-        json.dump(comparison_data, f, indent=2)
     
-    print(f"\n✓ Results saved to {output_path}")
-    print("\nSummary Comparison:")
-    print(f"{'Metric':<30} {'Without buffer.py':<20} {'With buffer.py':<20} {'Change':<15}")
-    print("-" * 85)
+    # If multiple ABRs, create a directory for results
+    if len(abr_list) > 1:
+        output_dir = script_dir / args.output if args.output.endswith('.json') else script_dir / args.output
+        output_dir.mkdir(exist_ok=True)
+        all_results = {}
+    else:
+        output_dir = None
+        all_results = None
     
-    summary_keys = ['total_rebuffer_time', 'rebuffer_count', 'total_play_time', 
-                    'played_utility', 'rebuffer_ratio']
-    
-    for key in summary_keys:
-        val_without = metrics_without.get('summary', {}).get(key, 0)
-        val_with = metrics_with.get('summary', {}).get(key, 0)
+    # Run comparisons for each ABR
+    for abr in abr_list:
+        print(f"\n{'='*85}")
+        print(f"Processing ABR algorithm: {abr}")
+        print(f"{'='*85}")
         
-        if val_without != 0:
-            change_pct = ((val_with - val_without) / val_without) * 100
-            change_str = f"{change_pct:+.1f}%"
+        config = {
+            'network': args.network,
+            'movie': args.movie,
+            'abr': abr,
+            'seek_config': args.seek_config,
+            'network_multiplier': args.network_multiplier
+        }
+        
+        # Run both simulations
+        metrics_without = run_simulation(use_buffer_py=False, config=config)
+        metrics_with = run_simulation(use_buffer_py=True, config=config)
+        
+        if metrics_without is None or metrics_with is None:
+            print(f"Error: Simulation failed for {abr}", file=sys.stderr)
+            continue
+        
+        # Prepare comparison data
+        comparison_data = {
+            'config': config,
+            'without_buffer_py': metrics_without,
+            'with_buffer_py': metrics_with
+        }
+        
+        # Determine output path
+        if len(abr_list) > 1:
+            output_path = output_dir / f"comparison_{abr}.json"
+            all_results[abr] = comparison_data
         else:
-            change_str = "N/A"
+            output_path = script_dir / args.output
         
-        print(f"{key:<30} {str(val_without):<20} {str(val_with):<20} {change_str:<15}")
+        # Write results to JSON file
+        with open(output_path, 'w') as f:
+            json.dump(comparison_data, f, indent=2)
+        
+        print(f"\n✓ Results saved to {output_path}")
+        print(f"\nSummary Comparison for {abr}:")
+        print(f"{'Metric':<30} {'Without buffer.py':<20} {'With buffer.py':<20} {'Change':<15}")
+        print("-" * 85)
+        
+        summary_keys = ['total_rebuffer_time', 'rebuffer_count', 'total_play_time', 
+                        'played_utility', 'rebuffer_ratio']
+        
+        for key in summary_keys:
+            val_without = metrics_without.get('summary', {}).get(key, 0)
+            val_with = metrics_with.get('summary', {}).get(key, 0)
+            
+            if val_without != 0:
+                change_pct = ((val_with - val_without) / val_without) * 100
+                change_str = f"{change_pct:+.1f}%"
+            else:
+                if val_with != 0:
+                    change_str = "N/A (was 0)"
+                else:
+                    change_str = "0.0%"
+            
+            print(f"{key:<30} {str(val_without):<20} {str(val_with):<20} {change_str:<15}")
     
-    print(f"\nOpen view_comparison.html in your browser and load {args.output} to see visualizations!")
+    # If multiple ABRs, create a summary file
+    if len(abr_list) > 1 and all_results:
+        summary_path = output_dir / "comparison_summary.json"
+        with open(summary_path, 'w') as f:
+            json.dump({
+                'config': {
+                    'network': args.network,
+                    'movie': args.movie,
+                    'seek_config': args.seek_config,
+                    'network_multiplier': args.network_multiplier
+                },
+                'algorithms': abr_list,
+                'results': all_results
+            }, f, indent=2)
+        print(f"\n{'='*85}")
+        print(f"✓ Summary saved to {summary_path}")
+        print(f"✓ Individual results saved to {output_dir}/")
+        print(f"\nOpen view_comparison.html in your browser and load individual JSON files to see visualizations!")
+    elif len(abr_list) == 1:
+        print(f"\nOpen view_comparison.html in your browser and load {args.output} to see visualizations!")
 
 
 if __name__ == '__main__':
