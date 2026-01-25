@@ -319,8 +319,9 @@ def deplete_buffer(time, abr):
         # Process full segments.
         # Refresh playable_chunks at the start of each iteration to match linear buffering behavior
         # (gs.buffer_contents is accessed directly in linear path, so we need to refresh here too)
+        # Use get_contiguous_chunks_from_current_position() to be consistent with buffer level calculation
         while time > 0:
-            playable_chunks = gs.multi_region_buffer.get_all_chunks()
+            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
             if len(playable_chunks) == 0:
                 break
                 
