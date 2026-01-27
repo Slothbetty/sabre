@@ -38,6 +38,7 @@ from abr_algorithms import (
     SlidingWindow, Ewma, Bola, BolaEnh, ThroughputRule, Dynamic, DynamicDash, Bba,
     NoReplace, Replace, AbrInput, ReplacementInput
 )
+from buffer import MultiRegionBuffer
 
 # Units used throughout:
 #     size     : bits
@@ -89,7 +90,13 @@ DownloadProgress = namedtuple(
 
 def get_buffer_level(segment_time, buffer_contents, buffer_fcc):
     """Returns the current buffer level."""
-    return segment_time * len(buffer_contents) - buffer_fcc
+    # If multi_region_buffer exists, use it; otherwise fall back to linear buffering
+    if gs.multi_region_buffer is not None:
+        # Use the buffer_fcc parameter for consistency with linear buffering
+        return gs.multi_region_buffer.get_buffer_level(buffer_fcc)
+    # Linear buffering
+    buffer_level = segment_time * len(buffer_contents) - buffer_fcc
+    return buffer_level
 
 
 def get_is_bola_value(abr):
@@ -121,30 +128,72 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
         pos_seek_to_ms (float): The seek position in milliseconds
         seg_time (float): Duration of each segment in milliseconds
     """
-    # Compute the segment index corresponding to the first element in the buffer.
-    # next_segment always equals: buffer_base + len(buffer_contents)
-    buffer_base = gs.next_segment - len(gs.buffer_contents)
-
-    # If the current buffered segments span content past the new playback position,
-    # keep the segments that are beyond 'new_segment'.
-    if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
-        # Calculate how many segments to drop.
-        skip_count = new_segment - buffer_base
-        gs.buffer_contents = gs.buffer_contents[skip_count:]
-    else:
-        # Otherwise, if no buffered segment is relevant, clear the buffer.
-        gs.buffer_contents.clear()
-        gs.next_segment = new_segment
-
-    # At this point, calculate how much of the first segment is already "used up":
-    # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
-    # Otherwise, we jumped to the very start of a segment.
-    if new_segment == floor_idx:
-        # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
-        gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
-    else:
-        # Seek landed at a segment boundary: no partial chunk has been consumed.
+    # Use MultiRegionBuffer if available
+    if gs.multi_region_buffer is not None:
+        # Convert seek position to milliseconds
+        seek_pos_ms = new_segment * seg_time
+        
+        # Update playback position
+        gs.current_playback_pos = seek_pos_ms
+        
+        # Find region containing seek position
+        region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
+        
+        if region:
+            # Seek within existing region: trim chunks before seek position
+            start_idx = int((seek_pos_ms - region.start) / seg_time)
+            region.chunks = region.chunks[start_idx:]
+            region.start = seek_pos_ms
+            # Calculate partial chunk consumption
+            if new_segment == floor_idx:
+                gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
+            else:
+                gs.buffer_fcc = 0
+        else:
+            # Seek outside buffered regions: preserve segments ahead if forward seek
+            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+            buffer_base = gs.next_segment - len(playable_chunks)
+            
+            if new_segment < gs.next_segment and new_segment >= buffer_base:
+                # Forward seek within buffered range: segments ahead are preserved automatically
+                # MultiRegionBuffer maintains separate regions
+                pass
+            else:
+                # Seek outside buffered range: clear buffer
+                gs.multi_region_buffer.region_starts.clear()
+                gs.multi_region_buffer.region_map.clear()
+            gs.next_segment = new_segment
+        
         gs.buffer_fcc = 0
+        
+        # Cleanup: merge adjacent regions
+        gs.multi_region_buffer.merge_adjacent_regions()
+    else:
+        # Original linear buffering logic
+        # Compute the segment index corresponding to the first element in the buffer.
+        # next_segment always equals: buffer_base + len(buffer_contents)
+        buffer_base = gs.next_segment - len(gs.buffer_contents)
+
+        # If the current buffered segments span content past the new playback position,
+        # keep the segments that are beyond 'new_segment'.
+        if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
+            # Calculate how many segments to drop.
+            skip_count = new_segment - buffer_base
+            gs.buffer_contents = gs.buffer_contents[skip_count:]
+        else:
+            # Otherwise, if no buffered segment is relevant, clear the buffer.
+            gs.buffer_contents.clear()
+            gs.next_segment = new_segment
+
+        # At this point, calculate how much of the first segment is already "used up":
+        # If `new_segment` equals `floor_idx`, the seek landed partway into that segment.
+        # Otherwise, we jumped to the very start of a segment.
+        if new_segment == floor_idx:
+            # Seek landed inside the same segment: set buffer_fcc to the elapsed ms within it.
+            gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
+        else:
+            # Seek landed at a segment boundary: no partial chunk has been consumed.
+            gs.buffer_fcc = 0
 
 
 def interrupted_by_seek(delta, abr):
@@ -235,77 +284,172 @@ def deplete_buffer(time, abr):
     Process the playback buffer for the given amount of time.
     Returns True if depleting the buffer completes normally, or False if a seek event is detected and processed.
     """
-    # Handles rebuffering when the buffer is empty
-    if len(gs.buffer_contents) == 0:
-        gs.rebuffer_time += time
-        if interrupted_by_seek(time, abr):
-            return False  # Seek event triggered: abort depleting further.
-        gs.rebuffer_event_count += 1
-        gs.segment_rebuffer_time = time
-        return True
-
-    if gs.buffer_fcc > 0:
-        # Play the remaining fraction of the first chunk.
-        if time + gs.buffer_fcc < gs.manifest.segment_time:
-            gs.buffer_fcc += time
+    # Use MultiRegionBuffer if available
+    if gs.multi_region_buffer is not None:
+        # Get contiguous chunks from current playback position forward
+        playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+        
+        # Handles rebuffering when the buffer is empty
+        if len(playable_chunks) == 0:
+            gs.rebuffer_time += time
             if interrupted_by_seek(time, abr):
-                return False
+                return False  # Seek event triggered: abort depleting further.
+            gs.current_playback_pos += time
+            gs.rebuffer_event_count += 1
+            gs.segment_rebuffer_time = time
             return True
-        dt = gs.manifest.segment_time - gs.buffer_fcc
-        time -= dt
-        if interrupted_by_seek(dt, abr):
-            return False
-        gs.buffer_contents.pop(0)
-        gs.buffer_fcc = 0
 
-    # Process full segments.
-    while time > 0 and len(gs.buffer_contents) > 0:
-        (_seg_idx, quality) = gs.buffer_contents[0]
-        gs.played_utility += gs.manifest.utilities[quality]
-        gs.played_bitrate += gs.manifest.bitrates[quality]
-        if gs.last_played is not None and quality != gs.last_played:
-            gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
-            gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
-        gs.last_played = quality
-
-        if gs.rampup_time is None:
-            rt = gs.sustainable_quality if gs.rampup_threshold is None else gs.rampup_threshold
-            if quality >= rt:
-                gs.rampup_time = gs.total_play_time - gs.rampup_origin
-
-        # Process pending quality-up events.
-        for p in gs.pending_quality_up:
-            if len(p) == 2 and quality >= p[1]:
-                p.append(gs.total_play_time)
-
-        if time >= gs.manifest.segment_time:
-            gs.buffer_contents.pop(0)
-            if interrupted_by_seek(gs.manifest.segment_time, abr):
+        buffer_fcc = gs.buffer_fcc
+        if buffer_fcc > 0:
+            # Play the remaining fraction of the first chunk.
+            if time + buffer_fcc < gs.manifest.segment_time:
+                gs.buffer_fcc += time
+                gs.current_playback_pos += time
+                if interrupted_by_seek(time, abr):
+                    return False
+                return True
+            dt = gs.manifest.segment_time - buffer_fcc
+            time -= dt
+            gs.current_playback_pos += dt
+            if interrupted_by_seek(dt, abr):
                 return False
-            time -= gs.manifest.segment_time
-        else:
-            gs.buffer_fcc = time
+            gs.multi_region_buffer.pop_chunk()
+            gs.buffer_fcc = 0
+
+        # Process full segments.
+        # Refresh playable_chunks at the start of each iteration to match linear buffering behavior
+        # (gs.buffer_contents is accessed directly in linear path, so we need to refresh here too)
+        # Use get_contiguous_chunks_from_current_position() to be consistent with buffer level calculation
+        while time > 0:
+            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+            if len(playable_chunks) == 0:
+                break
+                
+            quality = playable_chunks[0]
+            gs.played_utility += gs.manifest.utilities[quality]
+            gs.played_bitrate += gs.manifest.bitrates[quality]
+            if gs.last_played is not None and quality != gs.last_played:
+                gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
+                gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+            gs.last_played = quality
+
+            if gs.rampup_time is None:
+                rt = gs.sustainable_quality if gs.rampup_threshold is None else gs.rampup_threshold
+                if quality >= rt:
+                    gs.rampup_time = gs.total_play_time - gs.rampup_origin
+
+            # Process pending quality-up events.
+            for p in gs.pending_quality_up:
+                if len(p) == 2 and quality >= p[1]:
+                    p.append(gs.total_play_time)
+
+            if time >= gs.manifest.segment_time:
+                gs.current_playback_pos += gs.manifest.segment_time
+                gs.multi_region_buffer.pop_chunk()
+                gs.buffer_fcc = 0  # Reset buffer_fcc after popping full chunk
+                if interrupted_by_seek(gs.manifest.segment_time, abr):
+                    return False
+                time -= gs.manifest.segment_time
+            else:
+                gs.buffer_fcc = time
+                gs.current_playback_pos += time
+                if interrupted_by_seek(time, abr):
+                    return False
+                time = 0
+
+        if time > 0:
+            gs.rebuffer_time += time
+            gs.current_playback_pos += time
             if interrupted_by_seek(time, abr):
                 return False
-            time = 0
+            gs.rebuffer_event_count += 1
+            gs.segment_rebuffer_time = time
 
-    if time > 0:
-        gs.rebuffer_time += time
-        if interrupted_by_seek(time, abr):
-            return False
-        gs.rebuffer_event_count += 1
-        gs.segment_rebuffer_time = time
+        gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
+        return True  # Completed without interruption.
+    else:
+        # Original linear buffering logic
+        # Handles rebuffering when the buffer is empty
+        if len(gs.buffer_contents) == 0:
+            gs.rebuffer_time += time
+            if interrupted_by_seek(time, abr):
+                return False  # Seek event triggered: abort depleting further.
+            gs.rebuffer_event_count += 1
+            gs.segment_rebuffer_time = time
+            return True
 
-    gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
-    return True  # Completed without interruption.
+        if gs.buffer_fcc > 0:
+            # Play the remaining fraction of the first chunk.
+            if time + gs.buffer_fcc < gs.manifest.segment_time:
+                gs.buffer_fcc += time
+                if interrupted_by_seek(time, abr):
+                    return False
+                return True
+            dt = gs.manifest.segment_time - gs.buffer_fcc
+            time -= dt
+            if interrupted_by_seek(dt, abr):
+                return False
+            gs.buffer_contents.pop(0)
+            gs.buffer_fcc = 0
+
+        # Process full segments.
+        while time > 0 and len(gs.buffer_contents) > 0:
+            (_seg_idx, quality) = gs.buffer_contents[0]
+            gs.played_utility += gs.manifest.utilities[quality]
+            gs.played_bitrate += gs.manifest.bitrates[quality]
+            if gs.last_played is not None and quality != gs.last_played:
+                gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
+                gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+            gs.last_played = quality
+
+            if gs.rampup_time is None:
+                rt = gs.sustainable_quality if gs.rampup_threshold is None else gs.rampup_threshold
+                if quality >= rt:
+                    gs.rampup_time = gs.total_play_time - gs.rampup_origin
+
+            # Process pending quality-up events.
+            for p in gs.pending_quality_up:
+                if len(p) == 2 and quality >= p[1]:
+                    p.append(gs.total_play_time)
+
+            if time >= gs.manifest.segment_time:
+                gs.buffer_contents.pop(0)
+                gs.buffer_fcc = 0
+                if interrupted_by_seek(gs.manifest.segment_time, abr):
+                    return False
+                time -= gs.manifest.segment_time
+            else:
+                gs.buffer_fcc = time
+                if interrupted_by_seek(time, abr):
+                    return False
+                time = 0
+
+        if time > 0:
+            gs.rebuffer_time += time
+            if interrupted_by_seek(time, abr):
+                return False
+            gs.rebuffer_event_count += 1
+            gs.segment_rebuffer_time = time
+
+        gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
+        return True  # Completed without interruption.
 
 def playout_buffer(segment_time, buffer_contents, buffer_fcc, deplete_buffer_func):
     """Play out all the bufferred chunks. """
-    deplete_buffer_func(get_buffer_level(segment_time, buffer_contents, buffer_fcc))
+    buffer_level = get_buffer_level(segment_time, buffer_contents, buffer_fcc)
+    deplete_buffer_func(buffer_level)
 
     # make sure no rounding error
-    del buffer_contents[:]
-    buffer_fcc = 0
+    if gs.multi_region_buffer is not None:
+        # Clear MultiRegionBuffer
+        gs.multi_region_buffer.region_starts.clear()
+        gs.multi_region_buffer.region_map.clear()
+        gs.buffer_fcc = 0
+        gs.buffer_fcc = 0
+        gs.buffer_contents = []
+    else:
+        del buffer_contents[:]
+        buffer_fcc = 0
     return buffer_contents, buffer_fcc
 
 
@@ -347,9 +491,18 @@ def advertize_new_network_quality(quality, previous_quality):
     # filter out switches which are not upwards (three separate checks)
     if quality <= previous_quality:
         return
-    for (_idx, q) in gs.buffer_contents:
-        if quality <= q:
-            return
+    
+    # Check buffer contents - use wrapper if available
+    if gs.multi_region_buffer is not None:
+        playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
+        for q in playable_chunks:
+            if quality <= q:
+                return
+    else:
+        for (_idx, q) in gs.buffer_contents:
+            if quality <= q:
+                return
+    
     for p in gs.pending_quality_up:
         if quality <= p[1]:
             return
@@ -544,15 +697,28 @@ def process_download_loop(abr, replacer, graph, args, network):
         # Update buffer with new download.
         if replace is None:
             if download_metric.abandon_to_quality is None:
-                gs.buffer_contents.append((gs.next_segment, quality))
+                if gs.multi_region_buffer is not None:
+                    gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
+                else:
+                    gs.buffer_contents.append((gs.next_segment, quality))
                 gs.next_segment += 1
             else:
                 gs.abandoned_to_quality = download_metric.abandon_to_quality
         else:
             if download_metric.abandon_to_quality is None:
                 if get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time * replace >= 0:
-                    old_seg_idx, _ = gs.buffer_contents[replace]
-                    gs.buffer_contents[replace] = (old_seg_idx, quality)
+                    if gs.multi_region_buffer is not None:
+                        # For replacement with multi-region buffer, we need to update the region
+                        # Find the region containing the segment to replace
+                        replace_pos_ms = (gs.next_segment + replace) * gs.manifest.segment_time
+                        region = gs.multi_region_buffer._find_region_of(replace_pos_ms)
+                        if region:
+                            chunk_idx = int((replace_pos_ms - region.start) / gs.manifest.segment_time)
+                            if chunk_idx < len(region.chunks):
+                                region.chunks[chunk_idx] = quality
+                    else:
+                        old_seg_idx, _ = gs.buffer_contents[replace]
+                        gs.buffer_contents[replace] = (old_seg_idx, quality)
                 else:
                     print("WARNING: too late to replace")
             else:
@@ -866,15 +1032,6 @@ class NetworkModel:
             abandon_to_quality=abandon_quality,
         )
 
-
-
-
-
-
-
-
-
-
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Simulate an ABR session.",
@@ -1022,6 +1179,11 @@ if __name__ == "__main__":
     metavar="SEEK_CONFIG",
     help="Specify the JSON file containing multiple seek events."
     )
+    parser.add_argument(
+        "--use-buffer-py",
+        action="store_true",
+        help="Use MultiRegionBuffer from buffer.py for dynamic buffering."
+    )
     args = parser.parse_args()
 
     # Initialize GlobalState
@@ -1082,6 +1244,11 @@ if __name__ == "__main__":
         segments=manifest_data["segment_sizes_bits"],
     )
     SessionInfo.manifest = gs.manifest
+    
+    # Initialize MultiRegionBuffer if flag is set
+    if args.use_buffer_py:
+        gs.multi_region_buffer = MultiRegionBuffer(gs.manifest.segment_time)
+        gs.current_playback_pos = 0
 
     network_trace = load_json(args.network)
     network_trace = [
@@ -1131,7 +1298,12 @@ if __name__ == "__main__":
     download_metric = network.download(size, 0, quality, 0)
     download_time = download_metric.time - download_metric.time_to_first_bit
     gs.startup_time = download_time
-    gs.buffer_contents.append((0, download_metric.quality))
+    if gs.multi_region_buffer is not None:
+        gs.multi_region_buffer.add_chunk(0, download_metric.quality)
+        gs.next_segment = 1
+        gs.current_playback_pos = 0
+    else:
+        gs.buffer_contents.append((0, download_metric.quality))
     t = download_metric.size / download_time
     l = download_metric.time_to_first_bit
     gs.throughput_history.push(download_time, t, l)
