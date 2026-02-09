@@ -20,12 +20,13 @@ except ImportError:
 
 class SimulationRegressionTest:
     def __init__(self):
-        self.test_dir = Path(__file__).parent
+        self.test_dir = Path(__file__).resolve().parent
+        self.src_dir = self.test_dir.parent
         self.baseline_file = self.test_dir / "baseline_simulation_results.txt"
         self.test_config = {
-            "network": "network.json",
-            "movie": "movie.json", 
-            "seek_config": "seeks.json",
+            "network": self.test_dir / "network.json",
+            "movie": self.src_dir / "movie.json",
+            "seek_config": self.src_dir / "seeks.json",
             "verbose": True,
             "graph": True
         }
@@ -35,10 +36,10 @@ class SimulationRegressionTest:
     def run_simulation(self, output_file, abr_algorithm):
         """Run the simulation and return the output file path."""
         cmd = [
-            sys.executable, "sabre.py",
-            "-n", self.test_config["network"],
-            "-m", self.test_config["movie"],
-            "-sc", self.test_config["seek_config"],
+            sys.executable, str(self.src_dir / "sabre.py"),
+            "-n", str(self.test_config["network"]),
+            "-m", str(self.test_config["movie"]),
+            "-sc", str(self.test_config["seek_config"]),
             "-a", abr_algorithm,
             "-v" if self.test_config["verbose"] else "",
             "-g" if self.test_config["graph"] else ""
@@ -48,7 +49,7 @@ class SimulationRegressionTest:
         
         with open(output_file, 'w') as f:
             result = subprocess.run(cmd, stdout=f, stderr=subprocess.STDOUT, 
-                                  cwd=self.test_dir, text=True)
+                                  cwd=self.src_dir, text=True)
         
         if result.returncode != 0:
             raise RuntimeError(f"Simulation failed with return code {result.returncode}")
@@ -60,7 +61,7 @@ class SimulationRegressionTest:
         # Try using git command directly first
         try:
             result = subprocess.run(['git', 'branch', '--show-current'], 
-                                  capture_output=True, text=True, cwd=self.test_dir)
+                                  capture_output=True, text=True, cwd=self.src_dir)
             if result.returncode == 0 and result.stdout.strip():
                 return result.stdout.strip()
         except (subprocess.SubprocessError, FileNotFoundError):
@@ -69,7 +70,7 @@ class SimulationRegressionTest:
         # Fallback to GitPython if available
         if GIT_AVAILABLE:
             try:
-                repo = git.Repo(self.test_dir)
+                repo = git.Repo(self.src_dir)
                 return repo.active_branch.name
             except:
                 pass

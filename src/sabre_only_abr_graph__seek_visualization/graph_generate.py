@@ -1,8 +1,9 @@
 import pandas as pd
 import matplotlib.pyplot as plt
 import argparse
+import os
 
-def generate_graph(abrarray):
+def generate_graph(abrarray, input_dir):
     # Dictionary to store the DataFrame for each ABR algorithm
     dataframes = {}
 
@@ -10,9 +11,15 @@ def generate_graph(abrarray):
     colors = ['blue', 'orange', 'green', 'red', 'purple', 'brown', 'pink', 'gray', 'olive', 'cyan']
     marker = 'o'  # Use the same marker symbol
 
+    # Resolve relative input dir against this script's location
+    if not os.path.isabs(input_dir):
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        input_dir = os.path.join(script_dir, input_dir)
+
     # Load the data from each CSV file and store it in the dictionary
     for abr in abrarray:
-        dataframes[abr] = pd.read_csv(f'{abr}.csv')
+        csv_path = os.path.join(input_dir, f'{abr}.csv')
+        dataframes[abr] = pd.read_csv(csv_path)
 
     # Plot network_bandwidth vs time for all ABR algorithms with logarithmic scale
     plt.figure(figsize=(10, 5))
@@ -93,7 +100,14 @@ def generate_graph(abrarray):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description='Generate graphs for specified ABR algorithms')
     parser.add_argument('-a', '--abr', type=str, nargs='+', required=True, help='Array of ABR algorithms to use (space-separated)')
+    parser.add_argument(
+        '-i',
+        '--input-dir',
+        type=str,
+        default='sabre_only_abr_graph__seek_visualization',
+        help='Directory to read CSV inputs from'
+    )
     args = parser.parse_args()
 
     # Pass the ABR algorithm array to the generate_graph function
-    generate_graph(args.abr)
+    generate_graph(args.abr, args.input_dir)
