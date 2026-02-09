@@ -115,7 +115,7 @@ python run_buffer_comparison.py -n network.json -m movie.json -a bola -o compari
 
 Compare all supported algorithms:
 ```bash
-python run_buffer_comparison.py -a all -o comparison_results.json
+python run_buffer_comparison.py -a all -o comparison_results
 ```
 
 Compare specific algorithms:
