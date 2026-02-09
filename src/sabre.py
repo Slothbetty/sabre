@@ -294,7 +294,7 @@ def deplete_buffer(time, abr):
             gs.rebuffer_time += time
             if interrupted_by_seek(time, abr):
                 return False  # Seek event triggered: abort depleting further.
-            gs.current_playback_pos += time
+            # During rebuffering, playback position does not advance.
             gs.rebuffer_event_count += 1
             gs.segment_rebuffer_time = time
             return True
@@ -359,7 +359,7 @@ def deplete_buffer(time, abr):
 
         if time > 0:
             gs.rebuffer_time += time
-            gs.current_playback_pos += time
+            # During rebuffering, playback position does not advance.
             if interrupted_by_seek(time, abr):
                 return False
             gs.rebuffer_event_count += 1
