@@ -141,9 +141,14 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
         
         if region:
             # Seek within existing region: trim chunks before seek position
-            start_idx = int((seek_pos_ms - region.start) / seg_time)
+            seek_pos_idx = int(round(seek_pos_ms / seg_time))
+            start_idx = max(0, seek_pos_idx - region.start_idx)
             region.chunks = region.chunks[start_idx:]
-            region.start = seek_pos_ms
+            region.start_idx = seek_pos_idx
+            if region.chunks:
+                region.end_idx = region.start_idx + len(region.chunks)
+            else:
+                region.end_idx = None
             # Calculate partial chunk consumption
             if new_segment == floor_idx:
                 gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
@@ -713,8 +718,9 @@ def process_download_loop(abr, replacer, graph, args, network):
                         replace_pos_ms = (gs.next_segment + replace) * gs.manifest.segment_time
                         region = gs.multi_region_buffer._find_region_of(replace_pos_ms)
                         if region:
-                            chunk_idx = int((replace_pos_ms - region.start) / gs.manifest.segment_time)
-                            if chunk_idx < len(region.chunks):
+                            replace_pos_idx = int(round(replace_pos_ms / gs.manifest.segment_time))
+                            chunk_idx = replace_pos_idx - region.start_idx
+                            if 0 <= chunk_idx < len(region.chunks):
                                 region.chunks[chunk_idx] = quality
                     else:
                         old_seg_idx, _ = gs.buffer_contents[replace]
