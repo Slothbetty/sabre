@@ -93,7 +93,7 @@ class TestBufferComparison(unittest.TestCase):
             
             # Handle zero values
             if val_without == 0 and val_with == 0:
-                status = "✓ PASS"
+                status = "PASS"
                 print(f"  {key:<30} {str(val_without):<20} {str(val_with):<20} {status:<10}")
                 continue  # Both zero, skip comparison
             
@@ -101,14 +101,14 @@ class TestBufferComparison(unittest.TestCase):
             if isinstance(val_without, (int, float)) and isinstance(val_with, (int, float)):
                 diff = abs(val_without - val_with)
                 if diff > self.tolerance:
-                    status = "✗ FAIL"
+                    status = "FAIL"
                     all_passed = False
                     failures.append(
                         f"{abr_algorithm}.{key}: without={val_without}, with={val_with}, "
                         f"diff={diff}"
                     )
                 else:
-                    status = "✓ PASS"
+                    status = "PASS"
                     # Calculate percentage change for display
                     if val_without != 0:
                         pct_change = ((val_with - val_without) / val_without) * 100
@@ -117,13 +117,13 @@ class TestBufferComparison(unittest.TestCase):
                         status += " (0.0%)"
             else:
                 if val_without != val_with:
-                    status = "✗ FAIL"
+                    status = "FAIL"
                     all_passed = False
                     failures.append(
                         f"{abr_algorithm}.{key}: without={val_without}, with={val_with}"
                     )
                 else:
-                    status = "✓ PASS"
+                    status = "PASS"
             
             print(f"  {key:<30} {str(val_without):<20} {str(val_with):<20} {status:<10}")
         
@@ -131,7 +131,7 @@ class TestBufferComparison(unittest.TestCase):
             error_msg = f"\n  Metrics mismatch for {abr_algorithm}:\n  " + "\n  ".join(failures)
             self.fail(error_msg)
         else:
-            print(f"  ✓ All metrics match for {abr_algorithm}")
+            print(f"  All metrics match for {abr_algorithm}")
     
     def test_bola_comparison(self):
         """Test that bola produces identical results."""
@@ -209,27 +209,27 @@ class TestBufferComparison(unittest.TestCase):
                                 f"{abr}.{key}: without={val_without}, with={val_with}, "
                                 f"diff={abs(val_without - val_with)}"
                             )
-                            print(f"    ✗ {key}: mismatch (without={val_without}, with={val_with})")
+                            print(f"    FAIL {key}: mismatch (without={val_without}, with={val_with})")
                         else:
                             pct = ((val_with - val_without) / val_without * 100) if val_without != 0 else 0.0
-                            print(f"    ✓ {key}: match ({pct:+.1f}%)")
+                            print(f"    PASS {key}: match ({pct:+.1f}%)")
                     else:
                         if val_without != val_with:
                             failures.append(
                                 f"{abr}.{key}: without={val_without}, with={val_with}"
                             )
-                            print(f"    ✗ {key}: mismatch (without={val_without}, with={val_with})")
+                            print(f"    FAIL {key}: mismatch (without={val_without}, with={val_with})")
                         else:
-                            print(f"    ✓ {key}: match")
+                            print(f"    PASS {key}: match")
             except Exception as e:
                 failures.append(f"{abr}: {str(e)}")
-                print(f"    ✗ Error: {str(e)}")
+                print(f"    FAIL Error: {str(e)}")
         
         if failures:
             error_msg = "\nMetrics mismatch detected:\n" + "\n".join(failures)
             self.fail(error_msg)
         else:
-            print(f"\n  ✓ All ABR algorithms passed")
+            print(f"\n  All ABR algorithms passed")
     
     def test_buffer_level_consistency(self):
         """Test that buffer levels are consistent throughout simulation."""
@@ -280,7 +280,7 @@ class TestBufferComparison(unittest.TestCase):
             error_msg = "Buffer level mismatches detected:\n  " + "\n  ".join(mismatches)
             self.fail(error_msg)
         else:
-            print(f"  ✓ All buffer levels match across {len(events_without)} events")
+            print(f"  All buffer levels match across {len(events_without)} events")
 
 
 class TestBufferComparisonQuick(unittest.TestCase):
@@ -324,27 +324,27 @@ class TestBufferComparisonQuick(unittest.TestCase):
             val_with = summary_with.get(key, 0)
             
             if val_without == 0 and val_with == 0:
-                print(f"  {key:<30} {str(val_without):<20} {str(val_with):<20} {'✓ PASS':<10}")
+                print(f"  {key:<30} {str(val_without):<20} {str(val_with):<20} {'PASS':<10}")
                 continue
             
             if isinstance(val_without, (int, float)) and isinstance(val_with, (int, float)):
                 diff = abs(val_without - val_with)
                 if diff > self.tolerance:
-                    status = f"✗ FAIL (diff={diff})"
+                    status = f"FAIL (diff={diff})"
                     self.fail(f"Metric {key} mismatch: without={val_without}, with={val_with}")
                 else:
                     pct = ((val_with - val_without) / val_without * 100) if val_without != 0 else 0.0
-                    status = f"✓ PASS ({pct:+.1f}%)"
+                    status = f"PASS ({pct:+.1f}%)"
             else:
                 if val_without != val_with:
-                    status = "✗ FAIL"
+                    status = "FAIL"
                     self.fail(f"Metric {key} mismatch: without={val_without}, with={val_with}")
                 else:
-                    status = "✓ PASS"
+                    status = "PASS"
             
             print(f"  {key:<30} {str(val_without):<20} {str(val_with):<20} {status:<10}")
         
-        print(f"\n  ✓ Quick test passed")
+        print(f"\n  Quick test passed")
 
 
 if __name__ == '__main__':
@@ -373,7 +373,7 @@ if __name__ == '__main__':
         runner = unittest.TextTestRunner(verbosity=2 if verbose else 1)
         result = runner.run(suite)
         print(f"\n{'='*85}")
-        print(f"Summary: {'✓ PASSED' if result.wasSuccessful() else '✗ FAILED'}")
+        print(f"Summary: {'PASSED' if result.wasSuccessful() else 'FAILED'}")
         print(f"Tests run: {result.testsRun}, Failures: {len(result.failures)}, Errors: {len(result.errors)}")
         print(f"{'='*85}")
         sys.exit(0 if result.wasSuccessful() else 1)
@@ -390,7 +390,7 @@ if __name__ == '__main__':
         runner = unittest.TextTestRunner(verbosity=2 if verbose else 1)
         result = runner.run(suite)
         print(f"\n{'='*85}")
-        print(f"Summary: {'✓ PASSED' if result.wasSuccessful() else '✗ FAILED'}")
+        print(f"Summary: {'PASSED' if result.wasSuccessful() else 'FAILED'}")
         print(f"Tests run: {result.testsRun}, Failures: {len(result.failures)}, Errors: {len(result.errors)}")
         print(f"{'='*85}")
         sys.exit(0 if result.wasSuccessful() else 1)
@@ -415,6 +415,6 @@ if __name__ == '__main__':
             print(f"\nErrors:")
             for test, traceback in result.errors:
                 print(f"  - {test}: {traceback.split(chr(10))[-2]}")
-        print(f"\nResult: {'✓ ALL TESTS PASSED' if result.wasSuccessful() else '✗ SOME TESTS FAILED'}")
+        print(f"\nResult: {'ALL TESTS PASSED' if result.wasSuccessful() else 'SOME TESTS FAILED'}")
         print(f"{'='*85}")
         sys.exit(0 if result.wasSuccessful() else 1)
