@@ -106,6 +106,7 @@ class MultiRegionBuffer:
         # for all the regions afterwards
         self.region_map = {}        # region map {idx: region}
         self.chunk_duration = chunk_duration
+        self.prefetch_indices = set()  # tracks which chunk indices were prefetched
 
     def _pos_to_idx(self, pos_ms: float) -> int:
         """Convert milliseconds to chunk index (floor to containing chunk)."""
@@ -289,6 +290,11 @@ class MultiRegionBuffer:
         pos_ms = segment_index * self.chunk_duration
         self.buffer_by_pos(pos_ms, quality)
         self.merge_adjacent_regions()
+
+    def add_prefetch_chunk(self, segment_index, quality):
+        """Add a prefetch chunk and record its provenance."""
+        self.add_chunk(segment_index, quality)
+        self.prefetch_indices.add(segment_index)
     
     def merge_adjacent_regions(self):
         """Merge regions that are adjacent (no gap between them)."""
@@ -378,6 +384,7 @@ class MultiRegionBuffer:
             
             # Remove the first chunk (index 0) - matches buffer_contents.pop(0)
             old_start = region.start_idx
+            self.prefetch_indices.discard(old_start)
             region.chunks.pop(0)
             
             # Update region start since we removed the first chunk
