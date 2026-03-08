@@ -1,0 +1,7 @@
+{
+  "prefetch": [
+    {"segment": 5},
+    {"segment": 10},
+    {"segment": 15}
+  ]
+}

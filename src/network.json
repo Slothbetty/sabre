@@ -11,7 +11,7 @@
     },
     {
         "duration_ms": 30000,
-        "bandwidth_kbps": 2354,
+        "bandwidth_kbps": 0,
         "latency_ms": 63
     },
     {
@@ -21,7 +21,7 @@
     },
     {
         "duration_ms": 30000,
-        "bandwidth_kbps": 647,
+        "bandwidth_kbps": 0,
         "latency_ms": 245
     },
     {
@@ -31,7 +31,7 @@
     },
     {
         "duration_ms": 30000,
-        "bandwidth_kbps": 634,
+        "bandwidth_kbps": 0,
         "latency_ms": 112
     },
     {
@@ -41,7 +41,7 @@
     },
     {
         "duration_ms": 30000,
-        "bandwidth_kbps": 2489,
+        "bandwidth_kbps": 0,
         "latency_ms": 207
     },
     {

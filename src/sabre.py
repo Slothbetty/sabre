@@ -39,6 +39,7 @@ from abr_algorithms import (
     NoReplace, Replace, AbrInput, ReplacementInput
 )
 from buffer import MultiRegionBuffer
+from prefetch import PrefetchModule
 
 # Units used throughout:
 #     size     : bits
@@ -515,11 +516,40 @@ def advertize_new_network_quality(quality, previous_quality):
     # valid quality up switch
     gs.pending_quality_up.append([gs.network_total_time, quality])
 
-def process_download_loop(abr, replacer, graph, args, network):
+def process_download_loop(abr, replacer, graph, args, network, prefetch_module=None):
     while gs.next_segment < len(gs.manifest.segments):
+        # Skip segments that have already been prefetched
+        if (prefetch_module is not None
+                and gs.multi_region_buffer is not None
+                and gs.next_segment in gs.multi_region_buffer.prefetch_indices):
+            gs.next_segment += 1
+            continue
+
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
+            # When the buffer is full, use idle time for prefetch downloads
+            if (prefetch_module is not None
+                    and gs.multi_region_buffer is not None
+                    and prefetch_module.should_prefetch(
+                        get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))):
+                prefetch_seg = prefetch_module.get_next_prefetch_segment()
+                if prefetch_seg is not None and prefetch_seg < len(gs.manifest.segments):
+                    pf_quality, pf_delay = abr.get_quality_delay(prefetch_seg)
+                    pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
+                    pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
+                    pf_metric = network.download(pf_size, prefetch_seg, pf_quality, pf_bl)
+                    if not deplete_buffer(pf_metric.time, abr):
+                        continue  # seek during prefetch download
+                    if pf_metric.abandon_to_quality is None:
+                        gs.multi_region_buffer.add_prefetch_chunk(prefetch_seg, pf_quality)
+                        prefetch_module.mark_prefetched(prefetch_seg)
+                        if gs.verbose:
+                            print("prefetch segment %d quality=%d bl=%d"
+                                  % (prefetch_seg, pf_quality,
+                                     get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
+                    continue  # re-evaluate buffer state after prefetch
+
             if not deplete_buffer(full_delay, abr):
                 continue  # A seek event was triggered; restart loop.
             network.delay(full_delay)
@@ -1190,6 +1220,21 @@ if __name__ == "__main__":
         action="store_true",
         help="Use MultiRegionBuffer from buffer.py for dynamic buffering."
     )
+    parser.add_argument(
+        "-pc",
+        "--prefetch-config",
+        metavar="PREFETCH_CONFIG",
+        default=None,
+        help="JSON file listing segments to prefetch."
+    )
+    parser.add_argument(
+        "-pbt",
+        "--prefetch-buffer-threshold",
+        metavar="THRESHOLD_MS",
+        type=float,
+        default=20000,
+        help="Buffer level (ms) above which prefetch downloads are triggered."
+    )
     args = parser.parse_args()
 
     # Initialize GlobalState
@@ -1255,6 +1300,14 @@ if __name__ == "__main__":
     if args.use_buffer_py:
         gs.multi_region_buffer = MultiRegionBuffer(gs.manifest.segment_time)
         gs.current_playback_pos = 0
+
+    # Initialize prefetch module (requires --use-buffer-py)
+    prefetch_module = None
+    if args.prefetch_config:
+        if not args.use_buffer_py:
+            print("Warning: --prefetch-config requires --use-buffer-py; ignoring prefetch.", file=sys.stderr)
+        else:
+            prefetch_module = PrefetchModule(args.prefetch_config, args.prefetch_buffer_threshold)
 
     network_trace = load_json(args.network)
     network_trace = [
@@ -1369,7 +1422,7 @@ if __name__ == "__main__":
     gs.next_segment = 1
     gs.abandoned_to_quality = None
     while gs.next_segment < len(gs.manifest.segments):
-        process_download_loop(abr, replacer, args.graph, args, network)
+        process_download_loop(abr, replacer, args.graph, args, network, prefetch_module)
 
     gs.buffer_contents, gs.buffer_fcc = playout_buffer(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc, lambda time: deplete_buffer(time, abr))
 
