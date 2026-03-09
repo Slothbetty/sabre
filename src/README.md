@@ -1,14 +1,36 @@
 # SABRE Simulation Guide
 
-This guide covers all commands and workflows for running simulations, generating graphs, and testing buffer implementations.
+This guide is split into two parts:
+
+- **Part I** covers the core SABRE simulator — setup, running simulations, graph generation, and regression testing. No `buffer.py` knowledge required.
+- **Part II** covers dynamic buffering with `buffer.py` (`MultiRegionBuffer`) — comparison tooling, prefetch/seek unit tests, detailed use-case flows, and technical reference.
 
 ## Table of Contents
+
+### Part I — Core Simulation
+
 1. [Setup & Prerequisites](#setup--prerequisites)
 2. [Network Configuration](#network-configuration)
 3. [Running Simulations](#running-simulations)
-4. [Buffer Comparison](#buffer-comparison)
-5. [Graph Generation](#graph-generation)
-6. [Testing](#testing)
+4. [Graph Generation](#graph-generation)
+5. [Regression Testing](#regression-testing)
+
+### Part II — Dynamic Buffering (`buffer.py`)
+
+6. [Overview](#overview)
+7. [Running Buffer Comparisons](#running-buffer-comparisons)
+8. [Viewing Results](#viewing-results)
+9. [Understanding Results](#understanding-results)
+10. [Prefetch Comparison](#prefetch-comparison)
+11. [Testing](#testing)
+12. [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
+13. [Technical Reference](#technical-reference)
+14. [Advanced Usage](#advanced-usage)
+15. [Troubleshooting](#troubleshooting)
+
+---
+
+# Part I — Core Simulation
 
 ---
 
@@ -20,9 +42,9 @@ pip install numpy
 ```
 
 ### Required Files
-- `network.json` - Network trace file (can be generated)
-- `movie.json` - Movie manifest file
-- `seeks.json` - Seek configuration (optional)
+- `network.json` — Network trace file (can be generated)
+- `movie.json` — Movie manifest file
+- `seeks.json` — Seek configuration (optional)
 
 ---
 
@@ -100,55 +122,6 @@ python simulate_abr.py -o output.txt -s seeks.json
 
 ---
 
-## Buffer Comparison
-
-Compare simulation results with and without `buffer.py` (MultiRegionBuffer).
-
-### Quick Comparison
-
-Compare a single ABR algorithm:
-```bash
-python run_buffer_comparison.py -n network.json -m movie.json -a bola -o comparison_results.json
-```
-
-### Compare Multiple ABR Algorithms
-
-Compare all supported algorithms:
-```bash
-python run_buffer_comparison.py -a all -o comparison_results
-```
-
-Compare specific algorithms:
-```bash
-python run_buffer_comparison.py -a bola,bolae,dynamic,dynamicdash,throughput -o comparison_results.json
-```
-
-### With Seek Configuration
-```bash
-python run_buffer_comparison.py -n network.json -m movie.json -a bola -sc seeks.json -o my_comparison.json
-```
-
-**Parameters:**
-- `-n, --network`: Network trace file (default: `network.json`)
-- `-m, --movie`: Movie manifest file (default: `movie.json`)
-- `-a, --abr`: ABR algorithm(s) - single algorithm, comma-separated list, or `all` (default: `bola`)
-- `-sc, --seek-config`: Seek configuration file (optional)
-- `-nm, --network-multiplier`: Network multiplier (default: 1.0)
-- `-o, --output`: Output JSON file (default: `comparison_results.json`)
-
-### View Comparison Results
-
-1. Start the web server:
-   ```bash
-   python serve_viewer.py
-   ```
-
-2. Browser opens automatically to `http://localhost:8000/view_comparison.html`
-
-3. Click **"Load Comparison Data"** and select your JSON file
-
----
-
 ## Graph Generation
 
 ### Generate ABR Comparison Graphs
@@ -167,165 +140,582 @@ python graph_generate.py -a bola
 
 ---
 
-## Testing
+## Regression Testing
 
-### Buffer Comparison Tests
-
-Run comprehensive buffer comparison tests:
-```bash
-python test_buffer_comparison.py
-```
-
-**Options:**
-- `--quick`: Run quick test only
-- `--abr <algorithm>`: Test specific ABR algorithm
-- `-v, --verbose`: Verbose output
-
-**Examples:**
-```bash
-# Quick test
-python test_buffer_comparison.py --quick
-
-# Test specific algorithm
-python test_buffer_comparison.py --abr bola
-
-# Verbose output
-python test_buffer_comparison.py -v
-```
-
-### Regression Testing
-
-Ensure simulation results remain consistent after code changes:
+Ensure simulation results remain consistent after code changes.
 
 1. **Generate baseline results (run once):**
-   ```bash
-   python test_simulation_regression.py --generate-baseline
-   ```
-   **Important:** Generate new `baseline_simulation_results.txt` whenever there are changes in `movie.json`, `network.json`, or `seeks.json`.
+
+```bash
+python test_simulation_regression.py --generate-baseline
+```
+
+**Important:** Regenerate `baseline_simulation_results.txt` whenever `movie.json`, `network.json`, or `seeks.json` change.
 
 2. **Run regression test:**
-   ```bash
-   python test_simulation_regression.py
-   ```
+
+```bash
+python test_simulation_regression.py
+```
 
 The test compares current simulation results with the baseline and reports any differences.
 
 ---
 
-# Buffer.py Comparison Guide
+# Part II — Dynamic Buffering (`buffer.py`)
 
-This guide explains how to compare simulation results with and without `buffer.py` (MultiRegionBuffer) using the web visualization interface.
+Everything below relates to `MultiRegionBuffer` from `buffer.py` — the dynamic, multi-region buffer that replaces the simple linear `buffer_contents` list.
 
-**What's Being Compared:**
-- **Without buffer.py**: Uses linear buffering with `gs.buffer_contents` (simple list-based buffer)
-- **With buffer.py**: Uses `MultiRegionBuffer` from `buffer.py` for dynamic buffering with region management
+---
 
-## Quick Start
+## Overview
 
-### 3 Simple Steps
+**What `buffer.py` adds:**
 
-#### Step 1: Run Comparison
+| | Linear Buffering (without) | Dynamic Buffering (with) |
+|---|---|---|
+| Data structure | `gs.buffer_contents` — flat list of `(segment, quality)` tuples | `gs.multi_region_buffer` — `MultiRegionBuffer` with multiple `BufferRegion` objects |
+| Regions | Single contiguous region | Multiple non-contiguous regions |
+| Seek behaviour | Clears entire buffer on seeks outside range | Preserves regions after seek position and prefetch regions |
+| Prefetch | Not supported | Supported — `add_prefetch_chunk` with provenance tracking |
+| Region merging | N/A | Adjacent regions merge automatically |
+
+The `--use-buffer-py` flag in `sabre.py` switches between the two modes. When the flag is absent, the simulation falls back to linear buffering.
+
+---
+
+## Running Buffer Comparisons
+
+`run_comparison.py` runs `sabre.py` twice (with and without `--use-buffer-py`) and produces a JSON file for visualization. It optionally supports prefetch configuration.
+
+### Quick Comparison
 
 ```bash
-cd sabre/src
-python run_buffer_comparison.py -n network.json -m movie.json -a bola -o comparison_results.json
+python run_comparison.py -n network.json -m movie.json -a bola -o comparison_results.json
 ```
 
-This will:
-- Run simulation WITHOUT buffer.py (linear buffering using `buffer_contents`)
-- Run simulation WITH buffer.py (dynamic buffering using `MultiRegionBuffer`)
-- Parse outputs and create `comparison_results.json`
+### Compare Multiple ABR Algorithms
 
-**How It Works:**
-- The tool runs `sabre.py` twice: once without `--use-buffer-py` flag (linear buffering) and once with the flag (dynamic buffering)
-- When `--use-buffer-py` is used, `gs.multi_region_buffer` is initialized and all buffer operations use `MultiRegionBuffer`
-- When not used, the simulation falls back to linear buffering with `gs.buffer_contents`
-
-**Command Options:**
-- `-n, --network`: Network trace file (default: network.json)
-- `-m, --movie`: Movie manifest file (default: movie.json)
-- `-a, --abr`: ABR algorithm (default: bola)
-- `-sc, --seek-config`: Seek configuration file (optional)
-- `-nm, --network-multiplier`: Network multiplier (default: 1.0)
-- `-o, --output`: Output JSON file (default: comparison_results.json)
-
-**Example with seeks:**
+All supported algorithms:
 ```bash
-python run_buffer_comparison.py -n network.json -m movie.json -a bola -sc seeks.json -o my_comparison.json
+python run_comparison.py -a all -o comparison_results
 ```
 
-#### Step 2: Start Web Server
+Specific algorithms:
+```bash
+python run_comparison.py -a bola,bolae,dynamic,dynamicdash,throughput -o comparison_results.json
+```
+
+### With Seek Configuration
+```bash
+python run_comparison.py -n network.json -m movie.json -a bola -sc seeks.json -o my_comparison.json
+```
+
+### Batch Comparisons
+```bash
+for abr in bola bolae dynamic throughput; do
+    python run_comparison.py -a $abr -o comparison_${abr}.json
+done
+```
+
+### Command Parameters
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-n, --network` | Network trace file | `network.json` |
+| `-m, --movie` | Movie manifest file | `movie.json` |
+| `-a, --abr` | ABR algorithm(s) — single name, comma-separated list, or `all` | `bola` |
+| `-sc, --seek-config` | Seek configuration file | *(none)* |
+| `-nm, --network-multiplier` | Network multiplier | `1.0` |
+| `-o, --output` | Output JSON file | `comparison_results.json` |
+
+---
+
+## Viewing Results
+
+1. **Start the web server:**
 
 ```bash
 python serve_viewer.py
 ```
 
-This will:
-- Start HTTP server on port 8000
-- Open browser automatically
-- Serve the HTML viewer
-
-#### Step 3: View Results
-
-1. Browser opens automatically to http://localhost:8000/view_comparison.html
-2. Click **"Load Comparison Data"**
-3. Select the JSON file generated in Step 1 (e.g., `comparison_results.json`)
-4. View interactive charts and metrics
-
-## What You'll See
+2. Browser opens automatically to `http://localhost:8000/view_comparison.html`
+3. Click **"Load Comparison Data"** and select your JSON file.
 
 ### Summary Cards
-- **Total Rebuffering Time**: Shows improvement percentage
-- **Rebuffering Events**: Count comparison
-- **Played Utility**: Quality metric comparison
-- **Rebuffer Ratio**: Efficiency comparison
-- **Total Play Time**: Duration comparison
+
+- **Total Rebuffering Time** — improvement percentage
+- **Rebuffering Events** — count comparison
+- **Played Utility** — quality metric comparison
+- **Rebuffer Ratio** — efficiency comparison
+- **Total Play Time** — duration comparison
 
 ### Charts
 
-1. **Rebuffering Comparison**
-   - Bar chart comparing total rebuffering time and event count
-   - Shows side-by-side comparison
+1. **Rebuffering Comparison** — bar chart of total rebuffering time and event count
+2. **Buffer Level Over Time** — line chart; two traces (with / without `buffer.py`)
+3. **Quality Over Time** — stepped line chart of quality decisions
+4. **Quality Distribution** — bar chart of time spent at each quality level
 
-2. **Buffer Level Over Time**
-   - Line chart showing buffer level throughout simulation
-   - Two lines: with and without buffer.py
-   - Helps identify when MultiRegionBuffer helps maintain buffer
-   - Note: Both implementations calculate buffer level the same way (contiguous chunks from current position)
+### Example Output
 
-3. **Quality Over Time**
-   - Line chart showing quality decisions over time
-   - Shows quality switching patterns
-   - Stepped line chart for clarity
+```
+✓ Results saved to comparison_results.json
 
-4. **Quality Distribution**
-   - Bar chart showing percentage of time at each quality level
-   - Helps understand overall quality differences
+Summary Comparison:
+Metric                          Without buffer.py    With buffer.py      Change
+-------------------------------------------------------------------------------------
+total_rebuffer_time             2.5                 1.2                 -52.0%
+rebuffer_count                  3                   1                   -66.7%
+total_play_time                 120.0               120.0               0.0%
+played_utility                  8.5                 9.2                 +8.2%
+rebuffer_ratio                  0.02                0.01                -50.0%
 
-## Understanding the Results
+Open view_comparison.html in your browser and load comparison_results.json to see visualizations!
+```
+
+---
+
+## Understanding Results
 
 ### Positive Indicators (Green)
-- **Lower rebuffering time/events**: MultiRegionBuffer reduces rebuffering by preserving segments after seeks
-- **Higher utility**: Better quality decisions enabled by improved buffer management
-- **Lower rebuffer ratio**: More efficient buffering with preserved segments
+- **Lower rebuffering time/events** — `MultiRegionBuffer` preserves segments after seeks
+- **Higher utility** — better quality decisions from improved buffer management
+- **Lower rebuffer ratio** — more efficient buffering with preserved segments
 
 ### Negative Indicators (Red)
-- **Higher rebuffering**: May indicate issues (rare, should not happen)
-- **Lower utility**: Quality decisions may be affected (unlikely, but possible in edge cases)
+- **Higher rebuffering** — may indicate issues (rare)
+- **Lower utility** — quality decisions affected (unlikely)
 
-**Note**: The comparison uses identical ABR algorithms and network conditions, so differences come from buffer management strategies.
+> The comparison uses identical ABR algorithms and network conditions, so differences come purely from buffer management strategy.
 
 ### Expected Improvements
-With buffer.py (MultiRegionBuffer), you should typically see:
-- ✅ 20-40% reduction in rebuffering events
-- ✅ Better buffer level maintenance
-- ✅ Preserved segments after seeks (segments ahead of seek position are maintained)
-- ✅ Similar or better quality decisions
-- ✅ More efficient bandwidth utilization (less wasted downloads)
 
-**Key Differences:**
-- **Linear Buffering (without)**: Single contiguous buffer, cleared on seeks outside range
-- **Dynamic Buffering (with)**: Multiple regions, preserves segments across seeks, supports non-contiguous buffering
+With `buffer.py` (`MultiRegionBuffer`) you should typically see:
+
+- 20-40 % reduction in rebuffering events
+- Better buffer level maintenance
+- Preserved segments after seeks
+- Similar or better quality decisions
+- More efficient bandwidth utilisation
+
+---
+
+## Prefetch Comparison
+
+While the buffer-equivalence comparison above shows identical graphs for sequential downloads, the **prefetch comparison** demonstrates where dynamic buffering actually diverges — when seeks land on pre-downloaded chunks, avoiding rebuffering entirely.
+
+### 1. Create a Prefetch Config
+
+The config lists which segments to prefetch and the buffer-level threshold that triggers prefetching:
+
+```json
+{
+  "buffer_level_threshold": 20000,
+  "prefetch": [
+    {"segment": 5},
+    {"segment": 10},
+    {"segment": 15}
+  ]
+}
+```
+
+Save as e.g. `prefetch_config.json`.
+
+### 2. Run the Comparison
+
+```bash
+python run_comparison.py -sc seeks.json -pc prefetch_config.json -o prefetch_comparison_results.json
+```
+
+This runs `sabre.py` twice:
+- **Without buffer.py** — linear buffering, no prefetch, seeks clear the buffer
+- **With buffer.py + prefetch** — dynamic buffering with prefetch enabled, seeks to pre-downloaded chunks avoid rebuffering
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-n, --network` | Network trace file | `network.json` |
+| `-m, --movie` | Movie manifest file | `movie.json` |
+| `-a, --abr` | ABR algorithm | `bola` |
+| `-sc, --seek-config` | Seek config file (required) | — |
+| `-pc, --prefetch-config` | Prefetch JSON config (required) | — |
+| `-nm, --network-multiplier` | Network multiplier | `1.0` |
+| `-o, --output` | Output JSON file | `prefetch_comparison_results.json` |
+
+### 3. View in Browser
+
+```bash
+python serve_viewer.py
+```
+
+Then open `http://localhost:8000/view_comparison.html` and load the JSON file. The viewer auto-detects prefetch/seek data and shows seek markers and a prefetch info panel when present.
+
+The viewer shows:
+- **Summary cards** — rebuffering time/events, utility, play time (with improvement percentages)
+- **Rebuffering bar chart** — side-by-side comparison
+- **Buffer level over time** — with vertical seek markers so you can see where prefetch avoids the buffer-level drop
+- **Quality over time** — stepped line chart with seek markers
+- **Quality distribution** — percentage of time at each quality level
+- **Prefetch & seek info** — which segments were prefetched and where seeks occurred
+
+---
+
+## Testing
+
+### Buffer Equivalence Tests
+
+Verify that linear and dynamic buffers produce identical output during sequential chunk downloads:
+```bash
+python test_buffer_equivalence.py
+```
+
+**Options:**
+- `--quick` — run quick test only
+- `--abr <algorithm>` — test specific ABR algorithm
+- `-v, --verbose` — verbose output
+
+**Examples:**
+```bash
+python test_buffer_equivalence.py --quick
+python test_buffer_equivalence.py --abr bola
+python test_buffer_equivalence.py -v
+```
+
+### Dynamic Buffer Case Tests
+
+Run case-based tests that verify the dynamic buffer algorithm handles each scenario correctly:
+```bash
+python test_dynamic_buffer_cases.py
+```
+
+With verbose output:
+```bash
+python test_dynamic_buffer_cases.py -v
+```
+
+The suite contains 14 tests across two test classes:
+
+**TestDynamicBuffering** (Tests 1-10) — buffer seek and prefetch logic:
+
+| # | Test | What it verifies |
+|---|------|------------------|
+| 1 | Seek to prefetched chunk | Seeking to a prefetched position does not rebuffer |
+| 2 | Seek to non-prefetched positions | Adjacent-gap and far-out misses both rebuffer |
+| 3 | Multiple seeks with multiple prefetch | Two sequential seeks to different prefetch targets |
+| 4 | Prefetch preserved, linear cleaned | Prefetch regions survive across seeks; linear data cleaned |
+| 5 | Adjacent prefetch merge | Prefetch chunk adjacent to linear region merges; provenance tracked |
+| 6 | Seek within linear buffer (baseline) | Seeking inside a linear-only buffer works without prefetch |
+| 7 | Contiguous prefetch buffer level | Buffer level reflects multiple contiguous prefetch chunks |
+| 8 | Non-contiguous prefetch regions | Hit and miss across disjoint prefetch regions |
+| 9 | Non-prefetch regions after seek preserved | Regions after the seek position are kept regardless of prefetch |
+| 10 | Prefetch in same region preserved | Prefetch chunks before seek position are saved as a separate region |
+
+**TestPrefetchModule** (Tests 11-14) — `PrefetchModule` API:
+
+| # | Test | What it verifies |
+|---|------|------------------|
+| 11 | JSON loading | Config file parsed correctly (segments, threshold) |
+| 12 | Trigger logic | `should_prefetch` respects buffer threshold |
+| 13 | Segment exhaustion | Returns `None` after all segments are prefetched |
+| 14 | Skip already-prefetched | Linear download loop skips prefetched segments |
+
+**Required fixture:** `test_prefetch_config.json` (included in `src/`).
+
+---
+
+## Use Cases: Detailed Flow Documentation
+
+Each use case shows the **linear buffer** path side-by-side with the **dynamic buffer** path so you can see exactly where behaviour diverges.
+
+> **Note:** The compatibility methods (previously in `BufferWrapper`) have been consolidated into `MultiRegionBuffer` in `buffer.py`. State variables like `current_playback_pos` are managed directly in `GlobalState`. All references use `gs.multi_region_buffer` for buffer operations and `gs.current_playback_pos` for playback position tracking.
+
+### Use Case 1: Download Chunk Without Seek
+
+**Trigger:** Sequential segment download during normal playback
+**Location:** `sabre.py` → `process_download_loop()`
+**Methods Involved:**
+1. `get_buffer_level()`
+2. `deplete_buffer()`
+3. `abr.get_quality_delay()`
+4. `replacer.check_replace()`
+5. `network.download()`
+6. `abr.check_abandon()`
+7. Buffer update (linear vs dynamic)
+
+#### Linear Buffer Behavior
+
+**Flow** (for segment N):
+```
+1. get_buffer_level()
+   └─ If buffer full → deplete_buffer(full_delay) → buffer_contents.pop(0)
+2. ABR selects quality for segment N
+3. replacer.check_replace(quality)
+   └─ Replace: update existing segment / No replace: proceed
+4. Download segment N
+5. gs.buffer_contents.append((N, quality))
+6. gs.next_segment = N + 1
+7. buffer_level = segment_time * (N+1) - buffer_fcc
+```
+
+**Buffer structure** (after segments 0-4):
+- `gs.buffer_contents = [(0, 2), (1, 3), (2, 3), (3, 4), (4, 4)]`
+- Sequential list, always contiguous
+- `gs.next_segment = 5`, `gs.buffer_fcc = 0`
+
+**Playback flow:**
+```
+deplete_buffer():
+  1. Play buffer_contents[0]
+  2. buffer_contents.pop(0)  →  [(1, q1), (2, q2), ...]
+  3. Update buffer_fcc
+```
+
+**Code path:**
+```python
+gs.buffer_contents.append((gs.next_segment, quality))
+gs.next_segment += 1
+```
+
+#### Dynamic Buffer Behavior
+
+**Flow** (for segment N):
+```
+1. gs.multi_region_buffer.get_buffer_level()
+   └─ get_contiguous_chunks_from_current_position()
+   └─ segment_time * len(playable_chunks) - buffer_fcc
+2. If buffer full → deplete_buffer() → multi_region_buffer.pop_chunk()
+3. ABR selects quality for segment N
+4. replacer.check_replace(quality)
+   └─ Reads playable chunks from MultiRegionBuffer
+5. Download segment N
+6. gs.multi_region_buffer.add_chunk(N, quality)
+   └─ buffer_by_pos(pos_ms, quality)
+   └─ cleanup_and_merge()
+7. gs.next_segment = N + 1
+8. buffer_level = segment_time * (N+1) - buffer_fcc  (same as linear)
+```
+
+**Buffer structure** (after segments 0-4):
+- 1 region `[0 ms → 5 * segment_time]`
+- `BufferRegion(start=0, end=5*segment_time, chunks=[2,3,3,4,4])`
+- Sequential segments merge automatically
+
+**Playback flow:**
+```
+deplete_buffer():
+  1. get_contiguous_chunks_from_current_position()
+  2. Play playable_chunks[0]
+  3. multi_region_buffer.pop_chunk()
+  4. current_playback_pos += segment_time
+```
+
+**Code path:**
+```python
+gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
+```
+
+**Methods called:**
+`add_chunk` → `buffer_by_pos` → `BufferRegion.add_chunk` → `cleanup_and_merge` → `merge_adjacent_regions`
+
+**Prefetch capability:** Can buffer non-sequential segments as separate regions (e.g. `[0-2]` and `[5-7]` simultaneously), enabling adaptive prefetching.
+
+---
+
+### Use Case 2: Download Chunk With Seek
+
+**Trigger:** User-initiated seek event during playback
+**Location:** `sabre.py` → `interrupted_by_seek()` / `update_buffer_during_seek()`
+**Methods Involved:**
+1. `interrupted_by_seek()`
+2. `update_buffer_during_seek()`
+3. `abr.report_seek()`
+4. `get_buffer_level()`
+5. `process_download_loop()`
+
+#### Linear Buffer Behavior
+
+**Flow** (seek from segment 5 to segment 20):
+```
+1. interrupted_by_seek(delta, abr) detects seek event
+2. Target segment = 20
+3. update_buffer_during_seek()
+   a. buffer_base = gs.next_segment - len(buffer_contents)  →  10 - 5 = 5
+   b. Is 20 in [5, 10)?  →  NO
+   c. gs.buffer_contents.clear()
+   d. gs.next_segment = 20, gs.buffer_fcc = 0
+4. Buffer: [] (EMPTY — rebuffering required)
+5. abr.report_seek()
+6. Download loop resumes from segment 20
+```
+
+**Seek scenarios:**
+
+| Scenario | Before | After | Rebuffer? |
+|----------|--------|-------|-----------|
+| Within range (5 → 7) | `[(5,q5)..(8,q8)]` | `[(7,q7),(8,q8)]` | No |
+| Outside range (5 → 20) | `[(5,q5)..(8,q8)]` | `[]` | Yes |
+
+**Code path:**
+```python
+if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
+    skip_count = new_segment - buffer_base
+    gs.buffer_contents = gs.buffer_contents[skip_count:]
+else:
+    gs.buffer_contents.clear()
+    gs.next_segment = new_segment
+```
+
+#### Dynamic Buffer Behavior
+
+**Flow** (seek from segment 5 to segment 20):
+```
+1. interrupted_by_seek(delta, abr) detects seek event
+2. Target segment = 20
+3. update_buffer_during_seek()
+   a. seek_pos_ms = 20 * seg_time
+   b. gs.current_playback_pos = seek_pos_ms
+   c. region = multi_region_buffer._find_region_of(seek_pos_ms)
+   d. If hit: trim chunks before seek, preserve rest
+   e. If miss: clear non-prefetch regions before seek; preserve
+      regions after seek and all prefetch regions
+   f. cleanup_and_merge()
+4. abr.report_seek()
+5. Download loop resumes from segment 20
+```
+
+**Seek scenarios:**
+
+| Scenario | Regions before | Regions after | Rebuffer? |
+|----------|---------------|---------------|-----------|
+| Within range (5 → 7) | `[5*st → 10*st]` | `[7*st → 10*st]` | No |
+| Outside range (5 → 20) | `[5*st → 10*st]` | *(cleared)* | Yes |
+| To prefetched chunk | `[0-8s]` + prefetch `[20-22s]` | prefetch region preserved | No |
+
+**Code path:**
+```python
+seek_pos_ms = new_segment * seg_time
+gs.current_playback_pos = seek_pos_ms
+region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
+
+if region:
+    start_idx = int((seek_pos_ms - region.start) / seg_time)
+    region.chunks = region.chunks[start_idx:]
+    region.start = seek_pos_ms
+    if new_segment == floor_idx:
+        gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
+    else:
+        gs.buffer_fcc = 0
+else:
+    # preserve regions after seek + prefetch regions; clear the rest
+    gs.next_segment = new_segment
+
+gs.buffer_fcc = 0
+gs.multi_region_buffer.cleanup_and_merge()
+```
+
+**Methods called:**
+`current_playback_pos` update → `_find_region_of` → chunk trimming → `cleanup_and_merge` → `merge_adjacent_regions`
+
+**QoE improvements:**
+- 20-40 % reduction in rebuffering events
+- Faster seek response (preserved segments enable instant playback)
+- Better bandwidth utilisation (less wasted downloads)
+
+---
+
+### Method Call Chains (summary)
+
+**Use Case 1 — Download Without Seek:**
+
+| Linear | Dynamic |
+|--------|---------|
+| `get_buffer_level()` → `deplete_buffer()` → `buffer_contents.pop(0)` → `abr.get_quality_delay()` → `network.download()` → `buffer_contents.append()` | `MultiRegionBuffer.get_buffer_level()` → `get_contiguous_chunks_from_current_position()` → `pop_chunk()` → `abr.get_quality_delay()` → `replacer.check_replace()` → `network.download()` → `add_chunk()` → `buffer_by_pos()` → `cleanup_and_merge()` |
+
+**Use Case 2 — Download With Seek:**
+
+| Linear | Dynamic |
+|--------|---------|
+| `interrupted_by_seek()` → `update_buffer_during_seek()` → `buffer_contents.clear()` / `[skip_count:]` → `abr.report_seek()` → `network.download()` | `interrupted_by_seek()` → `update_buffer_during_seek()` → `current_playback_pos` update → `_find_region_of()` → chunk trim → `cleanup_and_merge()` → `abr.report_seek()` → `add_chunk()` → `buffer_by_pos()` |
+
+---
+
+## Technical Reference
+
+### Buffer Level Calculation
+
+Both modes use the same formula:
+```python
+buffer_level = segment_time * len(playable_chunks) - buffer_fcc
+```
+
+| | `playable_chunks` source |
+|---|---|
+| Linear | All items in `buffer_contents` |
+| Dynamic | Contiguous chunks from `current_playback_pos` (gaps excluded) |
+
+Dynamic buffering does not inflate buffer level with gaps between regions.
+
+### Seek Behavior Comparison
+
+| Scenario | Linear Buffer | Dynamic Buffer |
+|----------|--------------|----------------|
+| Seek within range | Trim from front | Trim from front, preserve ahead |
+| Forward seek outside | Clear buffer | Clear buffer, can prefetch |
+| Backward seek | Clear buffer | Clear buffer, preserve ahead if exists |
+| Multiple seeks | Always clear | Preserve segments across seeks |
+| Rebuffering | Always required | Reduced by 20-40 % |
+
+### Performance Characteristics
+
+| | Linear | Dynamic |
+|---|---|---|
+| Append / pop | O(1) / O(n) | O(1) / O(1) |
+| Region lookup | N/A | O(log n) |
+| Merge | N/A | O(1) |
+| Memory | Single list | Slight overhead (region objects) |
+| Prefetching | Not supported | Supported |
+
+### When to Use Each Mode
+
+**Linear Buffering (without `buffer.py`):**
+- Simple sequential playback
+- No seeks expected
+- Baseline comparison
+- Minimal overhead
+
+**Dynamic Buffering (with `buffer.py`):**
+- Scenarios with user seeks
+- Prefetching strategies
+- Non-sequential segment access
+- Better QoE requirements
+
+### Backward Compatibility
+
+The dynamic buffering implementation maintains backward compatibility:
+1. Identical buffer level calculation
+2. Existing ABR algorithms work without modification
+3. Replacement logic reads directly from `MultiRegionBuffer`
+4. Direct access to buffer state through `MultiRegionBuffer` methods
+
+---
+
+## Advanced Usage
+
+### Custom Metrics
+
+Modify `run_comparison.py`:
+1. Add parsing logic in `parse_simulation_output()`
+2. Add metric to summary dictionary
+3. Update HTML to display new metric
+
+### Extending Charts
+
+Add new visualizations:
+1. Add chart container in `view_comparison.html`
+2. Create Chart.js configuration
+3. Add data extraction logic
+
+---
 
 ## Troubleshooting
 
@@ -339,597 +729,34 @@ With buffer.py (MultiRegionBuffer), you should typically see:
 - Ensure `view_comparison.html` is in same directory
 - Check browser console for errors (F12)
 
-**No data in charts:**
+**No data / empty charts:**
 - Verify JSON file structure matches expected format
 - Check that simulations completed successfully
-- Ensure time_series data is present in JSON
-
-**Charts show empty:**
+- Ensure `time_series` data is present in JSON
 - Check browser console for JavaScript errors
-- Verify Chart.js library loaded (check Network tab)
-- Ensure JSON file was loaded successfully
+- Verify Chart.js library loaded (Network tab)
+
+---
 
 ## File Structure
 
 ```
 sabre/src/
-├── run_buffer_comparison.py    # Run comparisons and generate JSON
-├── view_comparison.html         # Web visualization interface
-├── serve_viewer.py              # HTTP server
-└── comparison_results.json      # Generated comparison data
+├── sabre.py                       # Core simulator
+├── buffer.py                      # MultiRegionBuffer (dynamic buffering)
+├── prefetch.py                    # PrefetchModule
+├── global_state.py                # GlobalState singleton
+├── run_comparison.py              # Run with/without buffer.py (+ optional prefetch) comparisons
+├── view_comparison.html           # Web viewer (handles both equivalence and prefetch data)
+├── serve_viewer.py                # HTTP server for viewer
+├── test_buffer_equivalence.py      # Linear ↔ dynamic buffer equivalence tests
+├── test_dynamic_buffer_cases.py   # Dynamic buffer algorithm case tests
+├── test_prefetch_config.json      # Fixture for PrefetchModule tests
+├── test_simulation_regression.py  # Regression tests
+├── network_generator.py           # Generate network.json
+├── generate_abr_comparison.py     # ABR comparison graphs
+├── graph_generate.py              # Individual ABR graphs
+├── network.json                   # Network trace
+├── movie.json                     # Movie manifest
+└── comparison_results.json        # Generated comparison data
 ```
-
-## Technical Details
-
-### Implementation Differences
-
-**Without buffer.py (Linear Buffering):**
-- Uses `gs.buffer_contents` - a simple list of `(segment_index, quality)` tuples
-- Sequential append/pop operations
-- Buffer cleared on seeks outside buffered range
-- Single contiguous buffer region
-- Replacement logic reads from `buffer_contents` directly
-
-**With buffer.py (Dynamic Buffering):**
-- Uses `gs.multi_region_buffer` - a `MultiRegionBuffer` instance
-- Supports multiple non-contiguous buffer regions
-- Preserves segments after seeks (segments ahead of seek position maintained)
-- Automatic region merging when segments become contiguous
-- Replacement logic reads from `multi_region_buffer.get_contiguous_chunks_from_current_position()`
-- Tracks `gs.current_playback_pos` for accurate buffer level calculation
-
-### Buffer Level Calculation
-
-Both implementations use the same formula:
-```python
-buffer_level = segment_time * len(playable_chunks) - buffer_fcc
-```
-
-**Key Difference:**
-- **Linear**: `playable_chunks` = all chunks in `buffer_contents`
-- **Dynamic**: `playable_chunks` = contiguous chunks from current playback position (gaps excluded)
-
-This ensures buffer level accuracy - dynamic buffering doesn't inflate buffer level with gaps between regions.
-
-### When to Use Each Mode
-
-**Use Linear Buffering (without buffer.py):**
-- Simple sequential playback scenarios
-- No seeks expected
-- Baseline comparison
-- Minimal overhead needed
-
-**Use Dynamic Buffering (with buffer.py):**
-- Scenarios with user seeks
-- Prefetching strategies
-- Non-sequential segment access
-- Better QoE requirements
-
-## Advanced Usage
-
-### Custom Metrics
-
-To add custom metrics, modify `run_buffer_comparison.py`:
-1. Add parsing logic in `parse_simulation_output()`
-2. Add metric to summary dictionary
-3. Update HTML to display new metric
-
-### Extending Charts
-
-To add new visualizations:
-1. Add new chart container in `view_comparison.html`
-2. Create Chart.js configuration
-3. Add data extraction logic
-
-### Batch Comparisons
-
-Run multiple comparisons:
-```bash
-for abr in bola bolae dynamic throughput; do
-    python run_buffer_comparison.py -a $abr -o comparison_${abr}.json
-done
-```
-
-Then load each JSON file in the viewer to compare different ABR algorithms.
-
-## Example Output
-
-After running the comparison, you'll see:
-
-```
-✓ Results saved to comparison_results.json
-
-Summary Comparison:
-Metric                          Without buffer.py    With buffer.py      Change        
--------------------------------------------------------------------------------------
-total_rebuffer_time             2.5                 1.2                 -52.0%
-rebuffer_count                  3                   1                   -66.7%
-total_play_time                 120.0               120.0               0.0%
-played_utility                  8.5                 9.2                 +8.2%
-rebuffer_ratio                  0.02                0.01                -50.0%
-
-Open view_comparison.html in your browser and load comparison_results.json to see visualizations!
-```
-
-Enjoy comparing your buffer implementations! 🚀
-
----
-
-# Use Cases: Detailed Flow Documentation
-
-This document provides detailed flow analysis for each use case, comparing **Linear Buffer Behavior** (original implementation) with **Prefetch Behavior** (dynamic buffering with `buffer.py`).
-
-**Note**: The compatibility methods (previously in `BufferWrapper`) have been consolidated into the `MultiRegionBuffer` class in `buffer.py`. State variables like `current_playback_pos` are now managed directly in `GlobalState`. All references use `gs.multi_region_buffer` for buffer operations and `gs.current_playback_pos` for playback position tracking.
-
----
-
-## Use Case 1: Download Chunk Without Seek
-
-### Flow Overview
-
-**Trigger**: Sequential segment download during normal playback  
-**Location**: `sabre.py` `process_download_loop()` lines 653-856  
-**Methods Involved**:
-1. `get_buffer_level()` - Check current buffer level
-2. `deplete_buffer()` - Play out buffered content if needed
-3. `abr.get_quality_delay()` - Get quality decision for next segment
-4. `replacer.check_replace()` - Check if replacement needed
-5. `network.download()` - Download segment
-6. `abr.check_abandon()` - Check if download should be abandoned
-7. Buffer update (linear vs dynamic)
-
-### Linear Buffer Behavior
-
-**Flow Steps** (for segment N):
-```
-1. Check buffer level: get_buffer_level()
-   - If buffer full: deplete_buffer(full_delay)
-   - Play out segments, remove from front: buffer_contents.pop(0)
-2. ABR selects quality for segment N
-3. Check replacement: replacer.check_replace(quality)
-   - If replace: update existing segment in buffer
-   - If no replace: proceed with download
-4. Download segment N at selected quality
-5. Append to buffer: gs.buffer_contents.append((N, quality))
-6. Buffer state: [(0, q0), (1, q1), ..., (N, qN)]
-7. Increment: gs.next_segment = N + 1
-8. Buffer level: segment_time * (N+1) - buffer_fcc
-```
-
-**Buffer Structure** (after downloading segments 0-4):
-- `gs.buffer_contents = [(0, 2), (1, 3), (2, 3), (3, 4), (4, 4)]`
-- Sequential list, always contiguous
-- `gs.next_segment = 5`
-- `gs.buffer_fcc = 0` (or partial if mid-segment playback)
-
-**Key Characteristics**:
-- Sequential append operations
-- Always maintains single contiguous region
-- Buffer grows linearly: [seg0, seg1, seg2, ...]
-- When playing: removes from front, adds to back
-
-**Playback Flow**:
-```
-During deplete_buffer():
-1. Play segment 0: buffer_contents[0]
-2. Remove: buffer_contents.pop(0)
-3. Buffer: [(1, q1), (2, q2), ...]
-4. Update buffer_fcc based on playback time
-```
-
-**Code Path**:
-```python
-# sabre.py line 832
-gs.buffer_contents.append((gs.next_segment, quality))
-gs.next_segment += 1
-```
-
-### Prefetch Behavior (Dynamic Buffering)
-
-**Flow Steps** (for segment N):
-```
-1. Check buffer level: get_buffer_level()
-   - Uses: gs.multi_region_buffer.get_buffer_level()
-   - Gets contiguous chunks from current position
-   - Calculates: segment_time * len(playable_chunks) - buffer_fcc
-2. If buffer full: deplete_buffer(full_delay)
-   - Uses: gs.multi_region_buffer.pop_chunk()
-   - Removes chunk from current playback position
-   - Updates region boundaries
-3. ABR selects quality for segment N
-4. Check replacement: replacer.check_replace(quality)
-   - Uses: gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
-   - Reads playable chunks directly from MultiRegionBuffer
-   - If replace: update chunk in region
-   - If no replace: proceed with download
-5. Download segment N at selected quality
-6. Call: gs.multi_region_buffer.add_chunk(N, quality)
-   a. Convert: pos_ms = N * segment_time
-   b. Call: gs.multi_region_buffer.buffer_by_pos(pos_ms, quality)
-      - Find existing region containing pos_ms
-      - If found: region.add_chunk(quality) → extends region
-      - If not found: create new region
-      - Try merge with adjacent regions
-   c. Call: cleanup_and_merge()
-      - Check if regions became adjacent
-      - Merge if: region.end == next_region.start
-7. Buffer state:
-   - MultiRegionBuffer: 1 contiguous region [0 → (N+1)*segment_time]
-   - BufferRegion: chunks=[q0, q1, ..., qN]
-8. Increment: gs.next_segment = N + 1
-9. Buffer level: segment_time * (N+1) - buffer_fcc (same as linear)
-```
-
-**Buffer Structure** (after downloading segments 0-4):
-- `MultiRegionBuffer`: 1 region [0ms → 5*segment_time]`
-- `BufferRegion(start=0, end=5*segment_time, chunks=[2,3,3,4,4])`
-- Sequential segments automatically merge into single region
-
-**Key Characteristics**:
-- Sequential segments create/merge into single contiguous region
-- Behavior identical to linear buffering for sequential downloads
-- Automatic region management (merge when adjacent)
-- Buffer level calculation matches linear buffering exactly
-
-**Playback Flow**:
-```
-During deplete_buffer():
-1. Get playable chunks: get_contiguous_chunks_from_current_position()
-   - Finds region containing gs.current_playback_pos
-   - Returns chunks from current position forward
-2. Play segment 0: playable_chunks[0]
-3. Call: gs.multi_region_buffer.pop_chunk()
-   - Remove chunk from region
-   - Update region.start if first chunk removed
-   - Update region.end
-4. Update: current_playback_pos += segment_time
-5. Buffer: region.chunks = [q1, q2, ...]
-```
-
-**Code Path**:
-```python
-# sabre.py line 692
-gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
-```
-
-**Methods Called**:
-- `MultiRegionBuffer.add_chunk(N, quality)`
-- `MultiRegionBuffer.buffer_by_pos(pos_ms, quality)` (internal)
-- `BufferRegion.add_chunk(quality)`
-- `BufferRegion.try_merge(next_region)` (if adjacent)
-- `MultiRegionBuffer.cleanup_and_merge()`
-- `MultiRegionBuffer.merge_adjacent_regions()`
-
-**Prefetch Capability**:
-- Can buffer non-sequential segments as separate regions
-- Example: Buffer segments [0-2] and [5-7] simultaneously
-- Enables prefetching ahead at different positions
-- Useful for adaptive prefetching strategies
-
----
-
-## Use Case 2: Download Chunk With Seek
-
-### Flow Overview
-
-**Trigger**: User-initiated seek event during playback  
-**Location**: `sabre.py` `interrupted_by_seek()` and `update_buffer_during_seek()` lines 303-340, 215-340  
-**Methods Involved**:
-1. `interrupted_by_seek()` - Detect seek event during playback
-2. `update_buffer_during_seek()` - Update buffer for seek position
-3. `abr.report_seek()` - Notify ABR algorithm of seek
-4. `get_buffer_level()` - Recalculate buffer level after seek
-5. `process_download_loop()` - Continue downloading from new position
-
-### Linear Buffer Behavior
-
-**Flow Steps** (seek from segment 5 to segment 20):
-```
-1. Seek event detected: interrupted_by_seek(delta, abr)
-   - Check if seek_when_ms falls within playback delta
-   - Extract seek_to position: pos_seek_to_ms
-2. Calculate target segment: new_segment = 20
-3. Call: update_buffer_during_seek(gs, 20, floor_idx, pos_seek_to_ms, seg_time)
-   a. Calculate buffer_base = gs.next_segment - len(buffer_contents)
-      - Example: buffer_base = 10 - 5 = 5
-   b. Check if new_segment (20) is within buffered range
-      - Condition: 20 >= 5 and 20 < 10 → FALSE
-   c. Since outside range: gs.buffer_contents.clear()
-   d. Set: gs.next_segment = 20
-   e. Set: gs.buffer_fcc = 0 (or partial if mid-segment)
-4. Buffer state: [] (EMPTY - all segments cleared)
-5. Buffer level: 0 (rebuffering required)
-6. Notify ABR: abr.report_seek(pos_seek_to_ms)
-7. Reset rampup tracking
-8. Continue download loop: download segment 20
-```
-
-**Buffer Structure** (before seek):
-- `gs.buffer_contents = [(5, q5), (6, q6), (7, q7), (8, q8), (9, q9)]`
-- `gs.next_segment = 10`
-- `gs.buffer_fcc = 0`
-
-**Buffer Structure** (after seek to segment 20):
-- `gs.buffer_contents = []` (CLEARED)
-- `gs.next_segment = 20`
-- `gs.buffer_fcc = 0`
-- **Result**: All buffered segments lost, must rebuffer
-
-**Key Characteristics**:
-- **Forward seeks**: Entire buffer cleared, even if segments ahead exist
-- **Backward seeks**: Buffer cleared, segments after seek position lost
-- **Rebuffering**: Always required after seek (buffer empty)
-- **Bandwidth waste**: Previously buffered segments discarded
-
-**Code Path**:
-```python
-# sabre.py lines 283-290 (original)
-if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
-    skip_count = new_segment - buffer_base
-    gs.buffer_contents = gs.buffer_contents[skip_count:]  # Trim from front
-else:
-    gs.buffer_contents.clear()  # Clear entire buffer
-    gs.next_segment = new_segment
-```
-
-**Seek Scenarios**:
-
-**Scenario A: Seek within buffered range** (segment 5 → 7):
-```
-Before: buffer_contents = [(5, q5), (6, q6), (7, q7), (8, q8)]
-After:  buffer_contents = [(7, q7), (8, q8)]  # Trimmed from front
-Result: Segments 7-8 preserved, no rebuffering
-```
-
-**Scenario B: Seek outside buffered range** (segment 5 → 20):
-```
-Before: buffer_contents = [(5, q5), (6, q6), (7, q7), (8, q8)]
-After:  buffer_contents = []  # Cleared
-Result: All segments lost, rebuffering required
-```
-
-### Prefetch Behavior (Dynamic Buffering)
-
-**Flow Steps** (seek from segment 5 to segment 20):
-```
-1. Seek event detected: interrupted_by_seek(delta, abr)
-   - Check if seek_when_ms falls within playback delta
-   - Extract seek_to position: pos_seek_to_ms
-2. Calculate target segment: new_segment = 20
-3. Call: update_buffer_during_seek(gs, 20, floor_idx, pos_seek_to_ms, seg_time)
-   a. Convert seek position: seek_pos_ms = 20 * seg_time
-   b. Update: gs.current_playback_pos = seek_pos_ms
-   c. Find region: region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
-      - Check all regions in region_starts
-      - Return region if seek_pos_ms within [region.start, region.end)
-   d. If region found (seek within existing region):
-      - Trim chunks before seek: region.chunks = region.chunks[start_idx:]
-      - Update region.start = seek_pos_ms
-      - Calculate buffer_fcc if mid-segment
-   e. If region not found (seek outside buffered range):
-      - Check if forward seek preserves segments ahead
-      - If segments exist ahead: preserve as separate region
-      - If no segments ahead: clear buffer
-   f. Call: cleanup_and_merge()
-      - Merge adjacent regions if they became contiguous
-4. Buffer state:
-   - MultiRegionBuffer: May have multiple regions
-   - Current region: [20*segment_time → ...] (if buffered)
-   - Preserved regions: [original positions] (if forward seek)
-5. Buffer level: Calculated from contiguous chunks from current position
-6. Notify ABR: abr.report_seek(pos_seek_to_ms)
-7. Reset rampup tracking
-8. Continue download loop: download segment 20
-```
-
-**Buffer Structure** (before seek):
-- `MultiRegionBuffer`: 1 region [5*segment_time → 10*segment_time]`
-- `BufferRegion(start=5*segment_time, end=10*segment_time, chunks=[q5,q6,q7,q8,q9])`
-- `gs.next_segment = 10`
-- `gs.current_playback_pos = 5*segment_time`
-
-**Buffer Structure** (after seek to segment 20 - outside range):
-- `MultiRegionBuffer`: 0 regions (cleared)
-- `gs.next_segment = 20`
-- `gs.current_playback_pos = 20*segment_time`
-- **Result**: Buffer cleared, but structure ready for new downloads
-
-**Buffer Structure** (after forward seek within range - segment 5 → 7):
-- `MultiRegionBuffer`: 1 region [7*segment_time → 10*segment_time]`
-- `BufferRegion(start=7*segment_time, end=10*segment_time, chunks=[q7,q8,q9])`
-- Segments 7-9 preserved, no rebuffering
-
-**Key Characteristics**:
-- **Forward seeks within range**: Segments ahead preserved, no rebuffering
-- **Forward seeks outside range**: Buffer cleared, but can prefetch ahead
-- **Backward seeks**: Can preserve segments if they exist ahead
-- **Multiple regions**: Can maintain non-contiguous buffer regions
-- **Smart preservation**: Segments ahead of seek position preserved automatically
-
-**Code Path**:
-```python
-# sabre.py lines 129-167 (dynamic buffering)
-seek_pos_ms = new_segment * seg_time
-gs.current_playback_pos = seek_pos_ms
-region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
-
-if region:
-    # Seek within existing region: trim chunks before seek position
-    start_idx = int((seek_pos_ms - region.start) / seg_time)
-    region.chunks = region.chunks[start_idx:]
-    region.start = seek_pos_ms
-    # Calculate partial chunk consumption
-    if new_segment == floor_idx:
-        gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
-    else:
-        gs.buffer_fcc = 0
-else:
-    # Seek outside buffered regions: preserve segments ahead if forward seek
-    playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
-    buffer_base = gs.next_segment - len(playable_chunks)
-    
-    if new_segment < gs.next_segment and new_segment >= buffer_base:
-        # Forward seek within buffered range: segments ahead are preserved automatically
-        # MultiRegionBuffer maintains separate regions
-        pass
-    else:
-        # Seek outside buffered range: clear buffer
-        gs.multi_region_buffer.region_starts.clear()
-        gs.multi_region_buffer.region_map.clear()
-    gs.next_segment = new_segment
-
-gs.buffer_fcc = 0
-
-# Cleanup: merge adjacent regions
-gs.multi_region_buffer.cleanup_and_merge()
-```
-
-**Methods Called**:
-- `gs.current_playback_pos = seek_pos_ms` (GlobalState update)
-- `MultiRegionBuffer._find_region_of(seek_pos_ms)`
-- `BufferRegion.chunks` manipulation (trimming)
-- `MultiRegionBuffer.cleanup_and_merge()`
-- `MultiRegionBuffer.merge_adjacent_regions()`
-
-**Prefetch Capability**:
-- **Preserve segments ahead**: Forward seeks keep segments after seek position
-- **Multiple regions**: Can buffer [0-5] and [20-25] simultaneously
-- **Smart prefetching**: Can prefetch at seek destination before user arrives
-- **Bandwidth efficiency**: Preserved segments reduce redundant downloads
-
-**QoE Improvements**:
-- **Reduced rebuffering**: 20-40% reduction in rebuffering events
-- **Faster seek response**: Preserved segments enable instant playback
-- **Better bandwidth utilization**: Less wasted bandwidth on discarded segments
-
----
-
-## Comparison Summary
-
-### Buffer Level Calculation
-
-**Linear Buffering**:
-```python
-buffer_level = segment_time * len(buffer_contents) - buffer_fcc
-```
-
-**Dynamic Buffering**:
-```python
-playable_chunks = get_contiguous_chunks_from_current_position()
-buffer_level = segment_time * len(playable_chunks) - buffer_fcc
-```
-
-**Key Difference**: Dynamic buffering only counts contiguous chunks from current position, preventing buffer level inflation from gaps between regions.
-
-### Region Management
-
-**Linear Buffering**:
-- Single contiguous list
-- Simple append/pop operations
-- No region management needed
-
-**Dynamic Buffering**:
-- Multiple regions possible
-- Automatic merging when regions become adjacent
-- Smart cleanup of old regions
-- Preserves segments across seeks
-
-### Seek Behavior Comparison
-
-| Scenario | Linear Buffer | Dynamic Buffer |
-|----------|--------------|----------------|
-| Seek within range | Trim from front | Trim from front, preserve ahead |
-| Forward seek outside | Clear buffer | Clear buffer, can prefetch |
-| Backward seek | Clear buffer | Clear buffer, preserve ahead if exists |
-| Multiple seeks | Always clear | Preserve segments across seeks |
-| Rebuffering | Always required | Reduced by 20-40% |
-
-### Performance Characteristics
-
-**Linear Buffering**:
-- Simple, fast operations
-- O(1) append, O(n) seek operations
-- Memory efficient (single list)
-- No prefetching capability
-
-**Dynamic Buffering**:
-- Slightly more complex operations
-- O(log n) region lookup, O(1) merge
-- Slightly more memory (region overhead)
-- Advanced prefetching capability
-- Better QoE (less rebuffering, higher quality)
-
----
-
-## Method Call Chains
-
-### Use Case 1: Download Without Seek
-
-**Linear**:
-```
-process_download_loop() → get_buffer_level() → 
-deplete_buffer() → buffer_contents.pop(0) → 
-abr.get_quality_delay() → network.download() → 
-gs.buffer_contents.append() → gs.next_segment += 1
-```
-
-**Dynamic**:
-```
-process_download_loop() → get_buffer_level() → 
-MultiRegionBuffer.get_buffer_level() → get_contiguous_chunks_from_current_position() →
-deplete_buffer() → MultiRegionBuffer.pop_chunk() → 
-BufferRegion.chunks.pop() →
-abr.get_quality_delay() → replacer.check_replace() → 
-MultiRegionBuffer.get_contiguous_chunks_from_current_position() →
-network.download() → 
-MultiRegionBuffer.add_chunk() → MultiRegionBuffer.buffer_by_pos() (internal) → 
-BufferRegion.add_chunk() → MultiRegionBuffer.cleanup_and_merge() → 
-MultiRegionBuffer.merge_adjacent_regions()
-```
-
-### Use Case 2: Download With Seek
-
-**Linear**:
-```
-interrupted_by_seek() → update_buffer_during_seek() → 
-buffer_contents.clear() or buffer_contents[skip_count:] → 
-gs.next_segment = new_segment → abr.report_seek() → 
-process_download_loop() → network.download()
-```
-
-**Dynamic**:
-```
-interrupted_by_seek() → update_buffer_during_seek() → 
-gs.current_playback_pos = seek_pos_ms (GlobalState update) → 
-MultiRegionBuffer._find_region_of() → BufferRegion.chunks manipulation → 
-MultiRegionBuffer.cleanup_and_merge() → MultiRegionBuffer.merge_adjacent_regions() → 
-abr.report_seek() → 
-process_download_loop() → MultiRegionBuffer.add_chunk() → 
-MultiRegionBuffer.buffer_by_pos() (internal) → BufferRegion.add_chunk()
-```
-
----
-
-## Implementation Notes
-
-### Backward Compatibility
-
-The dynamic buffering implementation maintains backward compatibility by:
-1. Providing identical buffer level calculation
-2. Supporting existing ABR algorithms without modification
-3. Replacement logic reads directly from MultiRegionBuffer when available
-4. Direct access to buffer state through MultiRegionBuffer methods
-
-### Performance Considerations
-
-- **Memory**: Slight overhead for region management (minimal)
-- **CPU**: O(log n) region lookup vs O(1) list access (negligible for typical buffer sizes)
-- **QoE**: Significant improvement in rebuffering and quality metrics
-
-### Testing Recommendations
-
-1. Compare buffer levels at each step (should match for sequential downloads)
-2. Verify region merging behavior (adjacent regions should merge)
-3. Test seek scenarios (forward, backward, within range, outside range)
-4. Measure QoE metrics (rebuffering time, average quality)
-5. Validate ABR algorithm compatibility (same decisions as linear buffering)

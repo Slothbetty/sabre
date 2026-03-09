@@ -2,8 +2,7 @@
 Prefetch module for SABRE dynamic buffering.
 
 Decides *when* and *where* to prefetch based on:
-- A JSON config that lists target segment indices
-- A buffer-level threshold: prefetch only when the buffer is sufficiently full
+- A JSON config that lists target segment indices and a buffer-level threshold
 
 Bitrate / quality selection is delegated to the ABR algorithm via the standard
 ``abr.get_quality_delay(segment_index)`` interface.
@@ -17,7 +16,7 @@ from typing import Optional
 
 # Dummy prefetch module that will be replaced with RL prefetch module.
 class PrefetchModule:
-    """Buffer-threshold-based prefetch scheduler.
+    """Config-driven prefetch scheduler.
 
     Parameters
     ----------
@@ -25,6 +24,7 @@ class PrefetchModule:
         Path to a JSON file with the format::
 
             {
+              "buffer_level_threshold": 20000,
               "prefetch": [
                 {"segment": 5},
                 {"segment": 10},
@@ -32,17 +32,15 @@ class PrefetchModule:
               ]
             }
 
-    buffer_threshold_ms : float
-        Minimum buffer level (in ms) required before a prefetch download is
-        triggered.
+        ``buffer_level_threshold`` is the minimum buffer level (in ms)
+        required before a prefetch download is triggered.
     """
 
-    def __init__(self, config_path: str | Path, buffer_threshold_ms: float) -> None:
-        self.buffer_threshold_ms = buffer_threshold_ms
-
+    def __init__(self, config_path: str | Path) -> None:
         with open(config_path) as f:
             data = json.load(f)
 
+        self.buffer_threshold_ms: float = data.get("buffer_level_threshold", 20000)
         entries = data.get("prefetch", [])
         self.pending_segments: list[int] = [e["segment"] for e in entries]
         self.completed_segments: set[int] = set()

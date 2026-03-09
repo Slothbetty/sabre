@@ -4,6 +4,7 @@
     "movie": "movie.json",
     "abr": "dynamicdash",
     "seek_config": null,
+    "prefetch_config": null,
     "network_multiplier": 1.0
   },
   "without_buffer_py": {
@@ -1610,7 +1611,7 @@
         "buffer_level_after": 0
       }
     ],
-    "rebuffer_events": [],
+    "prefetch_events": [],
     "seek_events": [],
     "time_series": {
       "time_points": [
@@ -4023,7 +4024,7 @@
         "buffer_level_after": 0
       }
     ],
-    "rebuffer_events": [],
+    "prefetch_events": [],
     "seek_events": [],
     "time_series": {
       "time_points": [
