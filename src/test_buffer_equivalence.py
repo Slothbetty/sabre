@@ -1,21 +1,23 @@
 #!/usr/bin/env python3
 """
-Unit test to ensure buffer.py comparison always produces identical results.
-This test verifies that simulations with and without buffer.py produce the same
-metrics for sequential downloads (0.0% change expected).
+Equivalence test: linear buffer vs dynamic buffer.
+
+Verifies that simulations with and without buffer.py (MultiRegionBuffer)
+produce identical metrics during sequential chunk downloads — i.e. the
+same graph output with 0.0% change expected.
 
 Usage:
     # Run all tests
-    python test_buffer_comparison.py
-    
+    python test_buffer_equivalence.py
+
     # Run quick test (single ABR algorithm, faster)
-    python test_buffer_comparison.py --quick
+    python test_buffer_equivalence.py --quick
     
     # Test specific ABR algorithm
-    python test_buffer_comparison.py --abr bola
+    python test_buffer_equivalence.py --abr bola
     
     # Verbose output
-    python test_buffer_comparison.py -v
+    python test_buffer_equivalence.py -v
 
 The test ensures that:
 - total_rebuffer_time matches exactly (0.0% change)
@@ -31,7 +33,7 @@ import subprocess
 import json
 import unittest
 from pathlib import Path
-from run_buffer_comparison import run_simulation, parse_simulation_output
+from run_comparison import run_simulation, parse_simulation_output
 
 
 class TestBufferComparison(unittest.TestCase):
@@ -303,7 +305,7 @@ class TestBufferComparisonQuick(unittest.TestCase):
         print(f"\n{'='*85}")
         print(f"Quick Test: bola comparison")
         print(f"{'='*85}")
-        from run_buffer_comparison import run_simulation
+        from run_comparison import run_simulation
         
         metrics_without = run_simulation(use_buffer_py=False, config=self.config)
         metrics_with = run_simulation(use_buffer_py=True, config=self.config)

@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Buffer.py Comparison Viewer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -167,6 +168,19 @@
         .config-info strong {
             color: #2c3e50;
         }
+
+        .prefetch-info {
+            background: #eaf7ee;
+            border-left: 4px solid #27ae60;
+            padding: 14px 18px;
+            border-radius: 4px;
+            margin-bottom: 20px;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+        .prefetch-info strong {
+            color: #2c3e50;
+        }
     </style>
 </head>
 <body>
@@ -189,6 +203,7 @@
         
         <div id="content" style="display: none;">
             <div id="configInfo" class="config-info"></div>
+            <div id="prefetchInfo" class="prefetch-info" style="display: none;"></div>
             
             <div class="summary-cards" id="summaryCards"></div>
             
@@ -233,6 +248,41 @@
             setTimeout(() => {
                 errorDiv.style.display = 'none';
             }, 5000);
+        }
+
+        function hasPrefetchData() {
+            const w = comparisonData.with_buffer_py || {};
+            return (w.prefetch_events && w.prefetch_events.length > 0)
+                || (w.seek_events && w.seek_events.length > 0);
+        }
+
+        function withLabel() {
+            return hasPrefetchData() ? 'With buffer.py + prefetch' : 'With buffer.py';
+        }
+
+        function seekAnnotations() {
+            const sk = (comparisonData.with_buffer_py || {}).seek_events || [];
+            if (sk.length === 0) return {};
+            const out = {};
+            sk.forEach((e, i) => {
+                out['seek' + i] = {
+                    type: 'line',
+                    scaleID: 'x',
+                    value: e.seek_to_s,
+                    borderColor: 'rgba(155, 89, 182, 0.7)',
+                    borderWidth: 2,
+                    borderDash: [6, 4],
+                    label: {
+                        display: true,
+                        content: 'Seek \u2192 seg ' + e.segment,
+                        position: 'start',
+                        backgroundColor: 'rgba(155, 89, 182, 0.8)',
+                        color: '#fff',
+                        font: { size: 11 }
+                    }
+                };
+            });
+            return out;
         }
         
         function loadFile() {
@@ -303,20 +353,39 @@
             document.getElementById('content').style.display = 'block';
             
             renderConfigInfo();
+            renderPrefetchInfo();
             renderSummary();
             renderCharts();
         }
         
         function renderConfigInfo() {
             const config = comparisonData.config || {};
-            const configHtml = `
+            let html = `
                 <strong>Configuration:</strong> 
                 Network: ${config.network || 'N/A'}, 
                 Movie: ${config.movie || 'N/A'}, 
                 ABR: ${config.abr || 'N/A'}
                 ${config.seek_config ? `, Seeks: ${config.seek_config}` : ''}
+                ${config.prefetch_config ? `, Prefetch: ${config.prefetch_config}` : ''}
             `;
-            document.getElementById('configInfo').innerHTML = configHtml;
+            document.getElementById('configInfo').innerHTML = html;
+        }
+
+        function renderPrefetchInfo() {
+            const el = document.getElementById('prefetchInfo');
+            if (!hasPrefetchData()) {
+                el.style.display = 'none';
+                return;
+            }
+            const w = comparisonData.with_buffer_py || {};
+            const pf = w.prefetch_events || [];
+            const sk = w.seek_events || [];
+            const pfSegs = pf.map(e => e.segment).join(', ') || 'none';
+            const skSegs = sk.map(e => `seg ${e.segment} (${e.seek_to_s}s)`).join(', ') || 'none';
+            el.innerHTML =
+                `<strong>Prefetched segments:</strong> ${pfSegs} (${pf.length} total)<br>
+                 <strong>Seek events:</strong> ${skSegs} (${sk.length} total)`;
+            el.style.display = 'block';
         }
         
         function renderSummary() {
@@ -324,36 +393,11 @@
             const with_ = comparisonData.with_buffer_py.summary || {};
             
             const metrics = [
-                {
-                    label: 'Total Rebuffering Time',
-                    key: 'total_rebuffer_time',
-                    unit: 's',
-                    lowerIsBetter: true
-                },
-                {
-                    label: 'Rebuffering Events',
-                    key: 'rebuffer_count',
-                    unit: '',
-                    lowerIsBetter: true
-                },
-                {
-                    label: 'Played Utility',
-                    key: 'played_utility',
-                    unit: '',
-                    lowerIsBetter: false
-                },
-                {
-                    label: 'Rebuffer Ratio',
-                    key: 'rebuffer_ratio',
-                    unit: '',
-                    lowerIsBetter: true
-                },
-                {
-                    label: 'Total Play Time',
-                    key: 'total_play_time',
-                    unit: 's',
-                    lowerIsBetter: false
-                }
+                { label: 'Total Rebuffering Time', key: 'total_rebuffer_time', unit: 's', lowerIsBetter: true },
+                { label: 'Rebuffering Events', key: 'rebuffer_count', unit: '', lowerIsBetter: true },
+                { label: 'Played Utility', key: 'played_utility', unit: '', lowerIsBetter: false },
+                { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true },
+                { label: 'Total Play Time', key: 'total_play_time', unit: 's', lowerIsBetter: false }
             ];
             
             const cardsHtml = metrics.map(metric => {
@@ -366,10 +410,10 @@
                 let comparisonText = '';
                 if (metric.lowerIsBetter) {
                     comparisonClass += diff < 0 ? ' positive' : ' negative';
-                    comparisonText = diff < 0 ? `↓ ${Math.abs(percentChange)}% improvement` : `↑ ${Math.abs(percentChange)}% worse`;
+                    comparisonText = diff < 0 ? `\u2193 ${Math.abs(percentChange)}% improvement` : `\u2191 ${Math.abs(percentChange)}% worse`;
                 } else {
                     comparisonClass += diff > 0 ? ' positive' : ' negative';
-                    comparisonText = diff > 0 ? `↑ ${Math.abs(percentChange)}% improvement` : `↓ ${Math.abs(percentChange)}% worse`;
+                    comparisonText = diff > 0 ? `\u2191 ${Math.abs(percentChange)}% improvement` : `\u2193 ${Math.abs(percentChange)}% worse`;
                 }
                 
                 return `
@@ -390,8 +434,9 @@
         function renderCharts() {
             const without = comparisonData.without_buffer_py;
             const with_ = comparisonData.with_buffer_py;
+            const label = withLabel();
+            const annotations = seekAnnotations();
             
-            // Destroy existing charts
             Object.values(charts).forEach(chart => {
                 if (chart) chart.destroy();
             });
@@ -415,7 +460,7 @@
                             borderWidth: 1
                         },
                         {
-                            label: 'With buffer.py',
+                            label: label,
                             data: [
                                 with_.summary?.total_rebuffer_time || 0,
                                 with_.summary?.rebuffer_count || 0
@@ -432,17 +477,11 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Value'
-                            }
+                            title: { display: true, text: 'Value' }
                         }
                     },
                     plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        },
+                        legend: { display: true, position: 'top' },
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
@@ -473,7 +512,7 @@
                             pointRadius: 2
                         },
                         {
-                            label: 'With buffer.py',
+                            label: label,
                             data: withTS.buffer_levels || [],
                             borderColor: 'rgba(39, 174, 96, 1)',
                             backgroundColor: 'rgba(39, 174, 96, 0.1)',
@@ -488,23 +527,15 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Buffer Level (seconds)'
-                            }
+                            title: { display: true, text: 'Buffer Level (seconds)' }
                         },
                         x: {
-                            title: {
-                                display: true,
-                                text: 'Time (seconds)'
-                            }
+                            title: { display: true, text: 'Time (seconds)' }
                         }
                     },
                     plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
+                        legend: { display: true, position: 'top' },
+                        annotation: { annotations }
                     }
                 }
             });
@@ -526,7 +557,7 @@
                             stepped: 'after'
                         },
                         {
-                            label: 'With buffer.py',
+                            label: label,
                             data: withTS.qualities || [],
                             borderColor: 'rgba(39, 174, 96, 1)',
                             backgroundColor: 'rgba(39, 174, 96, 0.1)',
@@ -542,34 +573,23 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Quality Level'
-                            }
+                            title: { display: true, text: 'Quality Level' }
                         },
                         x: {
-                            title: {
-                                display: true,
-                                text: 'Time (seconds)'
-                            }
+                            title: { display: true, text: 'Time (seconds)' }
                         }
                     },
                     plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
+                        legend: { display: true, position: 'top' },
+                        annotation: { annotations }
                     }
                 }
             });
             
             // Quality distribution
             const qualityDistCtx = document.getElementById('qualityDistChart').getContext('2d');
-            
-            // Calculate quality distribution
             const qualityDistWithout = calculateQualityDistribution(withoutTS.qualities || []);
             const qualityDistWith = calculateQualityDistribution(withTS.qualities || []);
-            
             const allQualities = [...new Set([...Object.keys(qualityDistWithout), ...Object.keys(qualityDistWith)])].map(Number).sort((a, b) => a - b);
             
             charts.qualityDist = new Chart(qualityDistCtx, {
@@ -585,7 +605,7 @@
                             borderWidth: 1
                         },
                         {
-                            label: 'With buffer.py',
+                            label: label,
                             data: allQualities.map(q => qualityDistWith[q] || 0),
                             backgroundColor: 'rgba(39, 174, 96, 0.7)',
                             borderColor: 'rgba(39, 174, 96, 1)',
@@ -599,28 +619,17 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: {
-                                display: true,
-                                text: 'Percentage of Time'
-                            },
+                            title: { display: true, text: 'Percentage of Time' },
                             ticks: {
-                                callback: function(value) {
-                                    return value + '%';
-                                }
+                                callback: function(value) { return value + '%'; }
                             }
                         },
                         x: {
-                            title: {
-                                display: true,
-                                text: 'Quality Level'
-                            }
+                            title: { display: true, text: 'Quality Level' }
                         }
                     },
                     plugins: {
-                        legend: {
-                            display: true,
-                            position: 'top'
-                        }
+                        legend: { display: true, position: 'top' }
                     }
                 }
             });
@@ -639,7 +648,7 @@
             return dist;
         }
         
-        // Allow drag and drop
+        // Drag and drop support
         const fileInput = document.getElementById('jsonFileInput');
         const dropZone = document.body;
         
@@ -664,4 +673,3 @@
     </script>
 </body>
 </html>
-

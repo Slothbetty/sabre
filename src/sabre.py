@@ -38,7 +38,7 @@ from abr_algorithms import (
     SlidingWindow, Ewma, Bola, BolaEnh, ThroughputRule, Dynamic, DynamicDash, Bba,
     NoReplace, Replace, AbrInput, ReplacementInput
 )
-from buffer import MultiRegionBuffer
+from buffer import BufferRegion, MultiRegionBuffer
 from prefetch import PrefetchModule
 
 # Units used throughout:
@@ -60,18 +60,6 @@ from prefetch import PrefetchModule
 
 # Global variable for tracking BOLA algorithm usage
 is_bola = False
-
-"""
-[Jinhui] Coding style TODOs:
-1. Replace all the global variables with a singleton class GlobalState, and
-  update all the callsites.
-2. Move all the ABR algorithms into a separate file, and import them here.
-3. For any function w/ less than 5 global usage, refactor them to be local
-  functions, i.e., return the values of modified values, and update them in the
-  caller.
-4. [Optional, hard] For any function w/ more than 50 lines, separate into 2
-  functions.
-"""
 
 
 def load_json(path):
@@ -113,6 +101,128 @@ def get_is_bola_value(abr):
         return False
 
 
+def multi_region_buffer_seek(buf, seek_pos_ms, seg_time):
+    """Perform seek on a MultiRegionBuffer.
+
+    Updates ``gs.current_playback_pos`` and sets ``gs.buffer_fcc = 0``.
+
+    Behaviour:
+    - **Hit** (seek lands in a buffered region): saves prefetch chunks
+      before the seek position, trims non-prefetch chunks via ``pop_chunk``,
+      re-inserts saved prefetch chunks as separate regions.
+    - **Miss** (seek outside any region): clears only non-prefetch regions
+      entirely before the seek position.
+    - In both cases, all regions/chunks **after** the seek position are
+      preserved regardless of prefetch status.
+
+    Returns ``True`` if rebuffer is needed (miss), ``False`` otherwise.
+    """
+    gs.current_playback_pos = seek_pos_ms
+    gs.buffer_fcc = 0
+
+    region = buf._find_region_of(seek_pos_ms)
+    prefetch_to_save = []
+    seek_pos_idx = int(round(seek_pos_ms / seg_time))
+
+    if region:
+        old_start = region.start_idx
+
+        # Save prefetch chunks before the seek position that would be lost
+        if region.end_idx is not None:
+            for idx in range(region.start_idx, min(seek_pos_idx, region.end_idx)):
+                if idx in buf.prefetch_indices:
+                    chunk_offset = idx - region.start_idx
+                    prefetch_to_save.append((idx, region.chunks[chunk_offset]))
+
+        region.pop_chunk(seek_pos_idx)
+
+        # Update region_map key after pop_chunk changed start_idx
+        if old_start != region.start_idx:
+            if old_start in buf.region_map:
+                del buf.region_map[old_start]
+            if old_start in buf.region_starts:
+                buf.region_starts.remove(old_start)
+            if region.chunks:
+                buf.region_map[region.start_idx] = region
+                if region.start_idx not in buf.region_starts:
+                    buf.region_starts.append(region.start_idx)
+                    buf.region_starts.sort()
+        elif not region.chunks:
+            if old_start in buf.region_map:
+                del buf.region_map[old_start]
+            if old_start in buf.region_starts:
+                buf.region_starts.remove(old_start)
+
+        # Clean up non-prefetch regions entirely before the seek position
+        for start in list(buf.region_starts):
+            if start not in buf.region_map:
+                buf.region_starts.remove(start)
+                continue
+            r = buf.region_map[start]
+            if r is region:
+                continue
+            if r.end_idx is not None and r.end_idx <= seek_pos_idx:
+                has_prefetch = any(
+                    idx in buf.prefetch_indices
+                    for idx in range(r.start_idx, r.end_idx)
+                )
+                if not has_prefetch:
+                    del buf.region_map[start]
+                    buf.region_starts.remove(start)
+
+        rebuffer = False
+    else:
+        # Seek outside any buffered region:
+        # Only remove non-prefetch regions entirely before the seek position;
+        # keep everything after the seek position.
+        for start in list(buf.region_starts):
+            if start not in buf.region_map:
+                buf.region_starts.remove(start)
+                continue
+            r = buf.region_map[start]
+            if r.end_idx is None:
+                del buf.region_map[start]
+                buf.region_starts.remove(start)
+                continue
+            if r.end_idx <= seek_pos_idx:
+                has_prefetch = any(
+                    idx in buf.prefetch_indices
+                    for idx in range(r.start_idx, r.end_idx)
+                )
+                if not has_prefetch:
+                    del buf.region_map[start]
+                    buf.region_starts.remove(start)
+
+        rebuffer = True
+
+    buf.merge_adjacent_regions()
+
+    # Re-insert saved prefetch chunks as separate regions.
+    # Done after merge to prevent them being merged back into the seek region.
+    if prefetch_to_save:
+        groups = []
+        current_group = [prefetch_to_save[0]]
+        for i in range(1, len(prefetch_to_save)):
+            if prefetch_to_save[i][0] == current_group[-1][0] + 1:
+                current_group.append(prefetch_to_save[i])
+            else:
+                groups.append(current_group)
+                current_group = [prefetch_to_save[i]]
+        groups.append(current_group)
+
+        for group in groups:
+            start_idx = group[0][0]
+            new_region = BufferRegion(start_idx, buf.chunk_duration)
+            for _, quality in group:
+                new_region.add_chunk(quality)
+            buf.region_map[start_idx] = new_region
+            if start_idx not in buf.region_starts:
+                buf.region_starts.append(start_idx)
+        buf.region_starts.sort()
+
+    return rebuffer
+
+
 def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time):
     """
     Update buffer contents and position during a seek event.
@@ -131,49 +241,14 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
     """
     # Use MultiRegionBuffer if available
     if gs.multi_region_buffer is not None:
-        # Convert seek position to milliseconds
         seek_pos_ms = new_segment * seg_time
-        
-        # Update playback position
-        gs.current_playback_pos = seek_pos_ms
-        
-        # Find region containing seek position
-        region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
-        
-        if region:
-            # Seek within existing region: trim chunks before seek position
-            seek_pos_idx = int(round(seek_pos_ms / seg_time))
-            start_idx = max(0, seek_pos_idx - region.start_idx)
-            region.chunks = region.chunks[start_idx:]
-            region.start_idx = seek_pos_idx
-            if region.chunks:
-                region.end_idx = region.start_idx + len(region.chunks)
-            else:
-                region.end_idx = None
-            # Calculate partial chunk consumption
+        rebuffer = multi_region_buffer_seek(gs.multi_region_buffer, seek_pos_ms, seg_time)
+
+        if not rebuffer:
             if new_segment == floor_idx:
                 gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
-            else:
-                gs.buffer_fcc = 0
         else:
-            # Seek outside buffered regions: preserve segments ahead if forward seek
-            playable_chunks = gs.multi_region_buffer.get_contiguous_chunks_from_current_position()
-            buffer_base = gs.next_segment - len(playable_chunks)
-            
-            if new_segment < gs.next_segment and new_segment >= buffer_base:
-                # Forward seek within buffered range: segments ahead are preserved automatically
-                # MultiRegionBuffer maintains separate regions
-                pass
-            else:
-                # Seek outside buffered range: clear buffer
-                gs.multi_region_buffer.region_starts.clear()
-                gs.multi_region_buffer.region_map.clear()
             gs.next_segment = new_segment
-        
-        gs.buffer_fcc = 0
-        
-        # Cleanup: merge adjacent regions
-        gs.multi_region_buffer.merge_adjacent_regions()
     else:
         # Original linear buffering logic
         # Compute the segment index corresponding to the first element in the buffer.
@@ -224,15 +299,6 @@ def interrupted_by_seek(delta, abr):
     if gs.seek_events:
         # Convert the next scheduled seek time to milliseconds.
         seek_when_ms = gs.seek_events[0]["seek_when"] * 1000
-
-
-        """ [Jinhui] In the implementation below, the meanings of time are mixed:
-        - `total_play_time` is wall time;
-        - `seek_when` is defined also in wall time;
-        - `seek_to` is defined in playback time.
-        The last two are confusing.
-        Change `seek_to` to something like `pos_seek_to` might help.
-        """
 
         # If adding delta would cross the seek event time, process the seek.
         if gs.total_play_time < seek_when_ms and gs.total_play_time + delta >= seek_when_ms:
@@ -525,31 +591,31 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
             gs.next_segment += 1
             continue
 
+        # Prefetch check: trigger when buffer level reaches the config threshold
+        if (prefetch_module is not None
+                and gs.multi_region_buffer is not None
+                and prefetch_module.should_prefetch(
+                    get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))):
+            prefetch_seg = prefetch_module.get_next_prefetch_segment()
+            if prefetch_seg is not None and prefetch_seg < len(gs.manifest.segments):
+                pf_quality, pf_delay = abr.get_quality_delay(prefetch_seg)
+                pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
+                pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
+                pf_metric = network.download(pf_size, prefetch_seg, pf_quality, pf_bl)
+                if not deplete_buffer(pf_metric.time, abr):
+                    continue  # seek during prefetch download
+                if pf_metric.abandon_to_quality is None:
+                    gs.multi_region_buffer.add_prefetch_chunk(prefetch_seg, pf_quality)
+                    prefetch_module.mark_prefetched(prefetch_seg)
+                    if gs.verbose:
+                        print("prefetch segment %d quality=%d bl=%d"
+                              % (prefetch_seg, pf_quality,
+                                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
+                continue  # re-evaluate buffer state after prefetch
+
         # Check if there is extra content in the buffer.
         full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
-            # When the buffer is full, use idle time for prefetch downloads
-            if (prefetch_module is not None
-                    and gs.multi_region_buffer is not None
-                    and prefetch_module.should_prefetch(
-                        get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))):
-                prefetch_seg = prefetch_module.get_next_prefetch_segment()
-                if prefetch_seg is not None and prefetch_seg < len(gs.manifest.segments):
-                    pf_quality, pf_delay = abr.get_quality_delay(prefetch_seg)
-                    pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
-                    pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
-                    pf_metric = network.download(pf_size, prefetch_seg, pf_quality, pf_bl)
-                    if not deplete_buffer(pf_metric.time, abr):
-                        continue  # seek during prefetch download
-                    if pf_metric.abandon_to_quality is None:
-                        gs.multi_region_buffer.add_prefetch_chunk(prefetch_seg, pf_quality)
-                        prefetch_module.mark_prefetched(prefetch_seg)
-                        if gs.verbose:
-                            print("prefetch segment %d quality=%d bl=%d"
-                                  % (prefetch_seg, pf_quality,
-                                     get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
-                    continue  # re-evaluate buffer state after prefetch
-
             if not deplete_buffer(full_delay, abr):
                 continue  # A seek event was triggered; restart loop.
             network.delay(full_delay)
@@ -1227,14 +1293,6 @@ if __name__ == "__main__":
         default=None,
         help="JSON file listing segments to prefetch."
     )
-    parser.add_argument(
-        "-pbt",
-        "--prefetch-buffer-threshold",
-        metavar="THRESHOLD_MS",
-        type=float,
-        default=20000,
-        help="Buffer level (ms) above which prefetch downloads are triggered."
-    )
     args = parser.parse_args()
 
     # Initialize GlobalState
@@ -1307,7 +1365,7 @@ if __name__ == "__main__":
         if not args.use_buffer_py:
             print("Warning: --prefetch-config requires --use-buffer-py; ignoring prefetch.", file=sys.stderr)
         else:
-            prefetch_module = PrefetchModule(args.prefetch_config, args.prefetch_buffer_threshold)
+            prefetch_module = PrefetchModule(args.prefetch_config)
 
     network_trace = load_json(args.network)
     network_trace = [

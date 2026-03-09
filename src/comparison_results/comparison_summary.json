@@ -3,6 +3,7 @@
     "network": "network.json",
     "movie": "movie.json",
     "seek_config": null,
+    "prefetch_config": null,
     "network_multiplier": 1.0
   },
   "algorithms": [
@@ -19,6 +20,7 @@
         "movie": "movie.json",
         "abr": "bola",
         "seek_config": null,
+        "prefetch_config": null,
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -1625,7 +1627,7 @@
             "buffer_level_after": 2910
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -4038,7 +4040,7 @@
             "buffer_level_after": 2910
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -4854,6 +4856,7 @@
         "movie": "movie.json",
         "abr": "bolae",
         "seek_config": null,
+        "prefetch_config": null,
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -6460,7 +6463,7 @@
             "buffer_level_after": 10490
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -8873,7 +8876,7 @@
             "buffer_level_after": 10490
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -9689,6 +9692,7 @@
         "movie": "movie.json",
         "abr": "dynamic",
         "seek_config": null,
+        "prefetch_config": null,
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -11295,7 +11299,7 @@
             "buffer_level_after": 2555
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -13708,7 +13712,7 @@
             "buffer_level_after": 2555
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -14524,6 +14528,7 @@
         "movie": "movie.json",
         "abr": "dynamicdash",
         "seek_config": null,
+        "prefetch_config": null,
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -16130,7 +16135,7 @@
             "buffer_level_after": 0
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -18543,7 +18548,7 @@
             "buffer_level_after": 0
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -19359,6 +19364,7 @@
         "movie": "movie.json",
         "abr": "throughput",
         "seek_config": null,
+        "prefetch_config": null,
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -20965,7 +20971,7 @@
             "buffer_level_after": 5434
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
@@ -23378,7 +23384,7 @@
             "buffer_level_after": 5434
           }
         ],
-        "rebuffer_events": [],
+        "prefetch_events": [],
         "seek_events": [],
         "time_series": {
           "time_points": [
