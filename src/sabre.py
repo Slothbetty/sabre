@@ -245,6 +245,11 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
         rebuffer = multi_region_buffer_seek(gs.multi_region_buffer, seek_pos_ms, seg_time)
 
         if not rebuffer:
+            region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
+            if region and region.end_idx is not None:
+                gs.next_segment = region.end_idx
+            else:
+                gs.next_segment = new_segment
             if new_segment == floor_idx:
                 gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
         else:
@@ -694,7 +699,6 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                                 download_metric.time - download_metric.time_to_first_bit,
                                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
-                            end="",
                         )
                 else:
                     if download_metric.abandon_to_quality is None:
@@ -708,7 +712,6 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                                 download_metric.time - download_metric.time_to_first_bit,
                                 get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc),
                             ),
-                            end="",
                         )
             if graph:
                 print(

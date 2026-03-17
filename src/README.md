@@ -208,8 +208,20 @@ python run_comparison.py -a bola,bolae,dynamic,dynamicdash,throughput -o compari
 
 ### With Seek Configuration
 ```bash
-python run_comparison.py -n network.json -m movie.json -a bola -sc seeks.json -o my_comparison.json
+python run_comparison.py -a bola -sc seeks.json -o my_comparison.json
 ```
+
+### With Prefetch + Seek (All ABR Algorithms)
+```bash
+python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+```
+#TODO: make sure download json include prefetched downloading information and seek time information.
+Make the rebuffer event only happen in user seeks case.
+change thresheld into 15s, make prefetched chunks more, user seeks to non-prefetched location.
+case 1: seek to prefetched location -> simulation has approved it decreased the rebuffering events.
+case 2: prefetched chunk every 10s, seeks has different distribution, seek forward instead of backward.
+
+This creates a `prefetch_comparison_results/` directory containing `comparison_bola.json`, `comparison_bolae.json`, `comparison_dynamic.json`, `comparison_dynamicdash.json`, `comparison_throughput.json`, and a `comparison_summary.json`.
 
 ### Batch Comparisons
 ```bash
@@ -301,13 +313,77 @@ With `buffer.py` (`MultiRegionBuffer`) you should typically see:
 
 ---
 
+## Generating Seek & Prefetch Configs
+
+`generate_configs.py` auto-generates `seeks.json` and `test_prefetch_config.json` by reading `movie.json` to determine segment count and duration. The prefetch segments are automatically aligned with seek destinations so that seeks land on pre-downloaded chunks.
+
+### Quick Start
+
+```bash
+python generate_configs.py
+```
+
+### Seek Patterns
+
+| Pattern | Description |
+|---------|-------------|
+| `random` (default) | Random seek times and destinations |
+| `uniform` | Evenly spaced across the movie timeline |
+| `forward` | Skip-ahead pattern (e.g. ad-skipping) |
+
+### Examples
+
+```bash
+# 5 uniformly-spaced seeks
+python generate_configs.py --num-seeks 5 --pattern uniform
+
+# Reproducible random seeks
+python generate_configs.py --seed 42
+
+# Forward-only seeks
+python generate_configs.py --pattern forward --num-seeks 4
+
+# Custom buffer threshold (ms)
+python generate_configs.py --buffer-threshold 15000
+
+# Only generate seeks (no prefetch config)
+python generate_configs.py --no-prefetch
+
+# Custom output paths
+python generate_configs.py -os my_seeks.json -op my_prefetch.json
+
+# Preview without writing files
+python generate_configs.py --dry-run
+```
+
+### Command Parameters
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `-m, --movie` | Movie manifest file | `movie.json` |
+| `-n, --num-seeks` | Number of seek events | `3` |
+| `-p, --pattern` | Seek pattern (`random`, `uniform`, `forward`) | `random` |
+| `--seed` | Random seed for reproducibility | *(none)* |
+| `--buffer-threshold` | Buffer level threshold in ms for prefetch | `20000` |
+| `--no-prefetch` | Skip prefetch config generation | *(off)* |
+| `-os, --output-seeks` | Output path for seeks config | `seeks.json` |
+| `-op, --output-prefetch` | Output path for prefetch config | `test_prefetch_config.json` |
+| `--dry-run` | Print to stdout without writing files | *(off)* |
+
+---
+
 ## Prefetch Comparison
 
 While the buffer-equivalence comparison above shows identical graphs for sequential downloads, the **prefetch comparison** demonstrates where dynamic buffering actually diverges — when seeks land on pre-downloaded chunks, avoiding rebuffering entirely.
 
 ### 1. Create a Prefetch Config
 
-The config lists which segments to prefetch and the buffer-level threshold that triggers prefetching:
+Generate configs automatically:
+```bash
+python generate_configs.py --seed 42
+```
+
+Or create manually — the config lists which segments to prefetch and the buffer-level threshold that triggers prefetching:
 
 ```json
 {
@@ -324,9 +400,17 @@ Save as e.g. `prefetch_config.json`.
 
 ### 2. Run the Comparison
 
+Single ABR algorithm:
 ```bash
-python run_comparison.py -sc seeks.json -pc prefetch_config.json -o prefetch_comparison_results.json
+python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a bola -o prefetch_comparison_results.json
 ```
+
+All ABR algorithms at once:
+```bash
+python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+```
+
+This creates a `prefetch_comparison_results/` directory with individual result files per algorithm (`comparison_bola.json`, `comparison_bolae.json`, etc.) and a `comparison_summary.json`.
 
 This runs `sabre.py` twice:
 - **Without buffer.py** — linear buffering, no prefetch, seeks clear the buffer
@@ -753,6 +837,7 @@ sabre/src/
 ├── test_dynamic_buffer_cases.py   # Dynamic buffer algorithm case tests
 ├── test_prefetch_config.json      # Fixture for PrefetchModule tests
 ├── test_simulation_regression.py  # Regression tests
+├── generate_configs.py            # Auto-generate seeks.json & test_prefetch_config.json
 ├── network_generator.py           # Generate network.json
 ├── generate_abr_comparison.py     # ABR comparison graphs
 ├── graph_generate.py              # Individual ABR graphs

@@ -1,6 +1,16 @@
 {
   "seeks": [
-    {"seek_when": 15, "seek_to": 18},
-    {"seek_when": 40, "seek_to": 43}
+    {
+      "seek_when": 500.9,
+      "seek_to": 365.9
+    },
+    {
+      "seek_when": 520.2,
+      "seek_to": 524.6
+    },
+    {
+      "seek_when": 554.4,
+      "seek_to": 485.6
+    }
   ]
 }
