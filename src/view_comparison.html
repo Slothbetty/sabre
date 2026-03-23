@@ -6,6 +6,7 @@
     <title>Buffer.py Comparison Viewer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js"></script>
     <style>
         * {
             margin: 0;
@@ -100,6 +101,13 @@
             color: #7f8c8d;
             font-size: 14px;
             text-transform: uppercase;
+            margin-bottom: 6px;
+        }
+
+        .summary-card .metric-desc {
+            color: #95a5a6;
+            font-size: 12px;
+            line-height: 1.4;
             margin-bottom: 10px;
         }
         
@@ -142,6 +150,11 @@
             position: relative;
             height: 400px;
         }
+        /* Taller area + room for bottom legend & angled ticks (summary dashboard bar charts) */
+        .chart-wrapper--summary {
+            height: 500px;
+            min-height: 400px;
+        }
         
         .error-message {
             background: #e74c3c;
@@ -181,6 +194,146 @@
         .prefetch-info strong {
             color: #2c3e50;
         }
+
+        .summary-dashboard {
+            margin-bottom: 20px;
+        }
+        .summary-dashboard h2 {
+            color: #2c3e50;
+            margin-bottom: 16px;
+        }
+        .summary-table-wrap {
+            background: white;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            padding: 20px;
+            margin-bottom: 20px;
+            overflow: visible;
+        }
+        /* Horizontal scroll only on inner wrapper — avoids overflow-y clipping last rows (browser quirk). */
+        .summary-table-scroll {
+            width: 100%;
+            overflow-x: auto;
+            overflow-y: visible;
+            -webkit-overflow-scrolling: touch;
+            padding-bottom: 8px;
+        }
+        .summary-table {
+            /* Let columns size to content — width:100% squashes many columns and causes overlap */
+            width: max-content;
+            min-width: 100%;
+            border-collapse: collapse;
+            font-size: 12px;
+            table-layout: auto;
+        }
+        .summary-table th, .summary-table td {
+            padding: 8px 10px;
+            text-align: right;
+            border-bottom: 1px solid #eee;
+            vertical-align: middle;
+            box-sizing: border-box;
+        }
+        .summary-table th {
+            background: #f8f9fa;
+            color: #7f8c8d;
+            font-size: 10px;
+            text-transform: uppercase;
+            letter-spacing: 0.02em;
+            line-height: 1.25;
+            white-space: normal;
+            word-break: break-word;
+            hyphens: auto;
+            min-width: 3.25rem;
+        }
+        /* Numeric / change columns: keep one line so digits don’t wrap oddly */
+        .summary-table td:not(:first-child) {
+            white-space: nowrap;
+        }
+        .summary-table-caption {
+            font-size: 12px;
+            color: #7f8c8d;
+            margin-top: 10px;
+        }
+        .summary-table th:first-child, .summary-table td:first-child {
+            text-align: left;
+            min-width: 10.5rem;
+            max-width: 15rem;
+            white-space: normal;
+            word-break: break-word;
+            vertical-align: top;
+            padding-right: 12px;
+        }
+        .summary-table tr.clickable-row {
+            cursor: pointer;
+            transition: background 0.15s;
+        }
+        .summary-table tr.clickable-row:hover {
+            background: #eaf7ee;
+        }
+        .summary-table tr.active-row {
+            background: #d5f5e3;
+        }
+        /* Summary table % change: green = improved vs baseline, red = worse, gray = no change */
+        .metric-better { color: #1e8449; font-weight: 600; }
+        .metric-worse  { color: #c0392b; font-weight: 600; }
+        .metric-same   { color: #7f8c8d; font-weight: 500; }
+        .badge {
+            display: inline-block;
+            padding: 2px 8px;
+            border-radius: 10px;
+            font-size: 11px;
+            font-weight: 600;
+            color: white;
+        }
+        .badge-hit  { background: #27ae60; }
+        .badge-miss { background: #e67e22; }
+        .back-btn {
+            margin-bottom: 16px;
+            background: #7f8c8d;
+        }
+        .back-btn:hover { background: #636e72; }
+
+        .seek-legend {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 14px;
+            margin-bottom: 18px;
+        }
+        .seek-legend-card {
+            background: #fff;
+            border-radius: 8px;
+            padding: 14px 16px;
+            border-left: 4px solid #bdc3c7;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+            font-size: 13px;
+            line-height: 1.45;
+        }
+        .seek-legend-card.miss { border-left-color: #e67e22; }
+        .seek-legend-card.hit  { border-left-color: #27ae60; }
+        .seek-legend-card h4 {
+            margin: 0 0 6px 0;
+            font-size: 14px;
+            color: #2c3e50;
+        }
+        .seek-legend-card code {
+            font-size: 11px;
+            background: #ecf0f1;
+            padding: 2px 6px;
+            border-radius: 3px;
+        }
+        .scenario-badge {
+            display: inline-block;
+            font-size: 11px;
+            font-weight: 600;
+            padding: 2px 8px;
+            border-radius: 4px;
+            margin-bottom: 4px;
+            background: #ecf0f1;
+            color: #2c3e50;
+        }
+        .scenario-badge.miss { background: #fdebd0; color: #a04000; }
+        .scenario-badge.hit  { background: #d5f5e3; color: #1e8449; }
+        .scenario-file { font-size: 11px; color: #95a5a6; }
     </style>
 </head>
 <body>
@@ -200,8 +353,44 @@
         
         <div id="errorMessage" class="error-message" style="display: none;"></div>
         <div id="loadingMessage" class="loading" style="display: none;">Loading data...</div>
-        
+
+        <div id="summaryDashboard" style="display: none;">
+            <div id="summaryConfigInfo" class="config-info"></div>
+            <div id="seekLegend"></div>
+            <div class="summary-dashboard">
+                <div class="summary-table-wrap">
+                    <h2>Cross-Comparison Summary</h2>
+                    <p style="color:#7f8c8d;font-size:13px;margin-bottom:14px;">
+                        Each row is one <strong>seek scenario</strong> (see cards above) &times; one <strong>ABR algorithm</strong>.
+                        <strong>Without</strong> = baseline without <code>buffer.py</code> (no dynamic buffering); <strong>with</strong> = same run with prefetch + dynamic buffer.
+                        <strong>Miss PF</strong> = seeks to non-prefetched segments (stress test where prefetch cannot help much).
+                        <strong>Hit PF</strong> = seeks aligned with prefetched segments (where dynamic buffering shines).
+                        Click a row for detailed charts.
+                    </p>
+                    <div class="summary-table-scroll">
+                        <table class="summary-table" id="summaryTable"></table>
+                    </div>
+                    <p class="summary-table-caption" id="summaryTableCaption"></p>
+                </div>
+                <div class="chart-container">
+                    <h2>Rebuffering Events Across All Runs</h2>
+                    <p style="color:#7f8c8d;font-size:12px;margin:-8px 0 12px 0;">X-axis: <strong>MP</strong> = Miss PF, <strong>HP</strong> = Hit PF, then ABR (e.g. <code>MP · bola</code>). Legend is below the chart to avoid overlapping bar values.</p>
+                    <div class="chart-wrapper chart-wrapper--summary">
+                        <canvas id="summaryRebufChart"></canvas>
+                    </div>
+                </div>
+                <div class="chart-container">
+                    <h2>Rebuffering Time Across All Runs</h2>
+                    <p style="color:#7f8c8d;font-size:12px;margin:-8px 0 12px 0;">Same groups as the events chart (MP/HP &times; each ABR).</p>
+                    <div class="chart-wrapper chart-wrapper--summary">
+                        <canvas id="summaryTimeChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
         <div id="content" style="display: none;">
+            <button id="backToSummary" class="back-btn" style="display:none;" onclick="backToSummary()">&larr; Back to Summary</button>
             <div id="configInfo" class="config-info"></div>
             <div id="prefetchInfo" class="prefetch-info" style="display: none;"></div>
             
@@ -239,7 +428,19 @@
     
     <script>
         let comparisonData = null;
+        let summaryData = null;
         let charts = {};
+        /** Detail (drill-down) chart keys only — must not destroy summary dashboard charts on row click */
+        const DETAIL_CHART_KEYS = ['rebuffer', 'buffer', 'quality', 'qualityDist'];
+
+        function destroyDetailChartsOnly() {
+            DETAIL_CHART_KEYS.forEach(function(key) {
+                if (charts[key]) {
+                    charts[key].destroy();
+                    delete charts[key];
+                }
+            });
+        }
         
         function showError(message) {
             const errorDiv = document.getElementById('errorMessage');
@@ -248,6 +449,101 @@
             setTimeout(() => {
                 errorDiv.style.display = 'none';
             }, 5000);
+        }
+
+        function isSummaryFormat(data) {
+            return data && data.results && data.algorithms && !data.without_buffer_py;
+        }
+
+        /**
+         * Map output folder stem (from run_comparison.py) to a clear UI label.
+         * Extend SEEK_SCENARIO_MAP when you add new seek JSON files.
+         */
+        const SEEK_SCENARIO_MAP = {
+            seeks: {
+                title: 'Seeks miss prefetch',
+                short: 'Miss PF',
+                file: 'seeks.json',
+                css: 'miss',
+                blurb: 'Seek targets are chosen so playback jumps to segments that are not in the prefetch list. Linear and dynamic buffering both miss the cache — expect little or no improvement from prefetch.'
+            },
+            seeks_prefetch_hit: {
+                title: 'Seeks hit prefetch',
+                short: 'Hit PF',
+                file: 'seeks_prefetch_hit.json',
+                css: 'hit',
+                blurb: 'Seek targets align with prefetched segments. Dynamic buffering can serve from disk without rebuffering; you should see fewer stalls vs. linear buffer.'
+            }
+        };
+
+        /**
+         * Build row order: every seek_config stem × algorithm, then any extra keys in results.
+         * Avoids missing rows when Object.keys order differs or JSON is hand-edited.
+         */
+        function orderedSummaryKeys(data) {
+            const results = data.results || {};
+            let algorithms = data.algorithms || [];
+            let stems = data.seek_configs || [];
+            if (!stems.length) {
+                const seen = new Set();
+                stems = [];
+                for (const k of Object.keys(results)) {
+                    const i = k.indexOf('/');
+                    if (i > 0) {
+                        const stem = k.slice(0, i);
+                        if (!seen.has(stem)) { seen.add(stem); stems.push(stem); }
+                    }
+                }
+            }
+            if (!algorithms.length) {
+                const seen = new Set();
+                algorithms = [];
+                for (const k of Object.keys(results)) {
+                    const i = k.indexOf('/');
+                    if (i > 0) {
+                        const abr = k.slice(i + 1);
+                        if (!seen.has(abr)) { seen.add(abr); algorithms.push(abr); }
+                    }
+                }
+            }
+            const ordered = [];
+            for (let s = 0; s < stems.length; s++) {
+                for (let a = 0; a < algorithms.length; a++) {
+                    const k = stems[s] + '/' + algorithms[a];
+                    if (results[k] !== undefined) ordered.push(k);
+                }
+            }
+            for (const k of Object.keys(results)) {
+                if (ordered.indexOf(k) === -1) ordered.push(k);
+            }
+            return ordered;
+        }
+
+        function seekScenarioFromKey(resultKey) {
+            const parts = resultKey.split('/');
+            const stem = parts.length > 1 ? parts[0] : '';
+            const abr = parts.length > 1 ? parts[1] : parts[0];
+            const known = SEEK_SCENARIO_MAP[stem];
+            if (known) {
+                return {
+                    stem: stem,
+                    abr: abr,
+                    title: known.title,
+                    short: known.short,
+                    file: known.file,
+                    css: known.css,
+                    blurb: known.blurb
+                };
+            }
+            return {
+                stem: stem,
+                abr: abr,
+                title: stem || resultKey,
+                short: stem || '?',
+                file: stem + '.json',
+                css: '',
+                blurb: 'Custom seek configuration.'
+            };
         }
 
         function hasPrefetchData() {
@@ -265,16 +561,17 @@
             if (sk.length === 0) return {};
             const out = {};
             sk.forEach((e, i) => {
+                const xVal = e.seek_when_s !== undefined ? e.seek_when_s : e.seek_to_s;
                 out['seek' + i] = {
                     type: 'line',
                     scaleID: 'x',
-                    value: e.seek_to_s,
+                    value: xVal,
                     borderColor: 'rgba(155, 89, 182, 0.7)',
                     borderWidth: 2,
                     borderDash: [6, 4],
                     label: {
                         display: true,
-                        content: 'Seek \u2192 seg ' + e.segment,
+                        content: 'Seek \u2192 seg ' + e.segment + ' (' + e.seek_to_s + 's)',
                         position: 'start',
                         backgroundColor: 'rgba(155, 89, 182, 0.8)',
                         color: '#fff',
@@ -283,6 +580,38 @@
                 };
             });
             return out;
+        }
+
+        function prefetchBandAnnotation() {
+            const pf = (comparisonData.with_buffer_py || {}).prefetch_events || [];
+            const timed = pf.filter(e => e.start_time !== undefined && e.end_time !== undefined);
+            if (timed.length === 0) return {};
+            const minT = Math.min(...timed.map(e => e.start_time)) / 1000;
+            const maxT = Math.max(...timed.map(e => e.end_time)) / 1000;
+            return {
+                prefetchBand: {
+                    type: 'box',
+                    xMin: minT,
+                    xMax: maxT,
+                    backgroundColor: 'rgba(46, 204, 113, 0.08)',
+                    borderColor: 'rgba(46, 204, 113, 0.4)',
+                    borderWidth: 1,
+                    borderDash: [4, 4],
+                    label: {
+                        display: true,
+                        content: pf.length + ' prefetches',
+                        position: { x: 'center', y: 'end' },
+                        backgroundColor: 'rgba(46, 204, 113, 0.85)',
+                        color: '#fff',
+                        font: { size: 10 },
+                        padding: 3
+                    }
+                }
+            };
+        }
+
+        function allAnnotations() {
+            return { ...seekAnnotations(), ...prefetchBandAnnotation() };
         }
         
         function loadFile() {
@@ -299,8 +628,15 @@
             const reader = new FileReader();
             reader.onload = function(e) {
                 try {
-                    comparisonData = JSON.parse(e.target.result);
-                    renderComparison();
+                    const parsed = JSON.parse(e.target.result);
+                    if (isSummaryFormat(parsed)) {
+                        summaryData = parsed;
+                        renderSummaryDashboard();
+                    } else {
+                        comparisonData = parsed;
+                        document.getElementById('summaryDashboard').style.display = 'none';
+                        renderComparison();
+                    }
                 } catch (error) {
                     showError('Error parsing JSON: ' + error.message);
                     document.getElementById('loadingMessage').style.display = 'none';
@@ -348,6 +684,257 @@
             renderComparison();
         }
         
+        function renderSummaryDashboard() {
+            document.getElementById('loadingMessage').style.display = 'none';
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('summaryDashboard').style.display = 'block';
+
+            const cfg = summaryData.config || {};
+            document.getElementById('summaryConfigInfo').innerHTML = `
+                <strong>Summary run:</strong>
+                Network <code>${cfg.network || 'N/A'}</code>,
+                Movie <code>${cfg.movie || 'N/A'}</code>,
+                Prefetch <code>${cfg.prefetch_config || 'N/A'}</code>,
+                ABR algorithms: <code>${(summaryData.algorithms || []).join(', ')}</code>
+            `;
+
+            const keys = orderedSummaryKeys(summaryData);
+            const cap = document.getElementById('summaryTableCaption');
+            if (cap) {
+                cap.textContent = keys.length + ' run' + (keys.length !== 1 ? 's' : '') +
+                    '. All Change columns: green = improved vs baseline, red = worse, gray = unchanged.';
+            }
+            const rows = keys.map(k => {
+                const r = summaryData.results[k];
+                const wo = (r.without_buffer_py || {}).summary || {};
+                const wi = (r.with_buffer_py || {}).summary || {};
+                const pf = ((r.with_buffer_py || {}).prefetch_events || []).length;
+                return { key: k, wo, wi, pf, config: r.config || {}, scenario: seekScenarioFromKey(k) };
+            });
+
+            const stemsSeen = [...new Set(rows.map(r => r.scenario.stem).filter(s => s))];
+            let legendHtml = '<div class="seek-legend">';
+            stemsSeen.forEach(function(stem) {
+                const m = SEEK_SCENARIO_MAP[stem];
+                if (m) {
+                    legendHtml += `
+                        <div class="seek-legend-card ${m.css}">
+                            <h4>${m.title}</h4>
+                            <div><code>${m.file}</code> <span style="color:#7f8c8d;">(folder: ${stem}/)</span></div>
+                            <p style="margin:8px 0 0 0;color:#555;">${m.blurb}</p>
+                        </div>`;
+                } else {
+                    legendHtml += `
+                        <div class="seek-legend-card">
+                            <h4>${stem}</h4>
+                            <p style="margin:6px 0 0 0;color:#555;">Custom seek scenario (see <code>${stem}.json</code>).</p>
+                        </div>`;
+                }
+            });
+            legendHtml += '</div>';
+            document.getElementById('seekLegend').innerHTML = legendHtml;
+
+            function pctChange(v0, v1) {
+                if (v0 === 0) return v1 === 0 ? '0%' : 'N/A';
+                return ((v1 - v0) / v0 * 100).toFixed(1) + '%';
+            }
+            /** lowerBetter: true = smaller value is better (rebuffer, play time); false = larger is better (utility) */
+            function metricChangeClass(v0, v1, lowerBetter) {
+                const eps = 1e-9;
+                if (Math.abs(Number(v0) - Number(v1)) <= eps) return 'metric-same';
+                const improved = lowerBetter ? (v1 < v0) : (v1 > v0);
+                return improved ? 'metric-better' : 'metric-worse';
+            }
+
+            let thtml = `<thead><tr>
+                <th>Seek scenario</th><th>ABR</th><th>Prefetches</th>
+                <th>Rebuf Events (without)</th><th>Rebuf Events (with)</th>
+                <th title="Percent change vs baseline; green = fewer events (better), red = more (worse)">Change</th>
+                <th>Rebuf Time (without)</th><th>Rebuf Time (with)</th>
+                <th title="Percent change vs baseline; green = less stall time (better), red = more (worse)">Change</th>
+                <th title="Fraction of session spent rebuffering (stall time / play time), baseline">Rebuf ratio (without)</th>
+                <th title="Fraction of session spent rebuffering with buffer.py">Rebuf ratio (with)</th>
+                <th title="Percent change vs baseline; green = lower ratio (better), red = higher (worse)">Change</th>
+                <th title="Played utility, baseline (no buffer.py)">Utility (without)</th>
+                <th title="Played utility with buffer.py">Utility (with)</th>
+                <th title="Percent change vs baseline; green = higher utility (better), red = lower (worse)">Change</th>
+                <th title="Wall-clock time to finish, baseline">Play time (without)</th>
+                <th title="Wall-clock time to finish with dynamic buffering">Play time (with)</th>
+                <th title="Percent change vs baseline; green = shorter session (better), red = longer (worse)">Change</th>
+            </tr></thead><tbody>`;
+            rows.forEach(r => {
+                const scen = r.scenario;
+                const escKey = r.key.replace(/\\/g, '\\\\').replace(/'/g, "\\'");
+                const rc0 = r.wo.rebuffer_count || 0;
+                const rc1 = r.wi.rebuffer_count || 0;
+                const rt0 = r.wo.total_rebuffer_time || 0;
+                const rt1 = r.wi.total_rebuffer_time || 0;
+                const rr0 = r.wo.rebuffer_ratio != null ? r.wo.rebuffer_ratio : 0;
+                const rr1 = r.wi.rebuffer_ratio != null ? r.wi.rebuffer_ratio : 0;
+                const util0 = r.wo.played_utility || 0;
+                const util1 = r.wi.played_utility || 0;
+                const pt0 = r.wo.total_play_time || 0;
+                const pt1 = r.wi.total_play_time || 0;
+                const badgeClass = scen.css ? ('scenario-badge ' + scen.css) : 'scenario-badge';
+                thtml += `<tr class="clickable-row" onclick="drillDown('${escKey}', this)">
+                    <td>
+                        <span class="${badgeClass}">${scen.short}</span><br>
+                        <strong>${scen.title}</strong><br>
+                        <span class="scenario-file">${scen.file}</span>
+                    </td>
+                    <td><strong>${scen.abr}</strong></td>
+                    <td>${r.pf}</td>
+                    <td>${rc0}</td><td>${rc1}</td>
+                    <td class="${metricChangeClass(rc0, rc1, true)}">${pctChange(rc0, rc1)}</td>
+                    <td>${rt0.toFixed(3)}s</td><td>${rt1.toFixed(3)}s</td>
+                    <td class="${metricChangeClass(rt0, rt1, true)}">${pctChange(rt0, rt1)}</td>
+                    <td>${(rr0 * 100).toFixed(3)}%</td><td>${(rr1 * 100).toFixed(3)}%</td>
+                    <td class="${metricChangeClass(rr0, rr1, true)}">${pctChange(rr0, rr1)}</td>
+                    <td>${util0.toFixed(1)}</td><td>${util1.toFixed(1)}</td>
+                    <td class="${metricChangeClass(util0, util1, false)}">${pctChange(util0, util1)}</td>
+                    <td>${pt0.toFixed(1)}s</td><td>${pt1.toFixed(1)}s</td>
+                    <td class="${metricChangeClass(pt0, pt1, true)}">${pctChange(pt0, pt1)}</td>
+                </tr>`;
+            });
+            thtml += '</tbody>';
+            document.getElementById('summaryTable').innerHTML = thtml;
+
+            Object.values(charts).forEach(c => { if (c) c.destroy(); });
+            charts = {};
+
+            // Defer chart creation so the browser lays out the now-visible container first
+            requestAnimationFrame(function() {
+                function compactSummaryXLabel(row) {
+                    const s = row.scenario;
+                    var pf = (s.short === 'Miss PF') ? 'MP' : (s.short === 'Hit PF') ? 'HP' : (s.short || s.stem || '?').replace(/\s+/g, '').slice(0, 6);
+                    return pf + ' \u00b7 ' + s.abr;
+                }
+                const chartLabels = rows.map(compactSummaryXLabel);
+                const colWithout = 'rgba(231, 76, 60, 0.7)';
+                const colWith = 'rgba(39, 174, 96, 0.7)';
+                const borderWithout = 'rgba(231, 76, 60, 1)';
+                const borderWith = 'rgba(39, 174, 96, 1)';
+
+                const dlOpts = {
+                    anchor: 'end',
+                    align: 'end',
+                    offset: 6,
+                    color: '#2c3e50',
+                    font: { weight: 'bold', size: 10 },
+                    clamp: true,
+                    clip: false
+                };
+
+                const summaryBarLayout = { padding: { top: 20, right: 8, bottom: 2, left: 6 } };
+                const summaryXScale = {
+                    grid: { offset: true },
+                    ticks: {
+                        maxRotation: 50,
+                        minRotation: 50,
+                        autoSkip: false,
+                        font: { size: 10, lineHeight: 1.2 },
+                        padding: 4,
+                        maxTicksLimit: 32
+                    }
+                };
+
+                charts.summaryRebuf = new Chart(
+                    document.getElementById('summaryRebufChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [
+                            { label: 'Without buffer.py',
+                              data: rows.map(r => r.wo.rebuffer_count || 0),
+                              backgroundColor: colWithout, borderColor: borderWithout, borderWidth: 1 },
+                            { label: 'With buffer.py + prefetch',
+                              data: rows.map(r => r.wi.rebuffer_count || 0),
+                              backgroundColor: colWith, borderColor: borderWith, borderWidth: 1 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: summaryBarLayout,
+                        datasets: {
+                            bar: { categoryPercentage: 0.78, barPercentage: 0.86 }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Rebuffer Events' } },
+                            x: summaryXScale
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                align: 'center',
+                                labels: { boxWidth: 14, padding: 14, font: { size: 12 } }
+                            },
+                            datalabels: Object.assign({}, dlOpts, {
+                                formatter: function(v) { return v % 1 === 0 ? v : v.toFixed(2); }
+                            })
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+
+                charts.summaryTime = new Chart(
+                    document.getElementById('summaryTimeChart'), {
+                    type: 'bar',
+                    data: {
+                        labels: chartLabels,
+                        datasets: [
+                            { label: 'Without buffer.py',
+                              data: rows.map(r => r.wo.total_rebuffer_time || 0),
+                              backgroundColor: colWithout, borderColor: borderWithout, borderWidth: 1 },
+                            { label: 'With buffer.py + prefetch',
+                              data: rows.map(r => r.wi.total_rebuffer_time || 0),
+                              backgroundColor: colWith, borderColor: borderWith, borderWidth: 1 }
+                        ]
+                    },
+                    options: {
+                        responsive: true,
+                        maintainAspectRatio: false,
+                        layout: summaryBarLayout,
+                        datasets: {
+                            bar: { categoryPercentage: 0.78, barPercentage: 0.86 }
+                        },
+                        scales: {
+                            y: { beginAtZero: true, title: { display: true, text: 'Rebuffer Time (s)' } },
+                            x: summaryXScale
+                        },
+                        plugins: {
+                            legend: {
+                                position: 'bottom',
+                                align: 'center',
+                                labels: { boxWidth: 14, padding: 14, font: { size: 12 } }
+                            },
+                            datalabels: Object.assign({}, dlOpts, {
+                                formatter: function(v) { return v.toFixed(2); }
+                            })
+                        }
+                    },
+                    plugins: [ChartDataLabels]
+                });
+            });
+        }
+
+        function drillDown(key, rowEl) {
+            if (!summaryData || !summaryData.results[key]) return;
+            comparisonData = summaryData.results[key];
+            document.querySelectorAll('.clickable-row').forEach(r => r.classList.remove('active-row'));
+            if (rowEl) rowEl.classList.add('active-row');
+            document.getElementById('content').style.display = 'block';
+            document.getElementById('backToSummary').style.display = '';
+            renderComparison();
+            document.getElementById('content').scrollIntoView({ behavior: 'smooth' });
+        }
+
+        function backToSummary() {
+            document.getElementById('content').style.display = 'none';
+            document.getElementById('backToSummary').style.display = 'none';
+            document.getElementById('summaryDashboard').scrollIntoView({ behavior: 'smooth' });
+        }
+
         function renderComparison() {
             document.getElementById('loadingMessage').style.display = 'none';
             document.getElementById('content').style.display = 'block';
@@ -358,8 +945,15 @@
             renderCharts();
         }
         
+        function seekScenarioFromSeekFile(seekPath) {
+            if (!seekPath) return null;
+            const base = seekPath.replace(/\\/g, '/').split('/').pop().replace(/\.json$/i, '');
+            return SEEK_SCENARIO_MAP[base] || null;
+        }
+
         function renderConfigInfo() {
             const config = comparisonData.config || {};
+            const scen = seekScenarioFromSeekFile(config.seek_config);
             let html = `
                 <strong>Configuration:</strong> 
                 Network: ${config.network || 'N/A'}, 
@@ -368,6 +962,9 @@
                 ${config.seek_config ? `, Seeks: ${config.seek_config}` : ''}
                 ${config.prefetch_config ? `, Prefetch: ${config.prefetch_config}` : ''}
             `;
+            if (scen) {
+                html += `<br><strong>Seek scenario:</strong> ${scen.title} — ${scen.blurb}`;
+            }
             document.getElementById('configInfo').innerHTML = html;
         }
 
@@ -380,11 +977,26 @@
             const w = comparisonData.with_buffer_py || {};
             const pf = w.prefetch_events || [];
             const sk = w.seek_events || [];
-            const pfSegs = pf.map(e => e.segment).join(', ') || 'none';
-            const skSegs = sk.map(e => `seg ${e.segment} (${e.seek_to_s}s)`).join(', ') || 'none';
+
+            const pfDetails = pf.map(e => {
+                let s = `seg ${e.segment} (q${e.quality})`;
+                if (e.start_time !== undefined && e.end_time !== undefined) {
+                    s += ` [${(e.start_time / 1000).toFixed(1)}s\u2013${(e.end_time / 1000).toFixed(1)}s]`;
+                }
+                return s;
+            }).join(', ') || 'none';
+
+            const skDetails = sk.map(e => {
+                let s = `seg ${e.segment} (${e.seek_to_s}s)`;
+                if (e.seek_when_s !== undefined) {
+                    s = `at ${e.seek_when_s.toFixed(1)}s \u2192 ${s}`;
+                }
+                return s;
+            }).join(', ') || 'none';
+
             el.innerHTML =
-                `<strong>Prefetched segments:</strong> ${pfSegs} (${pf.length} total)<br>
-                 <strong>Seek events:</strong> ${skSegs} (${sk.length} total)`;
+                `<strong>Prefetch downloads:</strong> ${pfDetails} (${pf.length} total)<br>
+                 <strong>Seek events:</strong> ${skDetails} (${sk.length} total)`;
             el.style.display = 'block';
         }
         
@@ -393,11 +1005,16 @@
             const with_ = comparisonData.with_buffer_py.summary || {};
             
             const metrics = [
-                { label: 'Total Rebuffering Time', key: 'total_rebuffer_time', unit: 's', lowerIsBetter: true },
-                { label: 'Rebuffering Events', key: 'rebuffer_count', unit: '', lowerIsBetter: true },
-                { label: 'Played Utility', key: 'played_utility', unit: '', lowerIsBetter: false },
-                { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true },
-                { label: 'Total Play Time', key: 'total_play_time', unit: 's', lowerIsBetter: false }
+                { label: 'Total Rebuffering Time', key: 'total_rebuffer_time', unit: 's', lowerIsBetter: true,
+                  desc: 'Cumulative time the player was stalled waiting for data. Lower means smoother playback.' },
+                { label: 'Rebuffering Events', key: 'rebuffer_count', unit: '', lowerIsBetter: true,
+                  desc: 'Number of times playback froze to wait for buffering. Each event is a visible stall the user experiences.' },
+                { label: 'Played Utility', key: 'played_utility', unit: '', lowerIsBetter: false,
+                  desc: 'Sum of per-segment quality scores over the session. Higher means the player selected better quality more often.' },
+                { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true,
+                  desc: 'Rebuffering time divided by total play time. Measures what fraction of the session was spent stalled.' },
+                { label: 'Total Play Time', key: 'total_play_time', unit: 's', lowerIsBetter: false,
+                  desc: 'Total wall-clock duration of the playback session including any rebuffering delays.' }
             ];
             
             const cardsHtml = metrics.map(metric => {
@@ -419,6 +1036,7 @@
                 return `
                     <div class="summary-card">
                         <h3>${metric.label}</h3>
+                        <div class="metric-desc">${metric.desc}</div>
                         <div class="value">${valWith.toFixed(2)}${metric.unit}</div>
                         <div class="${comparisonClass}">
                             Without: ${valWithout.toFixed(2)}${metric.unit}<br>
@@ -431,17 +1049,32 @@
             document.getElementById('summaryCards').innerHTML = cardsHtml;
         }
         
+        function toXY(timePoints, values) {
+            return (timePoints || []).map((t, i) => ({ x: t, y: (values || [])[i] }));
+        }
+
+        function findRebufferPoints(timePoints, bufferLevels, threshold) {
+            const pts = [];
+            const tp = timePoints || [];
+            const bl = bufferLevels || [];
+            for (let i = 0; i < tp.length; i++) {
+                if (bl[i] !== undefined && bl[i] <= threshold) {
+                    pts.push({ x: tp[i], y: bl[i] });
+                }
+            }
+            return pts;
+        }
+
         function renderCharts() {
             const without = comparisonData.without_buffer_py;
             const with_ = comparisonData.with_buffer_py;
             const label = withLabel();
-            const annotations = seekAnnotations();
-            
-            Object.values(charts).forEach(chart => {
-                if (chart) chart.destroy();
-            });
-            charts = {};
-            
+            const annotations = allAnnotations();
+            const pf = (with_.prefetch_events || []).filter(e => e.end_time !== undefined);
+
+            // Only tear down per-run charts — keep summaryRebuf / summaryTime alive (same page as summary table)
+            destroyDetailChartsOnly();
+
             // Rebuffering comparison chart
             const rebufferCtx = document.getElementById('rebufferChart').getContext('2d');
             charts.rebuffer = new Chart(rebufferCtx, {
@@ -488,39 +1121,100 @@
                                     return context.dataset.label + ': ' + context.parsed.y.toFixed(2);
                                 }
                             }
+                        },
+                        datalabels: {
+                            anchor: 'end',
+                            align: 'end',
+                            color: '#2c3e50',
+                            font: { weight: 'bold', size: 13 },
+                            formatter: function(value) {
+                                return value % 1 === 0 ? value : value.toFixed(2);
+                            }
                         }
                     }
-                }
+                },
+                plugins: [ChartDataLabels]
             });
-            
-            // Buffer level over time
+
+            // Buffer level over time (linear x-axis for precise annotation placement)
             const bufferCtx = document.getElementById('bufferChart').getContext('2d');
             const withoutTS = without.time_series || {};
             const withTS = with_.time_series || {};
-            
+
+            const rebufThreshold = 1.0;
+            const rebufWithout = findRebufferPoints(withoutTS.time_points, withoutTS.buffer_levels, rebufThreshold);
+            const rebufWith = findRebufferPoints(withTS.time_points, withTS.buffer_levels, rebufThreshold);
+
+            const bufferDatasets = [
+                {
+                    label: 'Without buffer.py',
+                    data: toXY(withoutTS.time_points, withoutTS.buffer_levels),
+                    borderColor: 'rgba(231, 76, 60, 0.7)',
+                    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+                    borderDash: [6, 3],
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 1.5
+                },
+                {
+                    label: label,
+                    data: toXY(withTS.time_points, withTS.buffer_levels),
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    backgroundColor: 'rgba(39, 174, 96, 0.08)',
+                    borderWidth: 2.5,
+                    tension: 0.1,
+                    pointRadius: 1.5
+                }
+            ];
+            if (rebufWithout.length > 0) {
+                bufferDatasets.push({
+                    label: 'Rebuffer (without)',
+                    data: rebufWithout,
+                    type: 'scatter',
+                    pointStyle: 'crossRot',
+                    pointRadius: 8,
+                    pointHoverRadius: 11,
+                    pointBackgroundColor: 'rgba(231, 76, 60, 1)',
+                    pointBorderColor: 'rgba(231, 76, 60, 1)',
+                    pointBorderWidth: 2.5,
+                    showLine: false
+                });
+            }
+            if (rebufWith.length > 0) {
+                bufferDatasets.push({
+                    label: 'Rebuffer (with)',
+                    data: rebufWith,
+                    type: 'scatter',
+                    pointStyle: 'crossRot',
+                    pointRadius: 8,
+                    pointHoverRadius: 11,
+                    pointBackgroundColor: 'rgba(243, 156, 18, 1)',
+                    pointBorderColor: 'rgba(243, 156, 18, 1)',
+                    pointBorderWidth: 2.5,
+                    showLine: false
+                });
+            }
+            if (pf.length > 0) {
+                bufferDatasets.push({
+                    label: 'Prefetch download',
+                    data: pf.map(e => ({
+                        x: e.end_time / 1000,
+                        y: (e.buffer_level_after !== undefined ? e.buffer_level_after : e.buffer_level) / 1000
+                    })),
+                    type: 'scatter',
+                    pointStyle: 'triangle',
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: 'rgba(46, 204, 113, 0.9)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1.5,
+                    showLine: false
+                });
+            }
+
             charts.buffer = new Chart(bufferCtx, {
                 type: 'line',
-                data: {
-                    labels: withoutTS.time_points || withTS.time_points || [],
-                    datasets: [
-                        {
-                            label: 'Without buffer.py',
-                            data: withoutTS.buffer_levels || [],
-                            borderColor: 'rgba(231, 76, 60, 1)',
-                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                            tension: 0.1,
-                            pointRadius: 2
-                        },
-                        {
-                            label: label,
-                            data: withTS.buffer_levels || [],
-                            borderColor: 'rgba(39, 174, 96, 1)',
-                            backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                            tension: 0.1,
-                            pointRadius: 2
-                        }
-                    ]
-                },
+                data: { datasets: bufferDatasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -530,43 +1224,75 @@
                             title: { display: true, text: 'Buffer Level (seconds)' }
                         },
                         x: {
-                            title: { display: true, text: 'Time (seconds)' }
+                            type: 'linear',
+                            title: { display: true, text: 'Playback Time (seconds)' }
                         }
                     },
                     plugins: {
                         legend: { display: true, position: 'top' },
-                        annotation: { annotations }
+                        annotation: { annotations },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.dataset.label === 'Prefetch download') {
+                                        const e = pf[ctx.dataIndex];
+                                        return `Prefetch seg ${e.segment} (q${e.quality}) at ${ctx.parsed.x.toFixed(1)}s`;
+                                    }
+                                    if (ctx.dataset.label && ctx.dataset.label.startsWith('Rebuffer')) {
+                                        return ctx.dataset.label + ' at ' + ctx.parsed.x.toFixed(1) + 's (buf=' + ctx.parsed.y.toFixed(2) + 's)';
+                                    }
+                                    return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's';
+                                }
+                            }
+                        }
                     }
                 }
             });
-            
-            // Quality over time
+
+            // Quality over time (linear x-axis)
             const qualityCtx = document.getElementById('qualityChart').getContext('2d');
+
+            const qualityDatasets = [
+                {
+                    label: 'Without buffer.py',
+                    data: toXY(withoutTS.time_points, withoutTS.qualities),
+                    borderColor: 'rgba(231, 76, 60, 0.7)',
+                    backgroundColor: 'rgba(231, 76, 60, 0.05)',
+                    borderDash: [6, 3],
+                    borderWidth: 2,
+                    tension: 0.1,
+                    pointRadius: 1.5,
+                    stepped: 'after'
+                },
+                {
+                    label: label,
+                    data: toXY(withTS.time_points, withTS.qualities),
+                    borderColor: 'rgba(39, 174, 96, 1)',
+                    backgroundColor: 'rgba(39, 174, 96, 0.08)',
+                    borderWidth: 2.5,
+                    tension: 0.1,
+                    pointRadius: 1.5,
+                    stepped: 'after'
+                }
+            ];
+            if (pf.length > 0) {
+                qualityDatasets.push({
+                    label: 'Prefetch download',
+                    data: pf.map(e => ({ x: e.end_time / 1000, y: e.quality })),
+                    type: 'scatter',
+                    pointStyle: 'triangle',
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: 'rgba(46, 204, 113, 0.9)',
+                    pointBorderColor: '#fff',
+                    pointBorderWidth: 1.5,
+                    showLine: false
+                });
+            }
+
             charts.quality = new Chart(qualityCtx, {
                 type: 'line',
-                data: {
-                    labels: withoutTS.time_points || withTS.time_points || [],
-                    datasets: [
-                        {
-                            label: 'Without buffer.py',
-                            data: withoutTS.qualities || [],
-                            borderColor: 'rgba(231, 76, 60, 1)',
-                            backgroundColor: 'rgba(231, 76, 60, 0.1)',
-                            tension: 0.1,
-                            pointRadius: 2,
-                            stepped: 'after'
-                        },
-                        {
-                            label: label,
-                            data: withTS.qualities || [],
-                            borderColor: 'rgba(39, 174, 96, 1)',
-                            backgroundColor: 'rgba(39, 174, 96, 0.1)',
-                            tension: 0.1,
-                            pointRadius: 2,
-                            stepped: 'after'
-                        }
-                    ]
-                },
+                data: { datasets: qualityDatasets },
                 options: {
                     responsive: true,
                     maintainAspectRatio: false,
@@ -576,22 +1302,34 @@
                             title: { display: true, text: 'Quality Level' }
                         },
                         x: {
-                            title: { display: true, text: 'Time (seconds)' }
+                            type: 'linear',
+                            title: { display: true, text: 'Playback Time (seconds)' }
                         }
                     },
                     plugins: {
                         legend: { display: true, position: 'top' },
-                        annotation: { annotations }
+                        annotation: { annotations },
+                        tooltip: {
+                            callbacks: {
+                                label: function(ctx) {
+                                    if (ctx.dataset.label === 'Prefetch download') {
+                                        const e = pf[ctx.dataIndex];
+                                        return `Prefetch seg ${e.segment} (q${e.quality}) at ${ctx.parsed.x.toFixed(1)}s`;
+                                    }
+                                    return ctx.dataset.label + ': quality ' + ctx.parsed.y;
+                                }
+                            }
+                        }
                     }
                 }
             });
-            
+
             // Quality distribution
             const qualityDistCtx = document.getElementById('qualityDistChart').getContext('2d');
             const qualityDistWithout = calculateQualityDistribution(withoutTS.qualities || []);
             const qualityDistWith = calculateQualityDistribution(withTS.qualities || []);
             const allQualities = [...new Set([...Object.keys(qualityDistWithout), ...Object.keys(qualityDistWith)])].map(Number).sort((a, b) => a - b);
-            
+
             charts.qualityDist = new Chart(qualityDistCtx, {
                 type: 'bar',
                 data: {

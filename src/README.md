@@ -21,12 +21,13 @@ This guide is split into two parts:
 7. [Running Buffer Comparisons](#running-buffer-comparisons)
 8. [Viewing Results](#viewing-results)
 9. [Understanding Results](#understanding-results)
-10. [Prefetch Comparison](#prefetch-comparison)
-11. [Testing](#testing)
-12. [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
-13. [Technical Reference](#technical-reference)
-14. [Advanced Usage](#advanced-usage)
-15. [Troubleshooting](#troubleshooting)
+10. [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs)
+11. [Prefetch Comparison Workflow](#prefetch-comparison-workflow)
+12. [Testing](#testing)
+13. [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
+14. [Technical Reference](#technical-reference)
+15. [Advanced Usage](#advanced-usage)
+16. [Troubleshooting](#troubleshooting)
 
 ---
 
@@ -215,13 +216,21 @@ python run_comparison.py -a bola -sc seeks.json -o my_comparison.json
 ```bash
 python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
 ```
-#TODO: make sure download json include prefetched downloading information and seek time information.
-Make the rebuffer event only happen in user seeks case.
-change thresheld into 15s, make prefetched chunks more, user seeks to non-prefetched location.
-case 1: seek to prefetched location -> simulation has approved it decreased the rebuffering events.
-case 2: prefetched chunk every 10s, seeks has different distribution, seek forward instead of backward.
 
-This creates a `prefetch_comparison_results/` directory containing `comparison_bola.json`, `comparison_bolae.json`, `comparison_dynamic.json`, `comparison_dynamicdash.json`, `comparison_throughput.json`, and a `comparison_summary.json`.
+This creates `prefetch_comparison_results/comparison_<abr>.json` for each algorithm plus `comparison_summary.json`.
+
+### Multiple seek configs (comma-separated `-sc`)
+
+Run the same ABR sweep against more than one `seeks*.json` in one go — results are grouped in subfolders named after each file’s stem (e.g. `seeks/`, `seeks_prefetch_hit/`):
+
+```bash
+python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+```
+
+- **`seeks/`** — from `seeks.json` (example: seeks that *miss* prefetched segments; prefetch rarely improves rebuffering).
+- **`seeks_prefetch_hit/`** — from `seeks_prefetch_hit.json` (example: seeks aligned with prefetch; dynamic buffering can reduce stalls).
+
+Load `prefetch_comparison_results/comparison_summary.json` in `view_comparison.html` for a cross-run table and charts; the viewer explains these scenarios with short labels (**Miss PF** / **Hit PF**).
 
 ### Batch Comparisons
 ```bash
@@ -237,39 +246,51 @@ done
 | `-n, --network` | Network trace file | `network.json` |
 | `-m, --movie` | Movie manifest file | `movie.json` |
 | `-a, --abr` | ABR algorithm(s) — single name, comma-separated list, or `all` | `bola` |
-| `-sc, --seek-config` | Seek configuration file | *(none)* |
+| `-sc, --seek-config` | Seek file(s) — one path, or comma-separated list (each stem gets a subfolder under `-o` when combined with multi-ABR or multi-seek) | *(none)* |
+| `-pc, --prefetch-config` | Prefetch JSON (only used with `buffer.py` / prefetch path) | *(none)* |
 | `-nm, --network-multiplier` | Network multiplier | `1.0` |
-| `-o, --output` | Output JSON file | `comparison_results.json` |
+| `-o, --output` | Output JSON file (single run) **or** output **directory** (multiple ABRs and/or multiple `-sc` entries) | `comparison_results.json` |
+
+When **multiple** ABR algorithms or **multiple** seek configs are used, `-o` must be a directory name; the tool writes `comparison_<abr>.json` files under it (and `comparison_summary.json` at the top level). For a single ABR and a single seek config, `-o` is a single JSON file path.
 
 ---
 
 ## Viewing Results
 
-1. **Start the web server:**
+1. **Start the web server** (from the directory that contains `view_comparison.html`, usually `src/`):
 
 ```bash
 python serve_viewer.py
 ```
 
-2. Browser opens automatically to `http://localhost:8000/view_comparison.html`
-3. Click **"Load Comparison Data"** and select your JSON file.
+2. Open the viewer (browser may open automatically): `http://localhost:8000/view_comparison.html`
+3. Click **Load Comparison Data** and pick a JSON file.
 
-### Summary Cards
+### Single-run comparison JSON
 
-- **Total Rebuffering Time** — improvement percentage
-- **Rebuffering Events** — count comparison
-- **Played Utility** — quality metric comparison
-- **Rebuffer Ratio** — efficiency comparison
-- **Total Play Time** — duration comparison
+Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json` or `comparison_results.json`.
 
-### Charts
+- **Summary cards** — total rebuffering time/events, utility, rebuffer ratio, total play time (with improvement percentages where applicable)
+- **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band when data is present); quality over time; quality distribution
+- **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows a short summary and annotations on the time-series charts
 
-1. **Rebuffering Comparison** — bar chart of total rebuffering time and event count
-2. **Buffer Level Over Time** — line chart; two traces (with / without `buffer.py`)
-3. **Quality Over Time** — stepped line chart of quality decisions
-4. **Quality Distribution** — bar chart of time spent at each quality level
+### Multi-run summary (`comparison_summary.json`)
 
-### Example Output
+When you run a **batch** comparison (multiple ABRs and/or multiple `-sc` seek configs), open the generated **`comparison_summary.json`** (e.g. `prefetch_comparison_results/comparison_summary.json`). The viewer shows:
+
+- **Cross-Comparison Summary** — sortable-style table: rows are **seek scenario × ABR** (e.g. `seeks/bola`, `seeks_prefetch_hit/throughput`). Columns include rebuffer events/time, **rebuffer ratio**, utility and play time **without vs with** `buffer.py`, and **Change** columns (green = improved vs baseline, red = worse, gray = unchanged).
+- **Scenario legend** — explains **Miss PF** / **Hit PF** and which seek JSON each row corresponds to.
+- **Summary bar charts** — **Rebuffering Events** and **Rebuffering Time** across all runs (compact axis labels **MP** / **HP** = Miss / Hit prefetch scenario; legend below the chart to avoid overlapping values).
+- **Row click (drill-down)** — click a row to scroll to the **per-run** detail charts (same as a single-run file). The summary table and summary bar charts **stay visible** above; only the detail charts refresh.
+
+### Detail charts (single-run or drill-down)
+
+1. **Rebuffering Comparison** — bar chart of total rebuffering time and event count  
+2. **Buffer Level Over Time** — line chart; two traces (with / without `buffer.py`)  
+3. **Quality Over Time** — stepped line chart of quality decisions  
+4. **Quality Distribution** — bar chart of time spent at each quality level  
+
+### Example `run_comparison.py` console output
 
 ```
 ✓ Results saved to comparison_results.json
@@ -289,6 +310,12 @@ Open view_comparison.html in your browser and load comparison_results.json to se
 ---
 
 ## Understanding Results
+
+### Single-run and summary table
+
+In the **detail** view and on **summary** cards, green / red indicators follow the usual QoE reading: less rebuffering is better, higher utility is better, lower rebuffer ratio is better.
+
+In the **Cross-Comparison Summary** table (when you load `comparison_summary.json`), each **Change** column is colored by **improvement vs the baseline (without `buffer.py`)**: **green** = improved for that metric, **red** = worse, **gray** = unchanged. (For example, utility uses “higher is better”; rebuffer count, rebuffer time, rebuffer ratio, and play time use “lower is better” where applicable.)
 
 ### Positive Indicators (Green)
 - **Lower rebuffering time/events** — `MultiRegionBuffer` preserves segments after seeks
@@ -315,44 +342,23 @@ With `buffer.py` (`MultiRegionBuffer`) you should typically see:
 
 ## Generating Seek & Prefetch Configs
 
-`generate_configs.py` auto-generates `seeks.json` and `test_prefetch_config.json` by reading `movie.json` to determine segment count and duration. The prefetch segments are automatically aligned with seek destinations so that seeks land on pre-downloaded chunks.
+`generate_configs.py` reads `movie.json` and writes three files for **prefetch hit vs miss** comparisons:
 
-### Quick Start
+| File | Role |
+|------|------|
+| `test_prefetch_config.json` | Spaced prefetch segment list + buffer threshold |
+| `seeks_prefetch_hit.json` | Seeks whose targets land on prefetched segments |
+| `seeks.json` | Same `seek_when` schedule; targets **off** the prefetch list |
 
 ```bash
 python generate_configs.py
 ```
 
-### Seek Patterns
-
-| Pattern | Description |
-|---------|-------------|
-| `random` (default) | Random seek times and destinations |
-| `uniform` | Evenly spaced across the movie timeline |
-| `forward` | Skip-ahead pattern (e.g. ad-skipping) |
-
-### Examples
+```bash
+python generate_configs.py --num-seeks 6 --prefetch-count 8 --buffer-threshold 15000
+```
 
 ```bash
-# 5 uniformly-spaced seeks
-python generate_configs.py --num-seeks 5 --pattern uniform
-
-# Reproducible random seeks
-python generate_configs.py --seed 42
-
-# Forward-only seeks
-python generate_configs.py --pattern forward --num-seeks 4
-
-# Custom buffer threshold (ms)
-python generate_configs.py --buffer-threshold 15000
-
-# Only generate seeks (no prefetch config)
-python generate_configs.py --no-prefetch
-
-# Custom output paths
-python generate_configs.py -os my_seeks.json -op my_prefetch.json
-
-# Preview without writing files
 python generate_configs.py --dry-run
 ```
 
@@ -361,86 +367,48 @@ python generate_configs.py --dry-run
 | Flag | Description | Default |
 |------|-------------|---------|
 | `-m, --movie` | Movie manifest file | `movie.json` |
-| `-n, --num-seeks` | Number of seek events | `3` |
-| `-p, --pattern` | Seek pattern (`random`, `uniform`, `forward`) | `random` |
-| `--seed` | Random seed for reproducibility | *(none)* |
-| `--buffer-threshold` | Buffer level threshold in ms for prefetch | `20000` |
-| `--no-prefetch` | Skip prefetch config generation | *(off)* |
-| `-os, --output-seeks` | Output path for seeks config | `seeks.json` |
+| `-n, --num-seeks` | Number of seek events per scenario | `6` |
+| `--prefetch-count` | Number of prefetch segments | `8` |
+| `--buffer-threshold` | Buffer level threshold in ms for prefetch | `15000` |
+| `--output-prefetch-hit` | Seek file for prefetch-hit scenario | `seeks_prefetch_hit.json` |
+| `--output-seeks-miss` | Seek file for prefetch-miss scenario | `seeks.json` |
 | `-op, --output-prefetch` | Output path for prefetch config | `test_prefetch_config.json` |
-| `--dry-run` | Print to stdout without writing files | *(off)* |
+| `--dry-run` | Print JSON to stdout; do not write files | *(off)* |
 
 ---
 
-## Prefetch Comparison
+## Prefetch Comparison Workflow
 
-While the buffer-equivalence comparison above shows identical graphs for sequential downloads, the **prefetch comparison** demonstrates where dynamic buffering actually diverges — when seeks land on pre-downloaded chunks, avoiding rebuffering entirely.
+The **prefetch comparison** shows where dynamic buffering diverges from the linear baseline: when seeks land on pre-downloaded segments, stalls can be reduced or avoided. Each run still executes **two** simulations — **without** `buffer.py` (no prefetch) and **with** `buffer.py` + prefetch (when `-pc` is set).
 
-### 1. Create a Prefetch Config
+### 1. Create seek + prefetch files
 
-Generate configs automatically:
-```bash
-python generate_configs.py --seed 42
-```
+Use [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs) (`generate_configs.py`) **or** write a prefetch JSON yourself (`buffer_level_threshold` + `prefetch` list of `{ "segment": n }`).
 
-Or create manually — the config lists which segments to prefetch and the buffer-level threshold that triggers prefetching:
+### 2. Run `run_comparison.py`
 
-```json
-{
-  "buffer_level_threshold": 20000,
-  "prefetch": [
-    {"segment": 5},
-    {"segment": 10},
-    {"segment": 15}
-  ]
-}
-```
+You need **`-sc`** (seek file) and **`-pc`** (prefetch file) for prefetch runs.
 
-Save as e.g. `prefetch_config.json`.
+- **One ABR, one seek file** — `-o` is a **single JSON file**:
+  ```bash
+  python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a bola -o prefetch_bola.json
+  ```
 
-### 2. Run the Comparison
+- **All ABR algorithms** — `-o` is a **directory**; results are `comparison_<abr>.json` inside it:
+  ```bash
+  python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+  ```
 
-Single ABR algorithm:
-```bash
-python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a bola -o prefetch_comparison_results.json
-```
+- **Two seek scenarios** (miss vs hit prefetch), **all ABRs** — same pattern as **Multiple seek configs (comma-separated `-sc`)** under [Running Buffer Comparisons](#running-buffer-comparisons); produces `seeks/comparison_*.json`, `seeks_prefetch_hit/comparison_*.json`, and **`comparison_summary.json`** under the output directory:
+  ```bash
+  python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+  ```
 
-All ABR algorithms at once:
-```bash
-python run_comparison.py -sc seeks.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
-```
+See [Command Parameters](#running-buffer-comparisons) under **Running Buffer Comparisons** for full flags (`-n`, `-m`, `-pc`, `-nm`, `-o`, etc.).
 
-This creates a `prefetch_comparison_results/` directory with individual result files per algorithm (`comparison_bola.json`, `comparison_bolae.json`, etc.) and a `comparison_summary.json`.
+### 3. View results
 
-This runs `sabre.py` twice:
-- **Without buffer.py** — linear buffering, no prefetch, seeks clear the buffer
-- **With buffer.py + prefetch** — dynamic buffering with prefetch enabled, seeks to pre-downloaded chunks avoid rebuffering
-
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-n, --network` | Network trace file | `network.json` |
-| `-m, --movie` | Movie manifest file | `movie.json` |
-| `-a, --abr` | ABR algorithm | `bola` |
-| `-sc, --seek-config` | Seek config file (required) | — |
-| `-pc, --prefetch-config` | Prefetch JSON config (required) | — |
-| `-nm, --network-multiplier` | Network multiplier | `1.0` |
-| `-o, --output` | Output JSON file | `prefetch_comparison_results.json` |
-
-### 3. View in Browser
-
-```bash
-python serve_viewer.py
-```
-
-Then open `http://localhost:8000/view_comparison.html` and load the JSON file. The viewer auto-detects prefetch/seek data and shows seek markers and a prefetch info panel when present.
-
-The viewer shows:
-- **Summary cards** — rebuffering time/events, utility, play time (with improvement percentages)
-- **Rebuffering bar chart** — side-by-side comparison
-- **Buffer level over time** — with vertical seek markers so you can see where prefetch avoids the buffer-level drop
-- **Quality over time** — stepped line chart with seek markers
-- **Quality distribution** — percentage of time at each quality level
-- **Prefetch & seek info** — which segments were prefetched and where seeks occurred
+Use **`serve_viewer.py`** and load either a **single** comparison JSON or **`comparison_summary.json`** — see [Viewing Results](#viewing-results).
 
 ---
 
@@ -787,17 +755,14 @@ The dynamic buffering implementation maintains backward compatibility:
 
 ### Custom Metrics
 
-Modify `run_comparison.py`:
-1. Add parsing logic in `parse_simulation_output()`
-2. Add metric to summary dictionary
-3. Update HTML to display new metric
+Modify `run_comparison.py` to capture additional fields from `sabre.py` output, merge them into the saved JSON (`without_buffer_py` / `with_buffer_py` summaries), and extend `view_comparison.html` (summary table row builder and/or detail cards) to display them.
 
-### Extending Charts
+### Extending the viewer
 
-Add new visualizations:
-1. Add chart container in `view_comparison.html`
-2. Create Chart.js configuration
-3. Add data extraction logic
+`view_comparison.html` holds both the **summary dashboard** (for `comparison_summary.json`) and the **detail** charts (single-run JSON or drill-down). When adding Chart.js views:
+
+1. Prefer **separate** chart instances for summary vs detail (the detail path must not destroy summary charts — see `destroyDetailChartsOnly()` vs full teardown in `renderSummaryDashboard()`).
+2. Add any new DOM under the correct section (`#summaryDashboard` vs `#content`).
 
 ---
 
@@ -820,6 +785,9 @@ Add new visualizations:
 - Check browser console for JavaScript errors
 - Verify Chart.js library loaded (Network tab)
 
+**Summary bar charts disappear after clicking a table row:**
+- Fixed in current `view_comparison.html`: drill-down only destroys **detail** chart instances, not the summary dashboard charts. Use an up-to-date viewer; hard-refresh the page (`Ctrl+F5`) if you cached an old HTML file.
+
 ---
 
 ## File Structure
@@ -830,18 +798,27 @@ sabre/src/
 ├── buffer.py                      # MultiRegionBuffer (dynamic buffering)
 ├── prefetch.py                    # PrefetchModule
 ├── global_state.py                # GlobalState singleton
-├── run_comparison.py              # Run with/without buffer.py (+ optional prefetch) comparisons
-├── view_comparison.html           # Web viewer (handles both equivalence and prefetch data)
-├── serve_viewer.py                # HTTP server for viewer
-├── test_buffer_equivalence.py      # Linear ↔ dynamic buffer equivalence tests
-├── test_dynamic_buffer_cases.py   # Dynamic buffer algorithm case tests
-├── test_prefetch_config.json      # Fixture for PrefetchModule tests
-├── test_simulation_regression.py  # Regression tests
-├── generate_configs.py            # Auto-generate seeks.json & test_prefetch_config.json
-├── network_generator.py           # Generate network.json
-├── generate_abr_comparison.py     # ABR comparison graphs
-├── graph_generate.py              # Individual ABR graphs
-├── network.json                   # Network trace
-├── movie.json                     # Movie manifest
-└── comparison_results.json        # Generated comparison data
+├── run_comparison.py            # With vs without buffer.py; optional prefetch; writes comparison_summary.json for batch runs
+├── view_comparison.html         # Web viewer (single-run JSON + comparison_summary.json dashboard)
+├── serve_viewer.py              # HTTP server for the viewer
+├── test_buffer_equivalence.py   # Linear ↔ dynamic buffer equivalence tests
+├── test_dynamic_buffer_cases.py # Dynamic buffer algorithm case tests
+├── test_simulation_regression.py
+├── generate_configs.py          # Writes test_prefetch_config.json, seeks.json, seeks_prefetch_hit.json
+├── network_generator.py
+├── generate_abr_comparison.py
+├── graph_generate.py
+├── network.json
+├── movie.json
+├── seeks.json                   # Often regenerated by generate_configs.py
+├── seeks_prefetch_hit.json
+├── test_prefetch_config.json    # Prefetch + threshold; demo/tests + generate_configs output
+└── prefetch_comparison_results/ # Example batch output (after run_comparison -a all …)
+    ├── comparison_summary.json  # Load this in the viewer for the cross-comparison table
+    ├── seeks/
+    │   └── comparison_<abr>.json
+    └── seeks_prefetch_hit/
+        └── comparison_<abr>.json
 ```
+
+Generated single-run files (e.g. `comparison_results.json` or `comparison_bola.json`) usually live in `src/` or a folder you pass to `-o`; names depend on flags.
