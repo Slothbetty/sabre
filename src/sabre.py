@@ -607,14 +607,17 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                 pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
                 pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
                 pf_metric = network.download(pf_size, prefetch_seg, pf_quality, pf_bl)
+                pf_start_time = round(gs.total_play_time)
                 if not deplete_buffer(pf_metric.time, abr):
                     continue  # seek during prefetch download
+                pf_end_time = round(gs.total_play_time)
                 if pf_metric.abandon_to_quality is None:
                     gs.multi_region_buffer.add_prefetch_chunk(prefetch_seg, pf_quality)
                     prefetch_module.mark_prefetched(prefetch_seg)
                     if gs.verbose:
-                        print("prefetch segment %d quality=%d bl=%d"
-                              % (prefetch_seg, pf_quality,
+                        print("[%d-%d] prefetch segment %d quality=%d bl=%d->%d"
+                              % (pf_start_time, pf_end_time, prefetch_seg, pf_quality,
+                                 pf_bl,
                                  get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))
                 continue  # re-evaluate buffer state after prefetch
 

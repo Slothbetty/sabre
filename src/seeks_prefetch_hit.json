@@ -2,27 +2,27 @@
   "seeks": [
     {
       "seek_when": 70.6,
-      "seek_to": 0.8
+      "seek_to": 21.8
     },
     {
       "seek_when": 147.6,
-      "seek_to": 120.8
+      "seek_to": 99.8
     },
     {
       "seek_when": 224.6,
-      "seek_to": 237.8
+      "seek_to": 258.8
     },
     {
       "seek_when": 301.6,
-      "seek_to": 357.8
+      "seek_to": 336.8
     },
     {
       "seek_when": 378.6,
-      "seek_to": 474.8
+      "seek_to": 495.8
     },
     {
       "seek_when": 455.6,
-      "seek_to": 594.8
+      "seek_to": 573.8
     }
   ]
 }

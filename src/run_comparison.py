@@ -22,9 +22,9 @@ from pathlib import Path
 _DOWNLOAD_RE = re.compile(
     r'\[(\d+)-(\d+)\]\s+(\d+):\s+quality=(\d+).*?buffer_level=(-?\d+)->(-?\d+)')
 _PREFETCH_RE = re.compile(
-    r'prefetch segment (\d+) quality=(\d+) bl=(\d+)')
+    r'\[(\d+)-(\d+)\] prefetch segment (\d+) quality=(\d+) bl=(\d+)->(\d+)')
 _SEEK_RE = re.compile(
-    r'\[Seek\].*seeking to (\d+) seconds \(segment index (\d+)\)')
+    r'\[Seek\] At playback time (\d+) ms: seeking to (\d+) seconds \(segment index (\d+)\)')
 
 _SUMMARY_KEYS = [
     ('total_rebuffer_time', 'total rebuffer:'),
@@ -64,18 +64,22 @@ def parse_simulation_output(output):
 
         m = _PREFETCH_RE.search(line)
         if m:
-            seg, quality, bl = m.groups()
+            start_time, end_time, seg, quality, bl_before, bl_after = m.groups()
             metrics['prefetch_events'].append({
+                'start_time': int(start_time),
+                'end_time': int(end_time),
                 'segment': int(seg),
                 'quality': int(quality),
-                'buffer_level': int(bl),
+                'buffer_level_before': int(bl_before),
+                'buffer_level_after': int(bl_after),
             })
             continue
 
         m = _SEEK_RE.search(line)
         if m:
-            seek_to_s, seg_idx = m.groups()
+            seek_when_ms, seek_to_s, seg_idx = m.groups()
             metrics['seek_events'].append({
+                'seek_when_s': int(seek_when_ms) / 1000.0,
                 'seek_to_s': int(seek_to_s),
                 'segment': int(seg_idx),
             })
@@ -189,6 +193,25 @@ def parse_abr_list(abr_arg):
     return [abr_arg]
 
 
+def parse_seek_configs(sc_arg):
+    """Return a list of seek config file paths from the CLI argument.
+
+    Accepts a single filename, a comma-separated list, or None.
+    """
+    if sc_arg is None:
+        return [None]
+    if ',' in sc_arg:
+        return [s.strip() for s in sc_arg.split(',') if s.strip()]
+    return [sc_arg]
+
+
+def seek_config_label(sc_path):
+    """Derive a short directory-safe label from a seek config path."""
+    if sc_path is None:
+        return 'no_seeks'
+    return Path(sc_path).stem
+
+
 def main():
     parser = argparse.ArgumentParser(
         description='Compare simulation results with vs without buffer.py (+ optional prefetch)')
@@ -199,65 +222,84 @@ def main():
     parser.add_argument(
         '-a', '--abr', default='bola',
         help='ABR algorithm(s): single name, comma-separated list, or "all"')
-    parser.add_argument('-sc', '--seek-config',
-                        help='Seek configuration file')
+    parser.add_argument(
+        '-sc', '--seek-config',
+        help='Seek config file(s): single name or comma-separated list')
     parser.add_argument('-pc', '--prefetch-config',
                         help='Prefetch JSON config file (only used with buffer.py)')
     parser.add_argument('-nm', '--network-multiplier', type=float, default=1.0,
                         help='Network multiplier')
     parser.add_argument(
         '-o', '--output', default='comparison_results.json',
-        help='Output JSON file (single ABR) or output directory (multiple ABRs)')
+        help='Output JSON file (single ABR) or output directory (multiple ABRs/seek configs)')
     args = parser.parse_args()
 
     abr_list = parse_abr_list(args.abr)
+    sc_list = parse_seek_configs(args.seek_config)
     has_prefetch = args.prefetch_config is not None
     script_dir = Path(__file__).parent
 
-    multi = len(abr_list) > 1
+    multi_abr = len(abr_list) > 1
+    multi_sc = len(sc_list) > 1
+    multi = multi_abr or multi_sc
+
     if multi:
         output_dir = script_dir / args.output
         output_dir.mkdir(exist_ok=True)
         all_results = {}
 
-    for abr in abr_list:
-        print(f"\n{'=' * 85}")
-        print(f"Processing ABR algorithm: {abr}")
-        print(f"{'=' * 85}")
+    for sc in sc_list:
+        sc_label = seek_config_label(sc)
 
-        config = {
-            'network': args.network,
-            'movie': args.movie,
-            'abr': abr,
-            'seek_config': args.seek_config,
-            'prefetch_config': args.prefetch_config,
-            'network_multiplier': args.network_multiplier,
-        }
+        if multi_sc:
+            sc_dir = output_dir / sc_label
+            sc_dir.mkdir(exist_ok=True)
+            print(f"\n{'#' * 85}")
+            print(f"Seek config: {sc or '(none)'}")
+            print(f"{'#' * 85}")
 
-        metrics_without = run_simulation(use_buffer_py=False, config=config)
-        metrics_with = run_simulation(use_buffer_py=True, config=config)
+        for abr in abr_list:
+            run_label = f"{sc_label}/{abr}" if multi_sc else abr
+            print(f"\n{'=' * 85}")
+            print(f"Processing: ABR={abr}  seeks={sc or '(none)'}")
+            print(f"{'=' * 85}")
 
-        if metrics_without is None or metrics_with is None:
-            print(f"Error: Simulation failed for {abr}", file=sys.stderr)
-            continue
+            config = {
+                'network': args.network,
+                'movie': args.movie,
+                'abr': abr,
+                'seek_config': sc,
+                'prefetch_config': args.prefetch_config,
+                'network_multiplier': args.network_multiplier,
+            }
 
-        comparison = {
-            'config': config,
-            'without_buffer_py': metrics_without,
-            'with_buffer_py': metrics_with,
-        }
+            metrics_without = run_simulation(use_buffer_py=False, config=config)
+            metrics_with = run_simulation(use_buffer_py=True, config=config)
 
-        if multi:
-            output_path = output_dir / f"comparison_{abr}.json"
-            all_results[abr] = comparison
-        else:
-            output_path = script_dir / args.output
+            if metrics_without is None or metrics_with is None:
+                print(f"Error: Simulation failed for {run_label}", file=sys.stderr)
+                continue
 
-        with open(output_path, 'w') as f:
-            json.dump(comparison, f, indent=2)
+            comparison = {
+                'config': config,
+                'without_buffer_py': metrics_without,
+                'with_buffer_py': metrics_with,
+            }
 
-        print(f"\n-> Results saved to {output_path}")
-        print_summary(abr, metrics_without, metrics_with, has_prefetch)
+            if multi:
+                if multi_sc:
+                    output_path = sc_dir / f"comparison_{abr}.json"
+                else:
+                    output_path = output_dir / f"comparison_{abr}.json"
+                all_results[run_label] = comparison
+            else:
+                output_path = script_dir / args.output
+
+            with open(output_path, 'w') as f:
+                json.dump(comparison, f, indent=2)
+
+            print(f"\n-> Results saved to {output_path}")
+            print_summary(abr, metrics_without, metrics_with, has_prefetch)
 
     if multi and all_results:
         summary_path = output_dir / "comparison_summary.json"
@@ -266,11 +308,12 @@ def main():
                 'config': {
                     'network': args.network,
                     'movie': args.movie,
-                    'seek_config': args.seek_config,
+                    'seek_configs': [s for s in sc_list],
                     'prefetch_config': args.prefetch_config,
                     'network_multiplier': args.network_multiplier,
                 },
                 'algorithms': abr_list,
+                'seek_configs': [seek_config_label(s) for s in sc_list],
                 'results': all_results,
             }, f, indent=2)
         print(f"\n{'=' * 85}")
