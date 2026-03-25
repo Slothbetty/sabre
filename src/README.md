@@ -361,7 +361,9 @@ python generate_configs.py --num-seeks 6 --prefetch-count 8 --buffer-threshold 1
 ```bash
 python generate_configs.py --dry-run
 ```
-
+#TODO:
+1. Add which seek hit prefetch and miss prefetch in graph.
+2. Add description about how do we generate seeks.json, seeks_prefetch_hit.json and test_prefetch_config.js(Add into slides).
 ### Command Parameters
 
 | Flag | Description | Default |
