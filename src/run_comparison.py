@@ -104,8 +104,21 @@ def parse_simulation_output(output):
         'segments': [],
     }
     for ev in metrics['download_events']:
+        bl_before = ev['buffer_level_before']
+        download_duration = ev['end_time'] - ev['start_time']
+
+        # If the buffer drains to 0 mid-download, insert an extra point at the
+        # moment it hit 0 so the chart shows the buffer actually reaching zero
+        # rather than interpolating above it during the stall period.
+        if bl_before > 0 and download_duration > bl_before:
+            stall_start_s = (ev['start_time'] + bl_before) / 1000.0
+            time_series['time_points'].append(stall_start_s)
+            time_series['buffer_levels'].append(0.0)
+            time_series['qualities'].append(ev['quality'])
+            time_series['segments'].append(ev['segment'])
+
         time_series['time_points'].append(ev['end_time'] / 1000.0)
-        time_series['buffer_levels'].append(ev['buffer_level_after'] / 1000.0)
+        time_series['buffer_levels'].append(max(0, ev['buffer_level_after']) / 1000.0)
         time_series['qualities'].append(ev['quality'])
         time_series['segments'].append(ev['segment'])
 
@@ -264,11 +277,17 @@ def main():
             print(f"Processing: ABR={abr}  seeks={sc or '(none)'}")
             print(f"{'=' * 85}")
 
+            seek_config_data = None
+            if sc:
+                with open(sc) as f:
+                    seek_config_data = json.load(f)
+
             config = {
                 'network': args.network,
                 'movie': args.movie,
                 'abr': abr,
                 'seek_config': sc,
+                'seek_config_data': seek_config_data,
                 'prefetch_config': args.prefetch_config,
                 'network_multiplier': args.network_multiplier,
             }

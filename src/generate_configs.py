@@ -2,21 +2,26 @@
 """
 Generate prefetch + seek configs for SABRE comparison demos.
 
-Writes three files in one run:
+Writes four files in one run:
   - test_prefetch_config.json  — spaced prefetch segment list + buffer threshold
   - seeks_prefetch_hit.json    — seeks that land on prefetched segments
   - seeks.json                 — same seek_when schedule; seek_to miss prefetch
+  - seeks_mixed.json           — random mix of hit and miss seeks
 
 Usage
 -----
     python generate_configs.py
 
     python generate_configs.py --num-seeks 6 --prefetch-count 8 --buffer-threshold 15000
+
+    # Control the hit ratio and fix the random seed for reproducibility
+    python generate_configs.py --mixed-hit-ratio 0.4 --seed 42
 """
 
 import argparse
 import json
 import math
+import random
 import sys
 from pathlib import Path
 
@@ -110,15 +115,15 @@ def pick_spaced_subset(indices: list[int], count: int) -> list[int]:
 def build_seek_when_schedule(
     num_seeks: int, total_s: float, seg_dur_ms: int
 ) -> list[float]:
-    """Spread seek_when times across playback (forward, non-overlapping)."""
+    """Spread seek_when times evenly across available playback time."""
     margin = seg_dur_ms / 1000.0 * 3
     if num_seeks < 1:
         return []
     hi = total_s - margin
-    span = max(hi - margin - 40.0, num_seeks * 25.0)
-    step = span / max(num_seeks + 1, 1)
+    available = max(hi - margin, 0.0)
+    step = available / max(num_seeks + 1, 1)
     times = []
-    t = margin + step * 0.8
+    t = margin + step
     for _ in range(num_seeks):
         times.append(round(min(t, hi - 5.0), 1))
         t += step
@@ -140,6 +145,56 @@ def generate_seeks_for_segment_targets(
     return seeks
 
 
+def build_mixed_seek_targets(
+    hit_targets: list[int],
+    miss_targets: list[int],
+    num_seeks: int,
+    hit_ratio: float,
+    rng: random.Random,
+    seg_dur_ms: int,
+) -> list[int]:
+    """
+    Build a list of `num_seeks` segment targets where approximately
+    `hit_ratio` fraction land on prefetched segments and the rest miss.
+
+    Targets are sorted by seek-to time so every seek moves playback forward
+    in roughly the same direction as the seek_when schedule — preventing an
+    early seek from jumping to the end of the movie and making all later
+    seek_when times already-past.
+
+    Within each pool (hits / misses) pick_spaced_subset already draws evenly
+    across the available segments.  The rng is used to randomly interleave
+    the two sorted pools rather than concatenating them, so the hit/miss
+    pattern is still varied.
+    """
+    num_hits = max(0, min(num_seeks, round(num_seeks * hit_ratio)))
+    num_misses = num_seeks - num_hits
+
+    hit_pool = sorted(
+        pick_spaced_subset(hit_targets, num_hits) if num_hits > 0 else [],
+        key=lambda s: seek_to_seconds_for_segment(s, seg_dur_ms),
+    )
+    miss_pool = sorted(
+        pick_spaced_subset(miss_targets, num_misses) if num_misses > 0 else [],
+        key=lambda s: seek_to_seconds_for_segment(s, seg_dur_ms),
+    )
+
+    # Randomly decide which schedule positions are hits vs misses, then
+    # consume each sorted pool in order so seek-to times increase monotonically.
+    assignment = [True] * num_hits + [False] * num_misses
+    rng.shuffle(assignment)
+
+    hi = mi = 0
+    combined: list[int] = []
+    for is_hit in assignment:
+        if is_hit and hi < len(hit_pool):
+            combined.append(hit_pool[hi]); hi += 1
+        elif not is_hit and mi < len(miss_pool):
+            combined.append(miss_pool[mi]); mi += 1
+
+    return combined
+
+
 def generate_comparison_bundle(
     num_seeks: int,
     total_s: float,
@@ -147,11 +202,14 @@ def generate_comparison_bundle(
     num_segments: int,
     buffer_threshold_ms: int,
     prefetch_count: int,
-) -> tuple[dict, dict, dict]:
+    mixed_hit_ratio: float = 0.5,
+    seed: int | None = None,
+) -> tuple[dict, dict, dict, dict]:
     """
-    Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss):
+    Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss, seeks_mixed):
     one shared prefetch list; hit seeks land on prefetched segments;
-    miss seeks land on segments outside that list.
+    miss seeks land on segments outside that list;
+    mixed seeks have a random mix of hits and misses.
     """
     prefetch_indices = build_spaced_prefetch_indices(num_segments, prefetch_count)
     prefetch_set = set(prefetch_indices)
@@ -175,6 +233,14 @@ def generate_comparison_bundle(
         miss_targets, schedule, seg_dur_ms, num_segments
     )
 
+    rng = random.Random(seed)
+    mixed_targets = build_mixed_seek_targets(
+        hit_targets, miss_targets, num_seeks, mixed_hit_ratio, rng, seg_dur_ms
+    )
+    seeks_mixed = generate_seeks_for_segment_targets(
+        mixed_targets, schedule, seg_dur_ms, num_segments
+    )
+
     prefetch_config = {
         "buffer_level_threshold": buffer_threshold_ms,
         "prefetch": [{"segment": s} for s in prefetch_indices],
@@ -184,6 +250,7 @@ def generate_comparison_bundle(
         prefetch_config,
         {"seeks": seeks_hit},
         {"seeks": seeks_miss},
+        {"seeks": seeks_mixed},
     )
 
 
@@ -229,6 +296,19 @@ def main():
         help="Seek file for prefetch-miss scenario (default: seeks.json)",
     )
     parser.add_argument(
+        "--output-seeks-mixed",
+        default="seeks_mixed.json",
+        help="Seek file for mixed hit/miss scenario (default: seeks_mixed.json)",
+    )
+    parser.add_argument(
+        "--mixed-hit-ratio", type=float, default=0.5,
+        help="Fraction of seeks that hit prefetch in the mixed scenario (default: 0.5)",
+    )
+    parser.add_argument(
+        "--seed", type=int, default=None,
+        help="Random seed for the mixed scenario shuffle (default: random)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print JSON to stdout; do not write files",
     )
@@ -245,34 +325,47 @@ def main():
 
     print(f"Movie: {num_segments} segments x {seg_dur_ms}ms = {total_s:.1f}s total")
 
+    if not (0.0 <= args.mixed_hit_ratio <= 1.0):
+        print("Error: --mixed-hit-ratio must be between 0.0 and 1.0", file=sys.stderr)
+        sys.exit(1)
+
     try:
-        prefetch_config, seeks_hit_cfg, seeks_miss_cfg = generate_comparison_bundle(
+        prefetch_config, seeks_hit_cfg, seeks_miss_cfg, seeks_mixed_cfg = generate_comparison_bundle(
             num_seeks=args.num_seeks,
             total_s=total_s,
             seg_dur_ms=seg_dur_ms,
             num_segments=num_segments,
             buffer_threshold_ms=args.buffer_threshold,
             prefetch_count=args.prefetch_count,
+            mixed_hit_ratio=args.mixed_hit_ratio,
+            seed=args.seed,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
         sys.exit(1)
 
-    pf_segs = [e["segment"] for e in prefetch_config["prefetch"]]
+    pf_segs = set(e["segment"] for e in prefetch_config["prefetch"])
+    num_hits = sum(
+        1 for s in seeks_mixed_cfg["seeks"]
+        if segment_index_for_time(s["seek_to"], seg_dur_ms) in pf_segs
+    )
     print("\n--- Comparison bundle ---")
     print(f"Prefetch ({args.output_prefetch}): threshold={args.buffer_threshold}ms, "
-          f"segments={pf_segs}")
-    print(f"Seeks (hit):  {args.output_prefetch_hit} -> seek_to land on prefetched segments")
-    print(f"Seeks (miss): {args.output_seeks_miss} -> same seek_when, seek_to miss prefetch")
+          f"segments={sorted(pf_segs)}")
+    print(f"Seeks (hit):   {args.output_prefetch_hit} -> all seek_to land on prefetched segments")
+    print(f"Seeks (miss):  {args.output_seeks_miss} -> all seek_to miss prefetch")
+    print(f"Seeks (mixed): {args.output_seeks_mixed} -> {num_hits}/{args.num_seeks} hit "
+          f"(ratio={args.mixed_hit_ratio}, seed={args.seed})")
 
     for label, cfg in (
         ("prefetch_hit", seeks_hit_cfg),
         ("prefetch_miss", seeks_miss_cfg),
+        ("mixed", seeks_mixed_cfg),
     ):
         print(f"\n  {label}:")
         for i, s in enumerate(cfg["seeks"], 1):
             seg_idx = segment_index_for_time(s["seek_to"], seg_dur_ms)
-            hit = "HIT" if seg_idx in set(pf_segs) else "miss"
+            hit = "HIT" if seg_idx in pf_segs else "miss"
             print(f"    {i}. when={s['seek_when']}s -> {s['seek_to']}s (seg {seg_idx}, {hit})")
 
     if args.dry_run:
@@ -282,6 +375,8 @@ def main():
         print(json.dumps(seeks_hit_cfg, indent=2))
         print("\n--- seeks (miss) ---")
         print(json.dumps(seeks_miss_cfg, indent=2))
+        print("\n--- seeks (mixed) ---")
+        print(json.dumps(seeks_mixed_cfg, indent=2))
         print("\n(dry run — no files written)")
         return
 
@@ -289,6 +384,7 @@ def main():
         (script_dir / args.output_prefetch, prefetch_config),
         (script_dir / args.output_prefetch_hit, seeks_hit_cfg),
         (script_dir / args.output_seeks_miss, seeks_miss_cfg),
+        (script_dir / args.output_seeks_mixed, seeks_mixed_cfg),
     ]
     for path, obj in paths:
         with open(path, "w") as f:
@@ -299,7 +395,8 @@ def main():
     print("\nRun multi-scenario comparison with:")
     print(
         f"  python run_comparison.py -sc {args.output_seeks_miss},"
-        f"{args.output_prefetch_hit} -pc {args.output_prefetch} -a all -o prefetch_comparison_results"
+        f"{args.output_prefetch_hit},{args.output_seeks_mixed}"
+        f" -pc {args.output_prefetch} -a all -o prefetch_comparison_results"
     )
 
 

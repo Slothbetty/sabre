@@ -334,9 +334,57 @@
         .scenario-badge.miss { background: #fdebd0; color: #a04000; }
         .scenario-badge.hit  { background: #d5f5e3; color: #1e8449; }
         .scenario-file { font-size: 11px; color: #95a5a6; }
+        .seek-legend-card.mixed { border-left-color: #2e86c1; }
+        .scenario-badge.mixed { background: #d6eaf8; color: #1a5276; }
+
+        .seek-hover-tooltip {
+            position: fixed;
+            background: rgba(0, 0, 0, 0.82);
+            color: #fff;
+            padding: 7px 11px;
+            border-radius: 6px;
+            font-size: 12px;
+            line-height: 1.55;
+            pointer-events: none;
+            z-index: 9999;
+            display: none;
+            white-space: nowrap;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+        }
+
+        .scenario-filter {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 14px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .scenario-filter label {
+            font-size: 13px;
+            font-weight: 600;
+            color: #7f8c8d;
+            margin-right: 4px;
+        }
+        .scenario-filter-btn {
+            padding: 5px 16px;
+            border-radius: 20px;
+            border: 2px solid #ddd;
+            background: white;
+            color: #555;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: background 0.15s, border-color 0.15s, color 0.15s;
+        }
+        .scenario-filter-btn:hover { border-color: #3498db; color: #3498db; }
+        .scenario-filter-btn.active { background: #3498db; border-color: #3498db; color: white; }
+        .scenario-filter-btn.active.miss  { background: #e67e22; border-color: #e67e22; }
+        .scenario-filter-btn.active.hit   { background: #27ae60; border-color: #27ae60; }
+        .scenario-filter-btn.active.mixed { background: #2e86c1; border-color: #2e86c1; }
     </style>
 </head>
 <body>
+    <div id="seekHoverTooltip" class="seek-hover-tooltip"></div>
     <div class="container">
         <header>
             <h1>Buffer.py Comparison Viewer</h1>
@@ -363,10 +411,9 @@
                     <p style="color:#7f8c8d;font-size:13px;margin-bottom:14px;">
                         Each row is one <strong>seek scenario</strong> (see cards above) &times; one <strong>ABR algorithm</strong>.
                         <strong>Without</strong> = baseline without <code>buffer.py</code> (no dynamic buffering); <strong>with</strong> = same run with prefetch + dynamic buffer.
-                        <strong>Miss PF</strong> = seeks to non-prefetched segments (stress test where prefetch cannot help much).
-                        <strong>Hit PF</strong> = seeks aligned with prefetched segments (where dynamic buffering shines).
                         Click a row for detailed charts.
                     </p>
+                    <div id="scenarioFilter" class="scenario-filter"></div>
                     <div class="summary-table-scroll">
                         <table class="summary-table" id="summaryTable"></table>
                     </div>
@@ -430,8 +477,29 @@
         let comparisonData = null;
         let summaryData = null;
         let charts = {};
+        let activeStemFilter = 'all';
         /** Detail (drill-down) chart keys only — must not destroy summary dashboard charts on row click */
         const DETAIL_CHART_KEYS = ['rebuffer', 'buffer', 'quality', 'qualityDist'];
+
+        function filterSummaryTable(stem) {
+            activeStemFilter = stem;
+            document.querySelectorAll('.scenario-filter-btn').forEach(function(btn) {
+                btn.classList.toggle('active', btn.dataset.stem === stem);
+            });
+            let visible = 0;
+            document.querySelectorAll('#summaryTable tbody tr.clickable-row').forEach(function(row) {
+                const show = stem === 'all' || row.dataset.stem === stem;
+                row.style.display = show ? '' : 'none';
+                if (show) visible++;
+            });
+            const cap = document.getElementById('summaryTableCaption');
+            if (cap) {
+                const total = document.querySelectorAll('#summaryTable tbody tr.clickable-row').length;
+                cap.textContent = (stem === 'all' ? total : visible + ' of ' + total) +
+                    ' run' + (visible !== 1 ? 's' : '') + ' shown' +
+                    '. All Change columns: green = improved vs baseline, red = worse, gray = unchanged.';
+            }
+        }
 
         function destroyDetailChartsOnly() {
             DETAIL_CHART_KEYS.forEach(function(key) {
@@ -473,6 +541,13 @@
                 file: 'seeks_prefetch_hit.json',
                 css: 'hit',
                 blurb: 'Seek targets align with prefetched segments. Dynamic buffering can serve from disk without rebuffering; you should see fewer stalls vs. linear buffer.'
+            },
+            seeks_mixed: {
+                title: 'Seeks mixed',
+                short: 'Mixed',
+                file: 'seeks_mixed.json',
+                css: 'mixed',
+                blurb: 'Seek targets are a random mix — some land on prefetched segments (hits) and some do not (misses). Shows the intermediate case where prefetch helps for only a subset of seeks.'
             }
         };
 
@@ -556,30 +631,120 @@
             return hasPrefetchData() ? 'With buffer.py + prefetch' : 'With buffer.py';
         }
 
+        function seekIntentForIndex(i) {
+            // Determine hit/miss/unknown for seek index i based on the scenario's
+            // intended design (from SEEK_SCENARIO_MAP), not actual prefetch results.
+            // Returns: true = hit, false = miss, null = no seek-scenario context.
+            const scen = seekScenarioFromSeekFile((comparisonData.config || {}).seek_config);
+            if (!scen) return null;
+            if (scen.css === 'hit') return true;
+            if (scen.css === 'miss') return false;
+            if (scen.css === 'mixed') {
+                // Mixed: read per-seek intent from the embedded seek config data
+                const seekData = (comparisonData.config || {}).seek_config_data;
+                if (seekData && seekData.seeks && seekData.seeks[i] !== undefined) {
+                    return seekData.seeks[i].prefetch_hit === true;
+                }
+                return null;
+            }
+            return null;
+        }
+
         function seekAnnotations() {
             const sk = (comparisonData.with_buffer_py || {}).seek_events || [];
             if (sk.length === 0) return {};
             const out = {};
             sk.forEach((e, i) => {
                 const xVal = e.seek_when_s !== undefined ? e.seek_when_s : e.seek_to_s;
+                const intent = seekIntentForIndex(i);
+                const color = intent === null
+                    ? 'rgba(155, 89, 182, 0.7)'
+                    : intent ? 'rgba(39, 174, 96, 0.85)' : 'rgba(230, 126, 34, 0.85)';
+                const bgColor = intent === null
+                    ? 'rgba(155, 89, 182, 0.8)'
+                    : intent ? 'rgba(39, 174, 96, 0.9)' : 'rgba(230, 126, 34, 0.9)';
                 out['seek' + i] = {
                     type: 'line',
                     scaleID: 'x',
                     value: xVal,
-                    borderColor: 'rgba(155, 89, 182, 0.7)',
+                    borderColor: color,
                     borderWidth: 2,
                     borderDash: [6, 4],
                     label: {
                         display: true,
-                        content: 'Seek \u2192 seg ' + e.segment + ' (' + e.seek_to_s + 's)',
+                        content: String(i + 1),
                         position: 'start',
-                        backgroundColor: 'rgba(155, 89, 182, 0.8)',
+                        backgroundColor: bgColor,
                         color: '#fff',
-                        font: { size: 11 }
+                        font: { size: 10, weight: 'bold' },
+                        padding: { x: 4, y: 2 },
+                        borderRadius: 3
                     }
                 };
             });
             return out;
+        }
+
+        function getSeekData() {
+            const sk = (comparisonData.with_buffer_py || {}).seek_events || [];
+            return sk.map((e, i) => {
+                const intent = seekIntentForIndex(i);
+                return {
+                    xVal: e.seek_when_s !== undefined ? e.seek_when_s : e.seek_to_s,
+                    seekIndex: i + 1,
+                    isHit: intent === true,
+                    hasPF: intent !== null,
+                    seekWhen: e.seek_when_s,
+                    seekTo: e.seek_to_s,
+                    segment: e.segment
+                };
+            });
+        }
+
+        function setupSeekLabelTooltip(chart, skData) {
+            if (!skData || skData.length === 0) return;
+            const tooltipEl = document.getElementById('seekHoverTooltip');
+            const canvas = chart.canvas;
+
+            canvas.addEventListener('mousemove', function(evt) {
+                const rect = canvas.getBoundingClientRect();
+                const mouseX = evt.clientX - rect.left;
+                const mouseY = evt.clientY - rect.top;
+                const top = chart.chartArea.top;
+
+                // Only trigger when cursor is in the label band at the top of the chart
+                if (mouseY < top - 2 || mouseY > top + 22) {
+                    tooltipEl.style.display = 'none';
+                    return;
+                }
+
+                let found = null;
+                for (let i = 0; i < skData.length; i++) {
+                    const px = chart.scales.x.getPixelForValue(skData[i].xVal);
+                    if (Math.abs(mouseX - px) <= 16) { found = skData[i]; break; }
+                }
+
+                if (found) {
+                    const status = found.hasPF
+                        ? (found.isHit ? '\u2713 HIT' : '\u2717 MISS') : '';
+                    const whenStr = found.seekWhen !== undefined
+                        ? found.seekWhen.toFixed(1) + 's' : '?';
+                    tooltipEl.innerHTML =
+                        '<strong>Seek #' + found.seekIndex +
+                        (status ? '&nbsp;&nbsp;' + status : '') + '</strong><br>' +
+                        'at ' + whenStr + ' \u2192 seg ' + found.segment +
+                        ' (' + found.seekTo + 's)';
+                    tooltipEl.style.display = 'block';
+                    tooltipEl.style.left = (evt.clientX + 14) + 'px';
+                    tooltipEl.style.top = (evt.clientY - 10) + 'px';
+                } else {
+                    tooltipEl.style.display = 'none';
+                }
+            });
+
+            canvas.addEventListener('mouseleave', function() {
+                tooltipEl.style.display = 'none';
+            });
         }
 
         function prefetchBandAnnotation() {
@@ -776,7 +941,7 @@
                 const pt0 = r.wo.total_play_time || 0;
                 const pt1 = r.wi.total_play_time || 0;
                 const badgeClass = scen.css ? ('scenario-badge ' + scen.css) : 'scenario-badge';
-                thtml += `<tr class="clickable-row" onclick="drillDown('${escKey}', this)">
+                thtml += `<tr class="clickable-row" data-stem="${scen.stem}" onclick="drillDown('${escKey}', this)">
                     <td>
                         <span class="${badgeClass}">${scen.short}</span><br>
                         <strong>${scen.title}</strong><br>
@@ -798,6 +963,21 @@
             });
             thtml += '</tbody>';
             document.getElementById('summaryTable').innerHTML = thtml;
+
+            // Build scenario filter buttons
+            activeStemFilter = 'all';
+            const filterEl = document.getElementById('scenarioFilter');
+            if (filterEl) {
+                let fbHtml = '<label>Show:</label>';
+                fbHtml += '<button class="scenario-filter-btn active" data-stem="all" onclick="filterSummaryTable(\'all\')">All</button>';
+                stemsSeen.forEach(function(stem) {
+                    const m = SEEK_SCENARIO_MAP[stem];
+                    const css = m ? m.css : '';
+                    const label = m ? m.title : stem;
+                    fbHtml += `<button class="scenario-filter-btn${css ? ' ' + css : ''}" data-stem="${stem}" onclick="filterSummaryTable('${stem}')">${label}</button>`;
+                });
+                filterEl.innerHTML = fbHtml;
+            }
 
             Object.values(charts).forEach(c => { if (c) c.destroy(); });
             charts = {};
@@ -986,12 +1166,17 @@
                 return s;
             }).join(', ') || 'none';
 
+            const prefetchedSegs = new Set(pf.map(e => e.segment));
             const skDetails = sk.map(e => {
+                const isHit = prefetchedSegs.size > 0 && e.segment !== undefined && prefetchedSegs.has(e.segment);
+                const badge = prefetchedSegs.size > 0
+                    ? `<span class="badge ${isHit ? 'badge-hit' : 'badge-miss'}">${isHit ? 'HIT' : 'MISS'}</span> `
+                    : '';
                 let s = `seg ${e.segment} (${e.seek_to_s}s)`;
                 if (e.seek_when_s !== undefined) {
                     s = `at ${e.seek_when_s.toFixed(1)}s \u2192 ${s}`;
                 }
-                return s;
+                return badge + s;
             }).join(', ') || 'none';
 
             el.innerHTML =
@@ -1059,7 +1244,7 @@
             const bl = bufferLevels || [];
             for (let i = 0; i < tp.length; i++) {
                 if (bl[i] !== undefined && bl[i] <= threshold) {
-                    pts.push({ x: tp[i], y: bl[i] });
+                    pts.push({ x: tp[i], y: 0 });
                 }
             }
             return pts;
@@ -1071,6 +1256,7 @@
             const label = withLabel();
             const annotations = allAnnotations();
             const pf = (with_.prefetch_events || []).filter(e => e.end_time !== undefined);
+            const skData = getSeekData();
 
             // Only tear down per-run charts — keep summaryRebuf / summaryTime alive (same page as summary table)
             destroyDetailChartsOnly();
@@ -1211,7 +1397,6 @@
                     showLine: false
                 });
             }
-
             charts.buffer = new Chart(bufferCtx, {
                 type: 'line',
                 data: { datasets: bufferDatasets },
@@ -1248,6 +1433,7 @@
                     }
                 }
             });
+            setupSeekLabelTooltip(charts.buffer, skData);
 
             // Quality over time (linear x-axis)
             const qualityCtx = document.getElementById('qualityChart').getContext('2d');
@@ -1289,7 +1475,6 @@
                     showLine: false
                 });
             }
-
             charts.quality = new Chart(qualityCtx, {
                 type: 'line',
                 data: { datasets: qualityDatasets },
@@ -1323,6 +1508,7 @@
                     }
                 }
             });
+            setupSeekLabelTooltip(charts.quality, skData);
 
             // Quality distribution
             const qualityDistCtx = document.getElementById('qualityDistChart').getContext('2d');

@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 -c \":*)",
+      "Bash(python test_dynamic_buffer_cases.py)"
+    ]
+  }
+}
