@@ -279,7 +279,7 @@ class TestDynamicBuffering(unittest.TestCase):
 class TestPrefetchModule(unittest.TestCase):
     """Unit tests for PrefetchModule loading, trigger logic, and exhaustion."""
 
-    FIXTURE = SRC_DIR / "test_prefetch_config.json"
+    FIXTURE = SRC_DIR / "test_prefetch_config_fixture.json"
 
     def setUp(self):
         self.pm = PrefetchModule(str(self.FIXTURE))
