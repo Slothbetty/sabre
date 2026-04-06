@@ -316,6 +316,28 @@ class TestPrefetchModule(unittest.TestCase):
         self.assertFalse(self.pm.should_prefetch(99999))
 
     # ------------------------------------------------------------------ #
+    # Test 13b: skip_stale_segments removes past entries                 #
+    # ------------------------------------------------------------------ #
+    def test_skip_stale_segments(self):
+        """Segments at or behind the current playhead must be discarded before
+        any prefetch download is attempted — reproduces the bug where seg 7 and
+        seg 12 were downloaded at wall-clock ~300 s even though the playhead
+        had already seeked past content position ~90 s (seg 30+)."""
+        pm = PrefetchModule(str(self.FIXTURE))   # pending: [5, 10, 15]
+
+        # Playhead is at segment 10 — segments 5 and 10 are stale.
+        pm.skip_stale_segments(current_segment=10)
+        self.assertEqual(pm.pending_segments, [15],
+            "Segments 5 and 10 should be purged; only 15 remains")
+
+        # Calling again when all remaining segments are also stale clears list.
+        pm.skip_stale_segments(current_segment=15)
+        self.assertEqual(pm.pending_segments, [],
+            "All pending segments purged when playhead is at or past the last one")
+        self.assertFalse(pm.should_prefetch(99999),
+            "should_prefetch must return False when nothing is pending")
+
+    # ------------------------------------------------------------------ #
     # Test 14: Skip already-prefetched during linear download             #
     # ------------------------------------------------------------------ #
     def test_skip_already_prefetched(self):
@@ -356,6 +378,126 @@ class TestPrefetchModule(unittest.TestCase):
         self.assertIn(1, downloaded)
         self.assertIn(4, downloaded)
         self.assertIn(5, downloaded)
+
+
+# ---------------------------------------------------------------------------
+# from_segment calculation tests (Tests 15-18)
+# ---------------------------------------------------------------------------
+
+class TestFromSegmentCalculation(unittest.TestCase):
+    """
+    Verify that the from_segment value reported at seek time reflects the
+    actual content position, not the wall-clock simulation time.
+
+    The logic under test (sabre.py, interrupted_by_seek):
+
+        if gs.multi_region_buffer is not None:
+            from_segment = int(gs.current_playback_pos / seg_time)
+        else:
+            buffer_base = gs.next_segment - len(gs.buffer_contents)
+            from_segment = int((buffer_base * seg_time + gs.buffer_fcc) / seg_time)
+    """
+
+    SEG_TIME = 3000  # ms — matches the real movie (3 s segments)
+
+    def setUp(self):
+        GlobalState._initialized = False
+        gs.__init__()
+        gs.buffer_fcc = 0
+
+    def _from_segment_dynamic(self):
+        """Replicate the dynamic-buffer branch of the from_segment calculation."""
+        return int(gs.current_playback_pos / self.SEG_TIME)
+
+    def _from_segment_linear(self):
+        """Replicate the linear-buffer branch of the from_segment calculation."""
+        buffer_base = gs.next_segment - len(gs.buffer_contents)
+        return int((buffer_base * self.SEG_TIME + gs.buffer_fcc) / self.SEG_TIME)
+
+    # ------------------------------------------------------------------ #
+    # Test 15: Dynamic buffer — from_segment tracks content_playback_pos #
+    #          and diverges from wall-clock after rebuffering             #
+    # ------------------------------------------------------------------ #
+    def test_dynamic_from_segment_uses_content_pos_not_wall_clock(self):
+        """After rebuffering, current_playback_pos lags behind total_play_time.
+        from_segment must be based on content position, not wall-clock."""
+        gs.multi_region_buffer = MultiRegionBuffer(self.SEG_TIME)
+
+        # Simulate: 10 s of rebuffering occurred, so content is 10 s behind wall-clock.
+        gs.total_play_time = 65_000   # wall-clock: 65 s
+        gs.current_playback_pos = 55_000  # content:    55 s  (10 s rebuffer)
+
+        from_seg = self._from_segment_dynamic()
+        wall_clock_seg = int(gs.total_play_time / self.SEG_TIME)
+
+        self.assertEqual(from_seg, 18,
+            "from_segment should be content-based (55000/3000=18), not wall-clock-based")
+        self.assertNotEqual(from_seg, wall_clock_seg,
+            "from_segment must differ from naive wall-clock division after rebuffering")
+
+    # ------------------------------------------------------------------ #
+    # Test 16: Linear buffer — from_segment equals buffer_base           #
+    # ------------------------------------------------------------------ #
+    def test_linear_from_segment_equals_buffer_base(self):
+        """For linear buffer, from_segment = next_segment - len(buffer_contents),
+        which is the index of the segment currently being played."""
+        gs.multi_region_buffer = None
+
+        # Simulate 10 segments downloaded, 3 still in buffer (segs 7, 8, 9).
+        # buffer_base = 10 - 3 = 7  → currently playing segment 7.
+        gs.next_segment = 10
+        gs.buffer_contents = [(q, 2) for q in range(3)]  # 3 buffered items
+        gs.buffer_fcc = 500  # 500 ms into segment 7
+
+        from_seg = self._from_segment_linear()
+        self.assertEqual(from_seg, 7,
+            "from_segment should be buffer_base=7 (next_segment=10, 3 buffered)")
+
+    # ------------------------------------------------------------------ #
+    # Test 17: Linear buffer — buffer_fcc does not change from_segment   #
+    # ------------------------------------------------------------------ #
+    def test_linear_from_segment_invariant_to_buffer_fcc(self):
+        """buffer_fcc is always < seg_time, so adding it can never push
+        content_pos into the next segment — from_segment stays = buffer_base."""
+        gs.multi_region_buffer = None
+        gs.next_segment = 10
+        gs.buffer_contents = [(q, 2) for q in range(3)]   # buffer_base = 7
+
+        for fcc in [0, 1, 999, 1500, self.SEG_TIME - 1]:
+            gs.buffer_fcc = fcc
+            from_seg = self._from_segment_linear()
+            self.assertEqual(from_seg, 7,
+                f"from_segment should always be 7 regardless of buffer_fcc={fcc}")
+
+    # ------------------------------------------------------------------ #
+    # Test 18: Two sequential seeks — user's specific example            #
+    #          seek_when=46.4 → seek_to=66.8, then seek_when=65.0        #
+    # ------------------------------------------------------------------ #
+    def test_from_segment_after_two_sequential_seeks(self):
+        """
+        Reproduces the reported scenario:
+          Seek 1: at wall-clock 46.4 s → content jumps to 66.8 s (seg 22)
+          Play for 18.6 s wall-clock but ~1.4 s is rebuffer → content at ~84 s
+          Seek 2: at wall-clock 65.0 s → from_segment should be ~28, NOT 21
+
+        Wall-clock-based (wrong):  floor(65_000 / 3000) = 21
+        Content-based   (correct): floor(84_000 / 3000) = 28
+        """
+        gs.multi_region_buffer = MultiRegionBuffer(self.SEG_TIME)
+
+        # After seek 1 lands at 66.8 s, the player plays forward.
+        # 18.6 s of wall-clock elapses; 1.4 s is rebuffering → 17.2 s of content.
+        # content position at seek 2: 66_800 + 17_200 = 84_000 ms
+        content_pos_at_seek2 = 66_800 + 17_200   # = 84_000 ms
+        gs.current_playback_pos = content_pos_at_seek2
+        gs.total_play_time = 65_000  # wall-clock at seek 2
+
+        from_seg = self._from_segment_dynamic()
+
+        self.assertEqual(from_seg, 28,
+            "from_segment at second seek should be 28 (content at 84 s), not 21")
+        self.assertNotEqual(from_seg, int(gs.total_play_time / self.SEG_TIME),
+            "from_segment must NOT equal wall-clock-based segment (21)")
 
 
 if __name__ == "__main__":
