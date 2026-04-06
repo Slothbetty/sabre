@@ -382,29 +382,18 @@ Use [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs) (`g
 Run all ABR algorithms against all three seek scenarios at once:
 
 ```bash
-python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json,seeks_mixed.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json,seeks_mixed.json,seeks_linear_hit_dynamic_miss.json,seeks_linear_miss_dynamic_hit.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
 ```
 
-This produces `seeks/comparison_*.json`, `seeks_prefetch_hit/comparison_*.json`, `seeks_mixed/comparison_*.json`, and **`comparison_summary.json`** under the output directory.
+This produces `seeks/comparison_*.json`, `seeks_prefetch_hit/comparison_*.json`, `seeks_mixed/comparison_*.json`, `seeks_linear_hit_dynamic_miss/comparison_*.json`, `seeks_linear_miss_dynamic_hit/comparison_*.json`, and **`comparison_summary.json`** under the output directory.
 
 See [Command Parameters](#running-buffer-comparisons) under **Running Buffer Comparisons** for full flags (`-n`, `-m`, `-pc`, `-nm`, `-o`, etc.).
 
 ### 3. View results
-
+S
 Use **`serve_viewer.py`** and load either a **single** comparison JSON or **`comparison_summary.json`** — see [Viewing Results](#viewing-results).
 
 ---
-
-## TODO:
-4 categories:
-1. both hit.
-2. both miss.
-3. one hit for linear, one miss for dynamic buffering.
-4. one miss for linear, one hit for dynamic buffering.
-miss and hit tags should be aligned in the simulation realtime results.
-set the seeks for forward only.
-Fix the bar graph and buffer level/quality graphs are not aligned issues.
-
 
 ## Testing
 

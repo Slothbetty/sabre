@@ -452,6 +452,7 @@
             
             <div class="chart-container">
                 <h2>Buffer Level Over Time</h2>
+                <p id="bufferChartCaption" class="summary-table-caption" style="margin:-6px 0 10px 0;"></p>
                 <div class="chart-wrapper">
                     <canvas id="bufferChart"></canvas>
                 </div>
@@ -548,6 +549,20 @@
                 file: 'seeks_mixed.json',
                 css: 'mixed',
                 blurb: 'Seek targets are a random mix — some land on prefetched segments (hits) and some do not (misses). Shows the intermediate case where prefetch helps for only a subset of seeks.'
+            },
+            seeks_linear_hit_dynamic_miss: {
+                title: 'Linear hit, dynamic miss',
+                short: 'Lin Hit',
+                file: 'seeks_linear_hit_dynamic_miss.json',
+                css: 'miss',
+                blurb: 'Short forward seeks (2–10 s ahead) land within the normal forward buffer, so linear buffering can resume without clearing. Targets are non-prefetched segments, so dynamic buffering gets no prefetch benefit and must also rebuffer.'
+            },
+            seeks_linear_miss_dynamic_hit: {
+                title: 'Linear miss, dynamic hit',
+                short: 'Dyn Hit',
+                file: 'seeks_linear_miss_dynamic_hit.json',
+                css: 'hit',
+                blurb: 'Far forward seeks (20–37 s ahead) jump well beyond the linear buffer window, forcing linear buffering to clear and rebuffer. Targets are prefetched segments, so dynamic buffering can resume immediately from the prefetch cache.'
             }
         };
 
@@ -632,22 +647,16 @@
         }
 
         function seekIntentForIndex(i) {
-            // Determine hit/miss/unknown for seek index i based on the scenario's
-            // intended design (from SEEK_SCENARIO_MAP), not actual prefetch results.
-            // Returns: true = hit, false = miss, null = no seek-scenario context.
-            const scen = seekScenarioFromSeekFile((comparisonData.config || {}).seek_config);
-            if (!scen) return null;
-            if (scen.css === 'hit') return true;
-            if (scen.css === 'miss') return false;
-            if (scen.css === 'mixed') {
-                // Mixed: read per-seek intent from the embedded seek config data
-                const seekData = (comparisonData.config || {}).seek_config_data;
-                if (seekData && seekData.seeks && seekData.seeks[i] !== undefined) {
-                    return seekData.seeks[i].prefetch_hit === true;
-                }
-                return null;
-            }
-            return null;
+            // Determine hit/miss for seek index i using the actual runtime result:
+            // a seek is a HIT if its destination segment was really prefetched.
+            // Falls back to null (no colour) when there is no prefetch data at all.
+            const sk = (comparisonData.with_buffer_py || {}).seek_events || [];
+            const pf = (comparisonData.with_buffer_py || {}).prefetch_events || [];
+            if (pf.length === 0) return null;
+            const prefetchedSegs = new Set(pf.map(e => e.segment));
+            const e = sk[i];
+            if (!e || e.segment === undefined) return null;
+            return prefetchedSegs.has(e.segment);
         }
 
         function seekAnnotations() {
@@ -696,6 +705,7 @@
                     hasPF: intent !== null,
                     seekWhen: e.seek_when_s,
                     seekTo: e.seek_to_s,
+                    fromSegment: e.from_segment,
                     segment: e.segment
                 };
             });
@@ -729,10 +739,13 @@
                         ? (found.isHit ? '\u2713 HIT' : '\u2717 MISS') : '';
                     const whenStr = found.seekWhen !== undefined
                         ? found.seekWhen.toFixed(1) + 's' : '?';
+                    const segStr = found.fromSegment !== undefined
+                        ? 'seg ' + found.fromSegment + ' \u2192 seg ' + found.segment
+                        : 'seg ' + found.segment;
                     tooltipEl.innerHTML =
                         '<strong>Seek #' + found.seekIndex +
                         (status ? '&nbsp;&nbsp;' + status : '') + '</strong><br>' +
-                        'at ' + whenStr + ' \u2192 seg ' + found.segment +
+                        'at ' + whenStr + ' &nbsp; ' + segStr +
                         ' (' + found.seekTo + 's)';
                     tooltipEl.style.display = 'block';
                     tooltipEl.style.left = (evt.clientX + 14) + 'px';
@@ -762,17 +775,48 @@
                     borderColor: 'rgba(46, 204, 113, 0.4)',
                     borderWidth: 1,
                     borderDash: [4, 4],
-                    label: {
-                        display: true,
-                        content: pf.length + ' prefetches',
-                        position: { x: 'center', y: 'end' },
-                        backgroundColor: 'rgba(46, 204, 113, 0.85)',
-                        color: '#fff',
-                        font: { size: 10 },
-                        padding: 3
-                    }
+                    label: { display: false }
                 }
             };
+        }
+
+        /** Horizontal bands: x extent = simulator stall duration (buffer chart y is seconds; strips sit near 0). */
+        function rebufferDurationBandsAnnotations(without, with_) {
+            const out = {};
+            function addBands(run, keyPrefix, yMin, yMax, fill, border) {
+                const s = run.rebuffer_starts_s;
+                const d = run.rebuffer_durations_s;
+                if (!Array.isArray(s) || !Array.isArray(d)) return;
+                const n = Math.min(s.length, d.length);
+                for (let i = 0; i < n; i++) {
+                    const dur = d[i];
+                    if (!(dur > 0)) continue;
+                    const x0 = s[i];
+                    out[keyPrefix + i] = {
+                        type: 'box',
+                        xMin: x0,
+                        xMax: x0 + dur,
+                        yMin: yMin,
+                        yMax: yMax,
+                        backgroundColor: fill,
+                        borderColor: border,
+                        borderWidth: 1
+                    };
+                }
+            }
+            addBands(
+                without, 'rbDurWo',
+                0.01, 0.23,
+                'rgba(231, 76, 60, 0.2)',
+                'rgba(231, 76, 60, 0.55)'
+            );
+            addBands(
+                with_, 'rbDurWi',
+                0.25, 0.47,
+                'rgba(243, 156, 18, 0.22)',
+                'rgba(230, 126, 34, 0.55)'
+            );
+            return out;
         }
 
         function allAnnotations() {
@@ -825,6 +869,8 @@
                         played_utility: 8.5,
                         rebuffer_ratio: 0.02
                     },
+                    rebuffer_starts_s: [0.5, 2.2, 4.0],
+                    rebuffer_durations_s: [0.8, 0.5, 1.2],
                     time_series: {
                         time_points: [0, 1, 2, 3, 4, 5],
                         buffer_levels: [0, 2, 4, 3, 5, 6],
@@ -839,6 +885,8 @@
                         played_utility: 9.2,
                         rebuffer_ratio: 0.01
                     },
+                    rebuffer_starts_s: [1.0],
+                    rebuffer_durations_s: [1.2],
                     time_series: {
                         time_points: [0, 1, 2, 3, 4, 5],
                         buffer_levels: [0, 3, 5, 4, 6, 7],
@@ -1163,6 +1211,10 @@
                 if (e.start_time !== undefined && e.end_time !== undefined) {
                     s += ` [${(e.start_time / 1000).toFixed(1)}s\u2013${(e.end_time / 1000).toFixed(1)}s]`;
                 }
+                const afterMs = e.buffer_level_after !== undefined ? e.buffer_level_after : e.buffer_level;
+                if (e.buffer_level_before != null && afterMs != null) {
+                    s += ` buf ${(e.buffer_level_before / 1000).toFixed(1)}\u2192${(afterMs / 1000).toFixed(1)}s`;
+                }
                 return s;
             }).join(', ') || 'none';
 
@@ -1172,9 +1224,12 @@
                 const badge = prefetchedSegs.size > 0
                     ? `<span class="badge ${isHit ? 'badge-hit' : 'badge-miss'}">${isHit ? 'HIT' : 'MISS'}</span> `
                     : '';
-                let s = `seg ${e.segment} (${e.seek_to_s}s)`;
+                const segStr = e.from_segment !== undefined
+                    ? `seg ${e.from_segment} \u2192 seg ${e.segment} (${e.seek_to_s}s)`
+                    : `seg ${e.segment} (${e.seek_to_s}s)`;
+                let s = segStr;
                 if (e.seek_when_s !== undefined) {
-                    s = `at ${e.seek_when_s.toFixed(1)}s \u2192 ${s}`;
+                    s = `at ${e.seek_when_s.toFixed(1)}s &nbsp; ${segStr}`;
                 }
                 return badge + s;
             }).join(', ') || 'none';
@@ -1191,9 +1246,9 @@
             
             const metrics = [
                 { label: 'Total Rebuffering Time', key: 'total_rebuffer_time', unit: 's', lowerIsBetter: true,
-                  desc: 'Cumulative time the player was stalled waiting for data. Lower means smoother playback.' },
+                  desc: 'Sum of all stall intervals inside the simulator (printed as seconds). Same numbers as the bar chart; the buffer graph does not recompute this total.' },
                 { label: 'Rebuffering Events', key: 'rebuffer_count', unit: '', lowerIsBetter: true,
-                  desc: 'Number of times playback froze to wait for buffering. Each event is a visible stall the user experiences.' },
+                  desc: 'How often the simulator charged an empty-buffer stall while advancing time. The buffer chart shows one marker per contiguous near-empty span, which should be close to this count.' },
                 { label: 'Played Utility', key: 'played_utility', unit: '', lowerIsBetter: false,
                   desc: 'Sum of per-segment quality scores over the session. Higher means the player selected better quality more often.' },
                 { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true,
@@ -1238,25 +1293,146 @@
             return (timePoints || []).map((t, i) => ({ x: t, y: (values || [])[i] }));
         }
 
-        function findRebufferPoints(timePoints, bufferLevels, threshold) {
-            const pts = [];
+        /**
+         * Contiguous stall episodes where buffer is (near) empty. The comparison JSON only
+         * records buffer at download boundaries, so duration is approximate (gap between samples).
+         * This matches the spirit of summary.rebuffer_count much better than flagging every sample
+         * with buffer &lt; 1s, which was both wrong semantically and unreadable.
+         */
+        function findRebufferEpisodes(timePoints, bufferLevels, emptyThresholdSec) {
             const tp = timePoints || [];
             const bl = bufferLevels || [];
+            const eps = emptyThresholdSec;
+            const episodes = [];
+            let inStall = false;
+            let stallStart = null;
+            let stallStartIdx = -1;
             for (let i = 0; i < tp.length; i++) {
-                if (bl[i] !== undefined && bl[i] <= threshold) {
-                    pts.push({ x: tp[i], y: 0 });
+                const v = bl[i];
+                const stalled = v !== undefined && v <= eps;
+                if (stalled && !inStall) {
+                    stallStart = tp[i];
+                    stallStartIdx = i;
+                    inStall = true;
+                } else if (!stalled && inStall) {
+                    episodes.push({
+                        start: stallStart,
+                        end: tp[i],
+                        duration: Math.max(0, tp[i] - stallStart),
+                        startIdx: stallStartIdx,
+                        endIdx: i
+                    });
+                    inStall = false;
+                    stallStart = null;
+                    stallStartIdx = -1;
                 }
             }
-            return pts;
+            if (inStall && stallStart !== null) {
+                const lastT = tp[tp.length - 1];
+                episodes.push({
+                    start: stallStart,
+                    end: lastT,
+                    duration: Math.max(0, lastT - stallStart),
+                    startIdx: stallStartIdx,
+                    endIdx: tp.length - 1
+                });
+            }
+            return episodes;
+        }
+
+        /** One scatter point per episode, y in seconds (slightly above axis so lines at 0 stay visible). */
+        function episodesToScatterPoints(episodes, ySec) {
+            return episodes.map(function(ep) {
+                return {
+                    x: ep.start,
+                    y: ySec,
+                    episodeEnd: ep.end,
+                    episodeDuration: ep.duration
+                };
+            });
+        }
+
+        /**
+         * Prefer `rebuffer_starts_s` from run_comparison.py (exact simulator times, same count as
+         * summary.rebuffer_count). Fall back to sparse time-series heuristics for older JSON.
+         */
+        function buildStallMarkers(runMetrics, timePoints, bufferLevels, emptyThresholdSec, ySec) {
+            if (Array.isArray(runMetrics.rebuffer_starts_s)) {
+                const durs = Array.isArray(runMetrics.rebuffer_durations_s)
+                    ? runMetrics.rebuffer_durations_s
+                    : null;
+                return {
+                    points: runMetrics.rebuffer_starts_s.map(function(t, i) {
+                        const o = { x: t, y: ySec, fromSimulator: true };
+                        if (durs && i < durs.length && durs[i] > 0) {
+                            o.stallDurationSec = durs[i];
+                        }
+                        return o;
+                    }),
+                    source: 'simulator',
+                    count: runMetrics.rebuffer_starts_s.length
+                };
+            }
+            const ep = findRebufferEpisodes(timePoints, bufferLevels, emptyThresholdSec);
+            return {
+                points: episodesToScatterPoints(ep, ySec),
+                source: 'estimated',
+                count: ep.length
+            };
+        }
+
+        function remapStallPointsY(points, ySec) {
+            return points.map(function(p) {
+                return {
+                    x: p.x,
+                    y: ySec,
+                    fromSimulator: p.fromSimulator,
+                    stallDurationSec: p.stallDurationSec,
+                    episodeEnd: p.episodeEnd,
+                    episodeDuration: p.episodeDuration
+                };
+            });
+        }
+
+        /** Prefetch JSON: buffer_level_before = ms when download starts (threshold gate); after = ms when done (buffer chart y). */
+        function prefetchTooltipLabel(e, endTimeSec) {
+            const t = endTimeSec != null ? endTimeSec.toFixed(1) : '?';
+            let s = 'Prefetch seg ' + e.segment + ' (q' + e.quality + ') ends ~' + t + 's';
+            if (e.start_time !== undefined && e.end_time !== undefined) {
+                s += ' [' + (e.start_time / 1000).toFixed(1) + 's–' + (e.end_time / 1000).toFixed(1) + 's]';
+            }
+            if (e.buffer_level_before != null) {
+                s += ' · at start: ' + (e.buffer_level_before / 1000).toFixed(2) + 's (when gate ran)';
+            }
+            const afterMs = e.buffer_level_after !== undefined ? e.buffer_level_after : e.buffer_level;
+            if (afterMs != null) {
+                s += ' · after: ' + (afterMs / 1000).toFixed(2) + 's (end of prefetch; height of green triangle on buffer chart)';
+            }
+            return s;
         }
 
         function renderCharts() {
             const without = comparisonData.without_buffer_py;
             const with_ = comparisonData.with_buffer_py;
             const label = withLabel();
-            const annotations = allAnnotations();
+            const baseAnnotations = allAnnotations();
             const pf = (with_.prefetch_events || []).filter(e => e.end_time !== undefined);
             const skData = getSeekData();
+
+            // Compute a shared x-axis range so both time-series charts use identical
+            // min/max, which keeps the annotation lines at the same pixel x-position.
+            const withoutTS = without.time_series || {};
+            const withTS = with_.time_series || {};
+            const allTP = [
+                ...(withoutTS.time_points || []),
+                ...(withTS.time_points || []),
+                ...pf.map(e => e.end_time / 1000)
+            ];
+            const sharedXMin = allTP.length > 0 ? Math.min(...allTP) : 0;
+            const sharedXMax = allTP.length > 0 ? Math.max(...allTP) : undefined;
+
+            // Fixed y-axis width (px) so both chart areas start at the same left offset.
+            const YAXIS_WIDTH = 62;
 
             // Only tear down per-run charts — keep summaryRebuf / summaryTime alive (same page as summary table)
             destroyDetailChartsOnly();
@@ -1304,7 +1480,12 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return context.dataset.label + ': ' + context.parsed.y.toFixed(2);
+                                    const v = context.parsed.y;
+                                    const isEvents = context.dataIndex === 1;
+                                    const s = isEvents && Math.abs(v - Math.round(v)) < 1e-6
+                                        ? String(Math.round(v))
+                                        : v.toFixed(2);
+                                    return context.dataset.label + ': ' + s;
                                 }
                             }
                         },
@@ -1324,12 +1505,49 @@
 
             // Buffer level over time (linear x-axis for precise annotation placement)
             const bufferCtx = document.getElementById('bufferChart').getContext('2d');
-            const withoutTS = without.time_series || {};
-            const withTS = with_.time_series || {};
 
-            const rebufThreshold = 1.0;
-            const rebufWithout = findRebufferPoints(withoutTS.time_points, withoutTS.buffer_levels, rebufThreshold);
-            const rebufWith = findRebufferPoints(withTS.time_points, withTS.buffer_levels, rebufThreshold);
+            const rebufEmptyThresholdSec = 0.02;
+            const rebufMarkerYWithout = 0.12;
+            const rebufMarkerYWith = 0.36;
+            const woStall = buildStallMarkers(
+                without, withoutTS.time_points, withoutTS.buffer_levels, rebufEmptyThresholdSec, rebufMarkerYWithout);
+            const wiStall = buildStallMarkers(
+                with_, withTS.time_points, withTS.buffer_levels, rebufEmptyThresholdSec, rebufMarkerYWith);
+            const rebufWithout = woStall.points;
+            const rebufWith = wiStall.points;
+
+            const durationBandAnn = rebufferDurationBandsAnnotations(without, with_);
+            const bufferAnnotations = Object.assign({}, baseAnnotations, durationBandAnn);
+
+            const bufCap = document.getElementById('bufferChartCaption');
+            if (bufCap) {
+                const sWo = without.summary && without.summary.rebuffer_count;
+                const sWi = with_.summary && with_.summary.rebuffer_count;
+                const hasDurData = (Array.isArray(without.rebuffer_durations_s) && without.rebuffer_durations_s.length > 0)
+                    || (Array.isArray(with_.rebuffer_durations_s) && with_.rebuffer_durations_s.length > 0);
+                bufCap.style.display = '';
+                if (woStall.source === 'simulator' && wiStall.source === 'simulator') {
+                    bufCap.innerHTML =
+                        '<strong>Stall markers</strong> use exact times from the simulator (same count as ' +
+                        '<strong>Rebuffering Events</strong> in the bar chart: ' +
+                        '<strong>' + woStall.count + '</strong> without, <strong>' + wiStall.count + '</strong> with). ' +
+                        (hasDurData
+                            ? '<strong>Coloured bands</strong> along the bottom span each stall’s <strong>duration</strong> ' +
+                              '(horizontal width = rebuffering time in seconds). Red = without buffer.py, orange = with. '
+                            : '') +
+                        'Markers sit at stall start; red/orange use different heights when both runs stall together.';
+                } else {
+                    bufCap.innerHTML =
+                        '<strong>Stall markers</strong> are estimated from sparse buffer samples (older JSON). ' +
+                        'Re-run <code>run_comparison.py</code> to embed <code>rebuffer_starts_s</code> so markers ' +
+                        'match the bar chart (' +
+                        (sWo != null ? 'summary without: ' + sWo : '?') +
+                        ', ' +
+                        (sWi != null ? 'with: ' + sWi : '?') +
+                        '). Estimated counts — without: <strong>' + woStall.count + '</strong>; with: <strong>' +
+                        wiStall.count + '</strong>.';
+                }
+            }
 
             const bufferDatasets = [
                 {
@@ -1354,29 +1572,29 @@
             ];
             if (rebufWithout.length > 0) {
                 bufferDatasets.push({
-                    label: 'Rebuffer (without)',
+                    label: 'Stall start (without)',
                     data: rebufWithout,
                     type: 'scatter',
                     pointStyle: 'crossRot',
-                    pointRadius: 8,
-                    pointHoverRadius: 11,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
                     pointBackgroundColor: 'rgba(231, 76, 60, 1)',
                     pointBorderColor: 'rgba(231, 76, 60, 1)',
-                    pointBorderWidth: 2.5,
+                    pointBorderWidth: 2,
                     showLine: false
                 });
             }
             if (rebufWith.length > 0) {
                 bufferDatasets.push({
-                    label: 'Rebuffer (with)',
+                    label: 'Stall start (with)',
                     data: rebufWith,
                     type: 'scatter',
-                    pointStyle: 'crossRot',
-                    pointRadius: 8,
-                    pointHoverRadius: 11,
+                    pointStyle: 'triangle',
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
                     pointBackgroundColor: 'rgba(243, 156, 18, 1)',
-                    pointBorderColor: 'rgba(243, 156, 18, 1)',
-                    pointBorderWidth: 2.5,
+                    pointBorderColor: 'rgba(230, 126, 34, 1)',
+                    pointBorderWidth: 2,
                     showLine: false
                 });
             }
@@ -1406,25 +1624,40 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: { display: true, text: 'Buffer Level (seconds)' }
+                            title: { display: true, text: 'Buffer Level (seconds)' },
+                            afterFit: function(axis) { axis.width = YAXIS_WIDTH; }
                         },
                         x: {
                             type: 'linear',
+                            min: sharedXMin,
+                            max: sharedXMax,
                             title: { display: true, text: 'Playback Time (seconds)' }
                         }
                     },
                     plugins: {
                         legend: { display: true, position: 'top' },
-                        annotation: { annotations },
+                        annotation: { annotations: bufferAnnotations },
                         tooltip: {
                             callbacks: {
                                 label: function(ctx) {
                                     if (ctx.dataset.label === 'Prefetch download') {
-                                        const e = pf[ctx.dataIndex];
-                                        return `Prefetch seg ${e.segment} (q${e.quality}) at ${ctx.parsed.x.toFixed(1)}s`;
+                                        return prefetchTooltipLabel(pf[ctx.dataIndex], ctx.parsed.x);
                                     }
-                                    if (ctx.dataset.label && ctx.dataset.label.startsWith('Rebuffer')) {
-                                        return ctx.dataset.label + ' at ' + ctx.parsed.x.toFixed(1) + 's (buf=' + ctx.parsed.y.toFixed(2) + 's)';
+                                    if (ctx.dataset.label && ctx.dataset.label.indexOf('Stall start') === 0) {
+                                        const raw = ctx.raw || {};
+                                        if (raw.fromSimulator) {
+                                            if (raw.stallDurationSec != null && raw.stallDurationSec > 0) {
+                                                return ctx.dataset.label + ': start ' + ctx.parsed.x.toFixed(2) +
+                                                    's, duration ' + raw.stallDurationSec.toFixed(2) + 's';
+                                            }
+                                            return ctx.dataset.label + ': ' + ctx.parsed.x.toFixed(2) +
+                                                's (simulator rebuffer event)';
+                                        }
+                                        const dur = raw.episodeDuration != null ? raw.episodeDuration : 0;
+                                        const endT = raw.episodeEnd != null ? raw.episodeEnd : ctx.parsed.x;
+                                        return ctx.dataset.label +
+                                            ': t\u2248' + ctx.parsed.x.toFixed(2) + '\u2013' + endT.toFixed(2) +
+                                            's (\u2248' + dur.toFixed(2) + 's from samples)';
                                     }
                                     return ctx.dataset.label + ': ' + ctx.parsed.y.toFixed(2) + 's';
                                 }
@@ -1461,6 +1694,38 @@
                     stepped: 'after'
                 }
             ];
+            const rebufQualityYWithout = 0.12;
+            const rebufQualityYWith = 0.36;
+            const rebufWithoutQ = remapStallPointsY(rebufWithout, rebufQualityYWithout);
+            const rebufWithQ = remapStallPointsY(rebufWith, rebufQualityYWith);
+            if (rebufWithoutQ.length > 0) {
+                qualityDatasets.push({
+                    label: 'Stall start (without)',
+                    data: rebufWithoutQ,
+                    type: 'scatter',
+                    pointStyle: 'crossRot',
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: 'rgba(231, 76, 60, 1)',
+                    pointBorderColor: 'rgba(231, 76, 60, 1)',
+                    pointBorderWidth: 2,
+                    showLine: false
+                });
+            }
+            if (rebufWithQ.length > 0) {
+                qualityDatasets.push({
+                    label: 'Stall start (with)',
+                    data: rebufWithQ,
+                    type: 'scatter',
+                    pointStyle: 'triangle',
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointBackgroundColor: 'rgba(243, 156, 18, 1)',
+                    pointBorderColor: 'rgba(230, 126, 34, 1)',
+                    pointBorderWidth: 2,
+                    showLine: false
+                });
+            }
             if (pf.length > 0) {
                 qualityDatasets.push({
                     label: 'Prefetch download',
@@ -1484,22 +1749,36 @@
                     scales: {
                         y: {
                             beginAtZero: true,
-                            title: { display: true, text: 'Quality Level' }
+                            title: { display: true, text: 'Quality Level' },
+                            afterFit: function(axis) { axis.width = YAXIS_WIDTH; }
                         },
                         x: {
                             type: 'linear',
+                            min: sharedXMin,
+                            max: sharedXMax,
                             title: { display: true, text: 'Playback Time (seconds)' }
                         }
                     },
                     plugins: {
                         legend: { display: true, position: 'top' },
-                        annotation: { annotations },
+                        annotation: { annotations: baseAnnotations },
                         tooltip: {
                             callbacks: {
                                 label: function(ctx) {
                                     if (ctx.dataset.label === 'Prefetch download') {
-                                        const e = pf[ctx.dataIndex];
-                                        return `Prefetch seg ${e.segment} (q${e.quality}) at ${ctx.parsed.x.toFixed(1)}s`;
+                                        return prefetchTooltipLabel(pf[ctx.dataIndex], ctx.parsed.x);
+                                    }
+                                    if (ctx.dataset.label && ctx.dataset.label.indexOf('Stall start') === 0) {
+                                        const raw = ctx.raw || {};
+                                        if (raw.fromSimulator) {
+                                            if (raw.stallDurationSec != null && raw.stallDurationSec > 0) {
+                                                return ctx.dataset.label + ': start ' + ctx.parsed.x.toFixed(2) +
+                                                    's, duration ' + raw.stallDurationSec.toFixed(2) + 's';
+                                            }
+                                            return ctx.dataset.label + ': ' + ctx.parsed.x.toFixed(2) +
+                                                's (simulator rebuffer event)';
+                                        }
+                                        return ctx.dataset.label + ' at ' + ctx.parsed.x.toFixed(2) + 's (estimated)';
                                     }
                                     return ctx.dataset.label + ': quality ' + ctx.parsed.y;
                                 }

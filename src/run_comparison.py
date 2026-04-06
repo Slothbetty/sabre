@@ -8,7 +8,7 @@ With buffer.py     : dynamic buffering + optional prefetch, seeks can hit
                      pre-downloaded chunks and avoid rebuffering.
 
 The JSON output is compatible with view_comparison.html (which auto-detects
-prefetch/seek data and renders seek markers + prefetch info when present).
+prefetch/seek data, seek markers, prefetch info, and per-stall durations when present).
 """
 
 import sys
@@ -24,7 +24,7 @@ _DOWNLOAD_RE = re.compile(
 _PREFETCH_RE = re.compile(
     r'\[(\d+)-(\d+)\] prefetch segment (\d+) quality=(\d+) bl=(\d+)->(\d+)')
 _SEEK_RE = re.compile(
-    r'\[Seek\] At playback time (\d+) ms: seeking to (\d+) seconds \(segment index (\d+)\)')
+    r'\[Seek\] At playback time (\d+) ms: seeking from segment (\d+) to (\d+) seconds \(segment index (\d+)\)')
 
 _SUMMARY_KEYS = [
     ('total_rebuffer_time', 'total rebuffer:'),
@@ -46,9 +46,32 @@ def parse_simulation_output(output):
         'download_events': [],
         'prefetch_events': [],
         'seek_events': [],
+        'rebuffer_starts_s': None,
+        'rebuffer_durations_s': None,
     }
 
     for line in output.split('\n'):
+        stripped = line.strip()
+        if stripped.lower().startswith('rebuffer_starts_ms:'):
+            rest = stripped.split(':', 1)[1].strip()
+            if rest:
+                metrics['rebuffer_starts_s'] = [
+                    int(p) / 1000.0 for p in rest.split(',') if p.strip()
+                ]
+            else:
+                metrics['rebuffer_starts_s'] = []
+            continue
+
+        if stripped.lower().startswith('rebuffer_durations_ms:'):
+            rest = stripped.split(':', 1)[1].strip()
+            if rest:
+                metrics['rebuffer_durations_s'] = [
+                    int(p) / 1000.0 for p in rest.split(',') if p.strip()
+                ]
+            else:
+                metrics['rebuffer_durations_s'] = []
+            continue
+
         m = _DOWNLOAD_RE.search(line)
         if m:
             start_time, end_time, segment, quality, bl_before, bl_after = m.groups()
@@ -77,9 +100,10 @@ def parse_simulation_output(output):
 
         m = _SEEK_RE.search(line)
         if m:
-            seek_when_ms, seek_to_s, seg_idx = m.groups()
+            seek_when_ms, from_seg, seek_to_s, seg_idx = m.groups()
             metrics['seek_events'].append({
                 'seek_when_s': int(seek_when_ms) / 1000.0,
+                'from_segment': int(from_seg),
                 'seek_to_s': int(seek_to_s),
                 'segment': int(seg_idx),
             })

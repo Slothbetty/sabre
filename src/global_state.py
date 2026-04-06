@@ -45,6 +45,10 @@ class GlobalState:
             self.rebuffer_event_count = 0
             self.rebuffer_time = 0
             self.segment_rebuffer_time = 0
+            # Wall-clock sim time (ms) each time rebuffer_event_count increments (for tooling / charts)
+            self.rebuffer_event_starts_ms = []
+            # Stall duration (ms) charged for that same increment (matches rebuffer_time summands)
+            self.rebuffer_event_durations_ms = []
             self.played_utility = 0
             self.played_bitrate = 0
             self.total_bitrate_change = 0

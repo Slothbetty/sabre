@@ -339,8 +339,13 @@ def interrupted_by_seek(delta, abr):
             gs.last_seek_time = gs.total_play_time
 
             if gs.verbose:
-                print("[Seek] At playback time %d ms: seeking to %d seconds (segment index %d)" %
-                    (gs.total_play_time, pos_seek_to_ms / 1000, new_segment))
+                if gs.multi_region_buffer is not None:
+                    from_segment = int(gs.current_playback_pos / seg_time)
+                else:
+                    buffer_base = gs.next_segment - len(gs.buffer_contents)
+                    from_segment = int((buffer_base * seg_time + gs.buffer_fcc) / seg_time)
+                print("[Seek] At playback time %d ms: seeking from segment %d to %d seconds (segment index %d)" %
+                    (gs.total_play_time, from_segment, pos_seek_to_ms / 1000, new_segment))
 
             # Update buffer during seek
             update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time)
@@ -373,6 +378,8 @@ def deplete_buffer(time, abr):
                 return False  # Seek event triggered: abort depleting further.
             # During rebuffering, playback position does not advance.
             gs.rebuffer_event_count += 1
+            gs.rebuffer_event_starts_ms.append(gs.total_play_time)
+            gs.rebuffer_event_durations_ms.append(int(time))
             gs.segment_rebuffer_time = time
             return True
 
@@ -440,6 +447,8 @@ def deplete_buffer(time, abr):
             if interrupted_by_seek(time, abr):
                 return False
             gs.rebuffer_event_count += 1
+            gs.rebuffer_event_starts_ms.append(gs.total_play_time)
+            gs.rebuffer_event_durations_ms.append(int(time))
             gs.segment_rebuffer_time = time
 
         gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
@@ -452,6 +461,8 @@ def deplete_buffer(time, abr):
             if interrupted_by_seek(time, abr):
                 return False  # Seek event triggered: abort depleting further.
             gs.rebuffer_event_count += 1
+            gs.rebuffer_event_starts_ms.append(gs.total_play_time)
+            gs.rebuffer_event_durations_ms.append(int(time))
             gs.segment_rebuffer_time = time
             return True
 
@@ -506,6 +517,8 @@ def deplete_buffer(time, abr):
             if interrupted_by_seek(time, abr):
                 return False
             gs.rebuffer_event_count += 1
+            gs.rebuffer_event_starts_ms.append(gs.total_play_time)
+            gs.rebuffer_event_durations_ms.append(int(time))
             gs.segment_rebuffer_time = time
 
         gs.pending_quality_up, gs.total_reaction_time = process_quality_up(gs.total_play_time, gs.max_buffer_size, gs.pending_quality_up, gs.total_reaction_time)
@@ -595,6 +608,11 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                 and gs.next_segment in gs.multi_region_buffer.prefetch_indices):
             gs.next_segment += 1
             continue
+
+        # Discard any pending prefetch segments the playhead has already passed.
+        if prefetch_module is not None and gs.multi_region_buffer is not None:
+            current_seg = int(gs.current_playback_pos / gs.manifest.segment_time)
+            prefetch_module.skip_stale_segments(current_seg)
 
         # Prefetch check: trigger when buffer level reaches the config threshold
         if (prefetch_module is not None
@@ -1312,6 +1330,8 @@ if __name__ == "__main__":
     gs.rebuffer_event_count = 0
     gs.rebuffer_time = 0
     gs.segment_rebuffer_time = 0
+    gs.rebuffer_event_starts_ms = []
+    gs.rebuffer_event_durations_ms = []
     gs.played_utility = 0
     gs.played_bitrate = 0
     gs.total_play_time = 0
@@ -1506,6 +1526,14 @@ if __name__ == "__main__":
         print("rebuffer ratio: %f" % (gs.rebuffer_time / gs.total_play_time))
         print("time average rebuffer: %f" % (gs.rebuffer_time / 1000 * to_time_average))
         print("total rebuffer events: %f" % gs.rebuffer_event_count)
+        print(
+            "rebuffer_starts_ms: "
+            + ",".join(str(int(t)) for t in gs.rebuffer_event_starts_ms)
+        )
+        print(
+            "rebuffer_durations_ms: "
+            + ",".join(str(int(t)) for t in gs.rebuffer_event_durations_ms)
+        )
         print(
             "time average rebuffer events: %f"
             % (gs.rebuffer_event_count * to_time_average)

@@ -33,7 +33,12 @@ class PrefetchModule:
             }
 
         ``buffer_level_threshold`` is the minimum buffer level (in ms)
-        required before a prefetch download is triggered.
+        required before a prefetch download is triggered (``should_prefetch``
+        uses ``buffer_level_ms > threshold``). Verbose logs print
+        ``bl=<before>-><after>``: *before* is the level when the prefetch
+        download **starts** (must exceed the threshold); *after* is the
+        level once the download completes and the chunk is added (often lower
+        if the buffer drained during the download).
     """
 
     def __init__(self, config_path: str | Path) -> None:
@@ -63,3 +68,14 @@ class PrefetchModule:
         if segment_index in self.pending_segments:
             self.pending_segments.remove(segment_index)
         self.completed_segments.add(segment_index)
+
+    def skip_stale_segments(self, current_segment: int) -> None:
+        """Discard any pending segments at or behind *current_segment*.
+
+        Called before each prefetch decision so that segments the playhead has
+        already passed are never downloaded.  Discarded segments are NOT added
+        to ``completed_segments`` because they were never actually fetched.
+        """
+        self.pending_segments = [
+            s for s in self.pending_segments if s > current_segment
+        ]

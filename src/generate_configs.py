@@ -145,6 +145,36 @@ def generate_seeks_for_segment_targets(
     return seeks
 
 
+def build_forward_seek_targets(
+    candidates: list[int],
+    seek_when_times: list[float],
+    seg_dur_ms: int,
+) -> list[int]:
+    """
+    For each seek_when time W, pick one candidate segment whose seek_to time is
+    strictly greater than W (forward-only).  Candidates are spread evenly across
+    the valid forward pool at each seek position so the chosen seek_to values
+    grow roughly in step with the seek_when schedule.
+
+    Falls back to the last candidate when the schedule reaches the end of the
+    movie and no forward option exists.
+    """
+    pool = sorted(set(candidates))
+    n = len(seek_when_times)
+    targets: list[int] = []
+    for i, when in enumerate(seek_when_times):
+        # Current segment the player is on at seek_when time.
+        current_seg = math.floor(when * 1000 / seg_dur_ms)
+        # Target must be a strictly later segment, not just a later timestamp.
+        valid = [s for s in pool if s > current_seg]
+        if not valid:
+            valid = [pool[-1]]
+        frac = i / max(n - 1, 1)
+        idx = int(round(frac * (len(valid) - 1)))
+        targets.append(valid[idx])
+    return targets
+
+
 def build_mixed_seek_targets(
     hit_targets: list[int],
     miss_targets: list[int],
@@ -195,6 +225,83 @@ def build_mixed_seek_targets(
     return combined
 
 
+def generate_linear_hit_dynamic_miss_seeks(
+    seek_when_times: list[float],
+    prefetch_set: set[int],
+    seg_dur_ms: int,
+    num_segments: int,
+    forward_window_ms: int = 12000,
+) -> list[dict]:
+    """
+    Generate short forward seeks that fall within the linear buffer window but
+    target non-prefetched segments (linear buffering hit, dynamic buffering miss).
+
+    For each seek_when time W, picks the non-prefetch segment whose seek_to time
+    is closest to W + forward_window_ms / 2, constrained to (W, W + forward_window_ms].
+    """
+    seeks = []
+    for when in seek_when_times:
+        when_ms = when * 1000
+        # First segment strictly after the one currently playing.
+        seg_lo = math.floor(when_ms / seg_dur_ms) + 1
+        seg_hi = min(math.floor((when_ms + forward_window_ms) / seg_dur_ms), num_segments - 1)
+        mid = (seg_lo + seg_hi) // 2
+
+        target_seg = None
+        for offset in range(max(seg_hi - seg_lo + 1, 1)):
+            for candidate in [mid + offset, mid - offset]:
+                if seg_lo <= candidate <= seg_hi and candidate not in prefetch_set:
+                    target_seg = candidate
+                    break
+            if target_seg is not None:
+                break
+
+        if target_seg is None:
+            # Fallback: first non-prefetch segment in range
+            for s in range(seg_lo, seg_hi + 1):
+                if s not in prefetch_set:
+                    target_seg = s
+                    break
+
+        if target_seg is None:
+            target_seg = max(0, min(num_segments - 1, seg_lo))
+
+        seeks.append({"seek_when": when, "seek_to": seek_to_seconds_for_segment(target_seg, seg_dur_ms)})
+    return seeks
+
+
+def generate_linear_miss_dynamic_hit_seeks(
+    seek_when_times: list[float],
+    prefetch_indices: list[int],
+    seg_dur_ms: int,
+    min_forward_ms: int = 20000,
+) -> list[dict]:
+    """
+    Generate far forward seeks that jump beyond the linear buffer window but
+    land on prefetched segments (linear buffering miss, dynamic buffering hit).
+
+    For each seek_when time W, picks the first prefetch segment whose seek_to
+    time exceeds W + min_forward_ms.  Falls back to the last prefetch segment
+    when near the end of the movie.
+    """
+    prefetch_sorted = sorted(prefetch_indices)
+    prefetch_times = [seek_to_seconds_for_segment(s, seg_dur_ms) for s in prefetch_sorted]
+
+    seeks = []
+    for when in seek_when_times:
+        target_time = when + min_forward_ms / 1000.0
+        target_seg = None
+        for seg, t in zip(prefetch_sorted, prefetch_times):
+            if t > target_time:
+                target_seg = seg
+                break
+        if target_seg is None:
+            target_seg = prefetch_sorted[-1]
+
+        seeks.append({"seek_when": when, "seek_to": seek_to_seconds_for_segment(target_seg, seg_dur_ms)})
+    return seeks
+
+
 def generate_comparison_bundle(
     num_seeks: int,
     total_s: float,
@@ -204,12 +311,15 @@ def generate_comparison_bundle(
     prefetch_count: int,
     mixed_hit_ratio: float = 0.5,
     seed: int | None = None,
-) -> tuple[dict, dict, dict, dict]:
+) -> tuple[dict, dict, dict, dict, dict, dict]:
     """
-    Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss, seeks_mixed):
+    Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss, seeks_mixed,
+           seeks_linear_hit_dynamic_miss, seeks_linear_miss_dynamic_hit):
     one shared prefetch list; hit seeks land on prefetched segments;
     miss seeks land on segments outside that list;
-    mixed seeks have a random mix of hits and misses.
+    mixed seeks have a random mix of hits and misses;
+    linear_hit_dynamic_miss seeks are short forward seeks to non-prefetched segments;
+    linear_miss_dynamic_hit seeks are far forward seeks to prefetched segments.
     """
     prefetch_indices = build_spaced_prefetch_indices(num_segments, prefetch_count)
     prefetch_set = set(prefetch_indices)
@@ -221,10 +331,11 @@ def generate_comparison_bundle(
             f"{num_seeks} miss seeks — lower --prefetch-count or --num-seeks."
         )
 
-    hit_targets = pick_spaced_subset(prefetch_indices, num_seeks)
-    miss_targets = pick_spaced_subset(complement, num_seeks)
-
     schedule = build_seek_when_schedule(num_seeks, total_s, seg_dur_ms)
+
+    # Per-seek forward-only targets: each entry is for the corresponding seek_when.
+    hit_targets = build_forward_seek_targets(prefetch_indices, schedule, seg_dur_ms)
+    miss_targets = build_forward_seek_targets(complement, schedule, seg_dur_ms)
 
     seeks_hit = generate_seeks_for_segment_targets(
         hit_targets, schedule, seg_dur_ms, num_segments
@@ -233,12 +344,23 @@ def generate_comparison_bundle(
         miss_targets, schedule, seg_dur_ms, num_segments
     )
 
+    # Mixed: randomly assign each seek position to hit or miss, then pick the
+    # corresponding per-seek forward target so seek_to > seek_when always holds.
     rng = random.Random(seed)
-    mixed_targets = build_mixed_seek_targets(
-        hit_targets, miss_targets, num_seeks, mixed_hit_ratio, rng, seg_dur_ms
-    )
+    num_hits = max(0, min(num_seeks, round(num_seeks * mixed_hit_ratio)))
+    assignment = [True] * num_hits + [False] * (num_seeks - num_hits)
+    rng.shuffle(assignment)
+    mixed_targets = [hit_targets[i] if assignment[i] else miss_targets[i]
+                     for i in range(num_seeks)]
     seeks_mixed = generate_seeks_for_segment_targets(
         mixed_targets, schedule, seg_dur_ms, num_segments
+    )
+
+    seeks_lin_hit_dyn_miss = generate_linear_hit_dynamic_miss_seeks(
+        schedule, prefetch_set, seg_dur_ms, num_segments
+    )
+    seeks_lin_miss_dyn_hit = generate_linear_miss_dynamic_hit_seeks(
+        schedule, prefetch_indices, seg_dur_ms
     )
 
     prefetch_config = {
@@ -251,6 +373,8 @@ def generate_comparison_bundle(
         {"seeks": seeks_hit},
         {"seeks": seeks_miss},
         {"seeks": seeks_mixed},
+        {"seeks": seeks_lin_hit_dyn_miss},
+        {"seeks": seeks_lin_miss_dyn_hit},
     )
 
 
@@ -301,6 +425,16 @@ def main():
         help="Seek file for mixed hit/miss scenario (default: seeks_mixed.json)",
     )
     parser.add_argument(
+        "--output-linear-hit-dynamic-miss",
+        default="seeks_linear_hit_dynamic_miss.json",
+        help="Seek file for linear-hit/dynamic-miss scenario (default: seeks_linear_hit_dynamic_miss.json)",
+    )
+    parser.add_argument(
+        "--output-linear-miss-dynamic-hit",
+        default="seeks_linear_miss_dynamic_hit.json",
+        help="Seek file for linear-miss/dynamic-hit scenario (default: seeks_linear_miss_dynamic_hit.json)",
+    )
+    parser.add_argument(
         "--mixed-hit-ratio", type=float, default=0.5,
         help="Fraction of seeks that hit prefetch in the mixed scenario (default: 0.5)",
     )
@@ -330,7 +464,14 @@ def main():
         sys.exit(1)
 
     try:
-        prefetch_config, seeks_hit_cfg, seeks_miss_cfg, seeks_mixed_cfg = generate_comparison_bundle(
+        (
+            prefetch_config,
+            seeks_hit_cfg,
+            seeks_miss_cfg,
+            seeks_mixed_cfg,
+            seeks_lin_hit_dyn_miss_cfg,
+            seeks_lin_miss_dyn_hit_cfg,
+        ) = generate_comparison_bundle(
             num_seeks=args.num_seeks,
             total_s=total_s,
             seg_dur_ms=seg_dur_ms,
@@ -352,21 +493,26 @@ def main():
     print("\n--- Comparison bundle ---")
     print(f"Prefetch ({args.output_prefetch}): threshold={args.buffer_threshold}ms, "
           f"segments={sorted(pf_segs)}")
-    print(f"Seeks (hit):   {args.output_prefetch_hit} -> all seek_to land on prefetched segments")
-    print(f"Seeks (miss):  {args.output_seeks_miss} -> all seek_to miss prefetch")
-    print(f"Seeks (mixed): {args.output_seeks_mixed} -> {num_hits}/{args.num_seeks} hit "
+    print(f"Seeks (hit):                   {args.output_prefetch_hit} -> all seek_to land on prefetched segments")
+    print(f"Seeks (miss):                  {args.output_seeks_miss} -> all seek_to miss prefetch")
+    print(f"Seeks (mixed):                 {args.output_seeks_mixed} -> {num_hits}/{args.num_seeks} hit "
           f"(ratio={args.mixed_hit_ratio}, seed={args.seed})")
+    print(f"Seeks (linear hit, dyn miss):  {args.output_linear_hit_dynamic_miss} -> short forward seeks, non-prefetch targets")
+    print(f"Seeks (linear miss, dyn hit):  {args.output_linear_miss_dynamic_hit} -> far forward seeks, prefetch targets")
 
     for label, cfg in (
         ("prefetch_hit", seeks_hit_cfg),
         ("prefetch_miss", seeks_miss_cfg),
         ("mixed", seeks_mixed_cfg),
+        ("linear_hit_dynamic_miss", seeks_lin_hit_dyn_miss_cfg),
+        ("linear_miss_dynamic_hit", seeks_lin_miss_dyn_hit_cfg),
     ):
         print(f"\n  {label}:")
         for i, s in enumerate(cfg["seeks"], 1):
             seg_idx = segment_index_for_time(s["seek_to"], seg_dur_ms)
             hit = "HIT" if seg_idx in pf_segs else "miss"
-            print(f"    {i}. when={s['seek_when']}s -> {s['seek_to']}s (seg {seg_idx}, {hit})")
+            fwd = s["seek_to"] - s["seek_when"]
+            print(f"    {i}. when={s['seek_when']}s -> {s['seek_to']}s (seg {seg_idx}, {hit}, {fwd:+.1f}s)")
 
     if args.dry_run:
         print("\n--- test_prefetch_config.json ---")
@@ -377,6 +523,10 @@ def main():
         print(json.dumps(seeks_miss_cfg, indent=2))
         print("\n--- seeks (mixed) ---")
         print(json.dumps(seeks_mixed_cfg, indent=2))
+        print("\n--- seeks_linear_hit_dynamic_miss ---")
+        print(json.dumps(seeks_lin_hit_dyn_miss_cfg, indent=2))
+        print("\n--- seeks_linear_miss_dynamic_hit ---")
+        print(json.dumps(seeks_lin_miss_dyn_hit_cfg, indent=2))
         print("\n(dry run — no files written)")
         return
 
@@ -385,6 +535,8 @@ def main():
         (script_dir / args.output_prefetch_hit, seeks_hit_cfg),
         (script_dir / args.output_seeks_miss, seeks_miss_cfg),
         (script_dir / args.output_seeks_mixed, seeks_mixed_cfg),
+        (script_dir / args.output_linear_hit_dynamic_miss, seeks_lin_hit_dyn_miss_cfg),
+        (script_dir / args.output_linear_miss_dynamic_hit, seeks_lin_miss_dyn_hit_cfg),
     ]
     for path, obj in paths:
         with open(path, "w") as f:
@@ -395,7 +547,8 @@ def main():
     print("\nRun multi-scenario comparison with:")
     print(
         f"  python run_comparison.py -sc {args.output_seeks_miss},"
-        f"{args.output_prefetch_hit},{args.output_seeks_mixed}"
+        f"{args.output_prefetch_hit},{args.output_seeks_mixed},"
+        f"{args.output_linear_hit_dynamic_miss},{args.output_linear_miss_dynamic_hit}"
         f" -pc {args.output_prefetch} -a all -o prefetch_comparison_results"
     )
 

@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(python3 -c \":*)",
-      "Bash(python test_dynamic_buffer_cases.py)"
+      "Bash(python test_dynamic_buffer_cases.py)",
+      "Bash(python /c/Users/sloth/Documents/sabre/src/prefetch_comparison_results/seeks/comparison_bola.json)"
     ]
   }
 }
