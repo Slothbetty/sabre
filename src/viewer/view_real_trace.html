@@ -1,0 +1,591 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Real Trace Viewer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+            color: #333;
+        }
+        .container { max-width: 1400px; margin: 0 auto; }
+        header {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        h1 { color: #2c3e50; margin-bottom: 6px; }
+        header p { color: #7f8c8d; font-size: 14px; }
+        .file-input-section {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .file-input-wrapper { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+        input[type="file"] {
+            padding: 8px;
+            border: 2px dashed #ddd;
+            border-radius: 4px;
+            cursor: pointer;
+            flex: 1;
+            min-width: 200px;
+        }
+        select {
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            background: white;
+            color: #333;
+            cursor: pointer;
+        }
+        button {
+            padding: 10px 20px;
+            background: #3498db;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #95a5a6; cursor: not-allowed; }
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 16px;
+            margin-bottom: 20px;
+        }
+        .summary-card {
+            background: white;
+            padding: 18px 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .summary-card h3 { color: #7f8c8d; font-size: 12px; text-transform: uppercase; margin-bottom: 4px; }
+        .summary-card .value { font-size: 28px; font-weight: bold; color: #2c3e50; }
+        .summary-card .sub { font-size: 12px; color: #95a5a6; margin-top: 4px; }
+        .chart-container {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            margin-bottom: 20px;
+        }
+        .chart-container h2 { color: #2c3e50; margin-bottom: 16px; font-size: 18px; }
+        .chart-container p.caption { color: #7f8c8d; font-size: 12px; margin: -8px 0 12px 0; }
+        .chart-wrapper { position: relative; height: 360px; }
+        .chart-wrapper--short { height: 260px; }
+        .error-message {
+            background: #e74c3c; color: white; padding: 14px; border-radius: 4px; margin-bottom: 20px;
+        }
+        #content { display: none; }
+        .config-info {
+            background: #ecf0f1; padding: 14px; border-radius: 4px; margin-bottom: 20px; font-size: 13px;
+        }
+        .config-info strong { color: #2c3e50; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <header>
+        <h1>Real Trace Viewer</h1>
+        <p>Load a CSV exported from the YouTube Trace Collector extension to visualise buffer level, quality, and stalls — same charts as the simulator viewer.</p>
+    </header>
+
+    <div class="file-input-section">
+        <div class="file-input-wrapper">
+            <input type="file" id="csvFile" accept=".csv">
+            <button onclick="loadCSV()">Load CSV</button>
+        </div>
+        <p style="color:#7f8c8d;font-size:12px;margin-top:8px;">
+            If the CSV has multiple sessions, pick one from the dropdown that appears after loading.
+        </p>
+    </div>
+
+    <div id="errorMessage" class="error-message" style="display:none;"></div>
+    <div id="sessionPicker" style="display:none; background:white; padding:16px; border-radius:8px; box-shadow:0 2px 4px rgba(0,0,0,0.1); margin-bottom:20px;">
+        <label style="font-size:14px; font-weight:600; color:#2c3e50; margin-right:10px;">Session:</label>
+        <select id="sessionSelect" onchange="renderSession()"></select>
+    </div>
+
+    <div id="content">
+        <div id="configInfo" class="config-info"></div>
+        <div class="summary-cards" id="summaryCards"></div>
+
+        <div class="chart-container">
+            <h2>Buffer Level Over Time</h2>
+            <p class="caption" id="bufferCaption"></p>
+            <div class="chart-wrapper">
+                <canvas id="bufferChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>Quality Over Time</h2>
+            <p class="caption">Stepped line shows resolution selected by YouTube's ABR; stall events marked with ✕.</p>
+            <div class="chart-wrapper">
+                <canvas id="qualityChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>Network Bandwidth Over Time</h2>
+            <p class="caption">Measured from segment Resource Timing entries, averaged into 5-second buckets.</p>
+            <div class="chart-wrapper chart-wrapper--short">
+                <canvas id="networkChart"></canvas>
+            </div>
+        </div>
+
+        <div class="chart-container">
+            <h2>Quality Distribution</h2>
+            <p class="caption">Total watch time (seconds) spent at each resolution.</p>
+            <div class="chart-wrapper chart-wrapper--short">
+                <canvas id="qualityDistChart"></canvas>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* ── CSV parser (handles RFC-4180 quoted fields) ──────────────────────────── */
+function parseCSV(text) {
+    const lines = text.replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n');
+    const headers = splitCSVRow(lines[0]);
+    const rows = [];
+    for (let i = 1; i < lines.length; i++) {
+        const line = lines[i].trim();
+        if (!line) continue;
+        const fields = splitCSVRow(line);
+        const obj = {};
+        headers.forEach((h, idx) => { obj[h.trim()] = fields[idx] || ''; });
+        rows.push(obj);
+    }
+    return rows;
+}
+
+function splitCSVRow(line) {
+    const fields = [];
+    let cur = '';
+    let inQuote = false;
+    for (let i = 0; i < line.length; i++) {
+        const c = line[i];
+        if (inQuote) {
+            if (c === '"') {
+                if (line[i + 1] === '"') { cur += '"'; i++; }
+                else { inQuote = false; }
+            } else { cur += c; }
+        } else {
+            if (c === '"') { inQuote = true; }
+            else if (c === ',') { fields.push(cur); cur = ''; }
+            else { cur += c; }
+        }
+    }
+    fields.push(cur);
+    return fields;
+}
+
+/* ── global state ─────────────────────────────────────────────────────────── */
+let allRows = [];
+let charts  = {};
+
+/* ── entry point ──────────────────────────────────────────────────────────── */
+function loadCSV() {
+    const file = document.getElementById('csvFile').files[0];
+    if (!file) { showError('Please select a CSV file.'); return; }
+    const reader = new FileReader();
+    reader.onload = e => {
+        try {
+            allRows = parseCSV(e.target.result);
+            if (!allRows.length) { showError('CSV appears empty.'); return; }
+
+            // Populate session picker
+            const sel = document.getElementById('sessionSelect');
+            sel.innerHTML = '';
+            allRows.forEach((row, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                const vid = row.videoId || '?';
+                const ts  = row.timestamp || '';
+                opt.textContent = `#${i + 1}  ${vid}  ${ts}`;
+                sel.appendChild(opt);
+            });
+
+            document.getElementById('sessionPicker').style.display =
+                allRows.length > 1 ? '' : 'none';
+
+            renderSession();
+        } catch (err) {
+            showError('Failed to parse CSV: ' + err.message);
+        }
+    };
+    reader.readAsText(file);
+}
+
+function renderSession() {
+    const idx = parseInt(document.getElementById('sessionSelect').value || '0', 10);
+    const row = allRows[idx];
+    if (!row) return;
+
+    // Parse all JSON fields
+    const bufferSamples    = tryParse(row.bufferSamplesString,    []);
+    const watchRanges      = tryParse(row.watchRangeSeconds,      []);
+    const stallDiffs       = tryParse(row.stallDiffsString,       []);
+    const stallTimes       = tryParse(row.stallTimesString,       []);
+    const networkPeriods   = tryParse(row.networkPeriodsString,   []);
+    const totalWatch       = parseFloat(row.totalWatchTimeSeconds) || 0;
+
+    // ── config info ──
+    document.getElementById('configInfo').innerHTML =
+        `<strong>Video:</strong> ${row.videoId || '?'} &nbsp;|&nbsp; ` +
+        `<strong>Session:</strong> ${row.timestamp || '?'} &nbsp;|&nbsp; ` +
+        `<strong>Browser:</strong> ${(row.browserInfo || '').split(' ').slice(0, 4).join(' ')} &nbsp;|&nbsp; ` +
+        `<strong>UUID:</strong> <code style="font-size:11px">${row.uuid || '?'}</code>`;
+
+    // ── summary cards ──
+    const totalStallSec = stallDiffs.reduce((s, d) => s + d, 0) / 1000;
+    const avgBuf = bufferSamples.length
+        ? bufferSamples.reduce((s, p) => s + p[1], 0) / bufferSamples.length : 0;
+    const avgBw = networkPeriods.length
+        ? networkPeriods.reduce((s, p) => s + p.bandwidth_kbps, 0) / networkPeriods.length : 0;
+
+    document.getElementById('summaryCards').innerHTML = `
+        <div class="summary-card">
+            <h3>Total Watch Time</h3>
+            <div class="value">${totalWatch.toFixed(1)}s</div>
+        </div>
+        <div class="summary-card">
+            <h3>Stall Events</h3>
+            <div class="value">${stallDiffs.length}</div>
+            <div class="sub">${totalStallSec.toFixed(2)} s total</div>
+        </div>
+        <div class="summary-card">
+            <h3>Avg Buffer Level</h3>
+            <div class="value">${avgBuf.toFixed(1)}s</div>
+        </div>
+        <div class="summary-card">
+            <h3>Avg Bandwidth</h3>
+            <div class="value">${avgBw >= 1000 ? (avgBw/1000).toFixed(1)+'M' : avgBw.toFixed(0)+'K'}</div>
+            <div class="sub">kbps (from segments)</div>
+        </div>
+        <div class="summary-card">
+            <h3>Quality Switches</h3>
+            <div class="value">${Math.max(0, watchRanges.length - 1)}</div>
+        </div>
+    `;
+
+    document.getElementById('content').style.display = '';
+
+    destroyAll();
+
+    const YAXIS_WIDTH = 58;
+
+    /* ── stall annotations (vertical lines) ────────────────────────────────── */
+    const stallAnnotations = {};
+    stallTimes.forEach((t, i) => {
+        stallAnnotations['stall' + i] = {
+            type: 'line',
+            xMin: t, xMax: t,
+            borderColor: 'rgba(231,76,60,0.7)',
+            borderWidth: 1.5,
+            borderDash: [4, 3],
+            label: {
+                display: stallDiffs[i] > 500,
+                content: (stallDiffs[i] / 1000).toFixed(1) + 's',
+                position: 'start',
+                backgroundColor: 'rgba(231,76,60,0.8)',
+                color: 'white',
+                font: { size: 10 },
+                padding: { x: 4, y: 2 }
+            }
+        };
+    });
+
+    /* ── 1. Buffer Level chart ──────────────────────────────────────────────── */
+    const bufData = bufferSamples.map(p => ({ x: p[0], y: p[1] }));
+
+    // Stall markers (scatter X at buffer level ~0)
+    const stallMarkers = stallTimes.map((t, i) => ({
+        x: t, y: 0.05,
+        stallDuration: stallDiffs[i]
+    }));
+
+    const bufDatasets = [{
+        label: 'Buffer level',
+        data: bufData,
+        borderColor: 'rgba(39,174,96,1)',
+        backgroundColor: 'rgba(39,174,96,0.08)',
+        borderWidth: 2,
+        tension: 0.1,
+        pointRadius: 1
+    }];
+    if (stallMarkers.length) {
+        bufDatasets.push({
+            label: 'Stall start',
+            data: stallMarkers,
+            type: 'scatter',
+            pointStyle: 'crossRot',
+            pointRadius: 7,
+            pointHoverRadius: 10,
+            pointBackgroundColor: 'rgba(231,76,60,1)',
+            pointBorderColor: 'rgba(231,76,60,1)',
+            pointBorderWidth: 2.5,
+            showLine: false
+        });
+    }
+
+    document.getElementById('bufferCaption').textContent =
+        stallDiffs.length
+            ? `${stallDiffs.length} stall event(s) marked with ✕. Total stall time: ${totalStallSec.toFixed(2)} s.`
+            : 'No stall events recorded in this session.';
+
+    charts.buffer = new Chart(document.getElementById('bufferChart'), {
+        type: 'line',
+        data: { datasets: bufDatasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Playback Time (seconds)' } },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Buffer Level (seconds)' },
+                    afterFit: axis => { axis.width = YAXIS_WIDTH; }
+                }
+            },
+            plugins: {
+                legend: { display: true, position: 'top' },
+                annotation: { annotations: stallAnnotations },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.dataset.label === 'Stall start') {
+                                const d = ctx.raw.stallDuration;
+                                return `Stall at t=${ctx.parsed.x.toFixed(2)}s, duration ${(d/1000).toFixed(2)}s`;
+                            }
+                            return `Buffer: ${ctx.parsed.y.toFixed(2)}s`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    /* ── 2. Quality Over Time chart ─────────────────────────────────────────── */
+    // Build step data from watchRanges: [[startSec, endSec, heightPx], ...]
+    // Each range produces a point at (start, res) then (end, res)
+    const qualityXY = [];
+    for (const [start, end, res] of watchRanges) {
+        if (qualityXY.length === 0 || qualityXY[qualityXY.length-1].x !== start) {
+            qualityXY.push({ x: start, y: res });
+        }
+        qualityXY.push({ x: end, y: res });
+    }
+
+    // Stall markers on quality chart (scatter at y=0 + small offset)
+    const stallMarkersQ = stallTimes.map((t, i) => ({
+        x: t, y: 50,
+        stallDuration: stallDiffs[i]
+    }));
+
+    const qualDatasets = [{
+        label: 'Quality (resolution)',
+        data: qualityXY,
+        borderColor: 'rgba(52,152,219,1)',
+        backgroundColor: 'rgba(52,152,219,0.08)',
+        borderWidth: 2.5,
+        tension: 0,
+        pointRadius: 2,
+        stepped: 'after'
+    }];
+    if (stallMarkersQ.length) {
+        qualDatasets.push({
+            label: 'Stall start',
+            data: stallMarkersQ,
+            type: 'scatter',
+            pointStyle: 'crossRot',
+            pointRadius: 7,
+            pointHoverRadius: 10,
+            pointBackgroundColor: 'rgba(231,76,60,1)',
+            pointBorderColor: 'rgba(231,76,60,1)',
+            pointBorderWidth: 2.5,
+            showLine: false
+        });
+    }
+
+    charts.quality = new Chart(document.getElementById('qualityChart'), {
+        type: 'line',
+        data: { datasets: qualDatasets },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Playback Time (seconds)' } },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Resolution (px height)' },
+                    ticks: {
+                        callback: v => v === 0 ? '0' : v + 'p'
+                    },
+                    afterFit: axis => { axis.width = YAXIS_WIDTH; }
+                }
+            },
+            plugins: {
+                legend: { display: true, position: 'top' },
+                annotation: { annotations: stallAnnotations },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => {
+                            if (ctx.dataset.label === 'Stall start') {
+                                const d = ctx.raw.stallDuration;
+                                return `Stall at t=${ctx.parsed.x.toFixed(2)}s, duration ${(d/1000).toFixed(2)}s`;
+                            }
+                            return `${ctx.parsed.y}p at t=${ctx.parsed.x.toFixed(2)}s`;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    /* ── 3. Network Bandwidth chart ─────────────────────────────────────────── */
+    // networkPeriods: [{duration_ms, bandwidth_kbps, latency_ms}, ...]
+    // Assign cumulative start times
+    let cumTime = 0;
+    const bwXY = [], latXY = [];
+    for (const p of networkPeriods) {
+        const midT = cumTime + p.duration_ms / 2000;
+        bwXY.push({ x: midT, y: p.bandwidth_kbps });
+        latXY.push({ x: midT, y: p.latency_ms });
+        cumTime += p.duration_ms / 1000;
+    }
+
+    charts.network = new Chart(document.getElementById('networkChart'), {
+        type: 'line',
+        data: {
+            datasets: [
+                {
+                    label: 'Bandwidth (kbps)',
+                    data: bwXY,
+                    borderColor: 'rgba(39,174,96,1)',
+                    backgroundColor: 'rgba(39,174,96,0.08)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: 4,
+                    yAxisID: 'yBw'
+                },
+                {
+                    label: 'Latency (ms)',
+                    data: latXY,
+                    borderColor: 'rgba(243,156,18,1)',
+                    backgroundColor: 'rgba(243,156,18,0.08)',
+                    borderWidth: 2,
+                    tension: 0.2,
+                    pointRadius: 4,
+                    borderDash: [5, 3],
+                    yAxisID: 'yLat'
+                }
+            ]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { type: 'linear', title: { display: true, text: 'Approx. Video Time (seconds)' } },
+                yBw: {
+                    beginAtZero: true,
+                    position: 'left',
+                    title: { display: true, text: 'Bandwidth (kbps)' },
+                    afterFit: axis => { axis.width = YAXIS_WIDTH; }
+                },
+                yLat: {
+                    beginAtZero: true,
+                    position: 'right',
+                    title: { display: true, text: 'Latency (ms)' },
+                    grid: { drawOnChartArea: false }
+                }
+            },
+            plugins: {
+                legend: { display: true, position: 'top' }
+            }
+        }
+    });
+
+    /* ── 4. Quality Distribution chart ─────────────────────────────────────── */
+    const distMap = {};
+    for (const [start, end, res] of watchRanges) {
+        const dur = end - start;
+        distMap[res] = (distMap[res] || 0) + dur;
+    }
+    const distLabels = Object.keys(distMap).map(Number).sort((a, b) => a - b);
+    const distValues = distLabels.map(q => +distMap[q].toFixed(2));
+
+    charts.qualityDist = new Chart(document.getElementById('qualityDistChart'), {
+        type: 'bar',
+        data: {
+            labels: distLabels.map(q => q + 'p'),
+            datasets: [{
+                label: 'Watch time (seconds)',
+                data: distValues,
+                backgroundColor: distLabels.map(q => {
+                    if (q >= 1080) return 'rgba(39,174,96,0.7)';
+                    if (q >= 720)  return 'rgba(52,152,219,0.7)';
+                    if (q >= 480)  return 'rgba(243,156,18,0.7)';
+                    return 'rgba(231,76,60,0.7)';
+                }),
+                borderRadius: 4
+            }]
+        },
+        options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: { title: { display: true, text: 'Resolution' } },
+                y: {
+                    beginAtZero: true,
+                    title: { display: true, text: 'Duration (seconds)' },
+                    afterFit: axis => { axis.width = YAXIS_WIDTH; }
+                }
+            },
+            plugins: {
+                legend: { display: false },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => `${ctx.parsed.y.toFixed(1)} s`
+                    }
+                }
+            }
+        }
+    });
+}
+
+/* ── helpers ──────────────────────────────────────────────────────────────── */
+function tryParse(str, fallback) {
+    try { return str ? JSON.parse(str) : fallback; }
+    catch (e) { return fallback; }
+}
+
+function destroyAll() {
+    Object.values(charts).forEach(c => c && c.destroy());
+    charts = {};
+}
+
+function showError(msg) {
+    const el = document.getElementById('errorMessage');
+    el.textContent = msg;
+    el.style.display = '';
+    setTimeout(() => { el.style.display = 'none'; }, 6000);
+}
+</script>
+</body>
+</html>

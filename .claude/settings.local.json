@@ -3,7 +3,8 @@
     "allow": [
       "Bash(python3 -c \":*)",
       "Bash(python test_dynamic_buffer_cases.py)",
-      "Bash(python /c/Users/sloth/Documents/sabre/src/prefetch_comparison_results/seeks/comparison_bola.json)"
+      "Bash(python /c/Users/sloth/Documents/sabre/src/prefetch_comparison_results/seeks/comparison_bola.json)",
+      "Bash(python parse_real_traces.py yt_traces_2026-04-18.csv)"
     ]
   }
 }
