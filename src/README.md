@@ -1,9 +1,10 @@
 # SABRE Simulation Guide
 
-This guide is split into two parts:
+This guide is split into three parts:
 
 - **Part I** covers the core SABRE simulator — setup, running simulations, graph generation, and regression testing. No `buffer.py` knowledge required.
 - **Part II** covers dynamic buffering with `buffer.py` (`MultiRegionBuffer`) — comparison tooling, prefetch/seek unit tests, detailed use-case flows, and technical reference.
+- **Part III** covers the real trace workflow — collecting YouTube traces, parsing them into simulation inputs, running the 5 prefetch scenarios, and viewing results.
 
 ## Table of Contents
 
@@ -22,12 +23,24 @@ This guide is split into two parts:
 8. [Viewing Results](#viewing-results)
 9. [Understanding Results](#understanding-results)
 10. [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs)
-11. [Prefetch Comparison Workflow](#prefetch-comparison-workflow)
+11. [Prefetch Comparison Workflow (Synthetic)](#prefetch-comparison-workflow-synthetic)
 12. [Testing](#testing)
 13. [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
 14. [Technical Reference](#technical-reference)
 15. [Advanced Usage](#advanced-usage)
 16. [Troubleshooting](#troubleshooting)
+
+### Part III — Real Trace Workflow
+
+17. [Collecting Traces](#collecting-traces)
+18. [Parsing Traces](#parsing-traces)
+19. [Real Trace Prefetch Scenarios](#real-trace-prefetch-scenarios)
+20. [Running Real Trace Comparisons](#running-real-trace-comparisons)
+21. [Merging Real Trace Results](#merging-real-trace-results)
+
+### Reference
+
+22. [File Structure](#file-structure)
 
 ---
 
@@ -43,9 +56,9 @@ pip install numpy
 ```
 
 ### Required Files
-- `network.json` — Network trace file (can be generated)
-- `movie.json` — Movie manifest file
-- `seeks.json` — Seek configuration (optional)
+- `synthetic/network.json` — Network trace file (can be generated)
+- `synthetic/movie.json` — Movie manifest file
+- `synthetic/seeks.json` — Seek configuration (optional)
 
 ---
 
@@ -80,46 +93,20 @@ python network_generator.py -ne 20 -d 6000 -bm 5000 -bs 2000 -lm 100 -ls 30
 
 Run simulation with default settings:
 ```bash
-python sabre.py
+python sabre.py -n synthetic/network.json -m synthetic/movie.json
 ```
 
 ### With Verbose Output
 ```bash
-python sabre.py -v
+python sabre.py -v -n synthetic/network.json -m synthetic/movie.json
 ```
 
 ### With Seek Configuration
 
-Create a seek config file (`seeks.json`):
-```json
-{
-  "seeks": [
-    {"seek_when": 15, "seek_to": 18},
-    {"seek_when": 40, "seek_to": 43}
-  ]
-}
-```
-
 Run with seeks:
 ```bash
-python sabre.py -v -sc seeks.json
+python sabre.py -v -n synthetic/network.json -m synthetic/movie.json -sc synthetic/seeks.json
 ```
-
-### Using simulate_abr.py
-
-Run simulation and save output to file:
-```bash
-python simulate_abr.py -o output.txt
-```
-
-With custom seek config:
-```bash
-python simulate_abr.py -o output.txt -s seeks.json
-```
-
-**Parameters:**
-- `-o, --output`: Output file path
-- `-s, --seek-config`: Seek configuration file
 
 ---
 
@@ -127,16 +114,16 @@ python simulate_abr.py -o output.txt -s seeks.json
 
 ### Generate ABR Comparison Graphs
 
-Update the `abrArray` in `generate_abr_comparison.py` to choose ABR algorithms, then run:
+Update the `abrArray` in `sabre_only_abr_graph__seek_visualization/generate_abr_comparison.py` to choose ABR algorithms, then run:
 ```bash
-python generate_abr_comparison.py
+python sabre_only_abr_graph__seek_visualization/generate_abr_comparison.py
 ```
 
 ### Generate Individual ABR Graphs
 
 Use `graph_generate.py` for specific algorithms:
 ```bash
-python graph_generate.py -a bola
+python sabre_only_abr_graph__seek_visualization/graph_generate.py -a bola
 ```
 
 ---
@@ -151,15 +138,13 @@ Ensure simulation results remain consistent after code changes.
 python test_simulation_regression.py --generate-baseline
 ```
 
-**Important:** Regenerate `baseline_simulation_results.txt` whenever `movie.json`, `network.json`, or `seeks.json` change.
+**Important:** Regenerate the baseline whenever `synthetic/movie.json`, `synthetic/network.json`, or `synthetic/seeks.json` change.
 
 2. **Run regression test:**
 
 ```bash
 python test_simulation_regression.py
 ```
-
-The test compares current simulation results with the baseline and reports any differences.
 
 ---
 
@@ -192,48 +177,39 @@ The `--use-buffer-py` flag in `sabre.py` switches between the two modes. When th
 ### Quick Comparison
 
 ```bash
-python run_comparison.py -n network.json -m movie.json -a bola -o comparison_results.json
+python run_comparison.py -n synthetic/network.json -m synthetic/movie.json -a bola -o comparison_results.json
 ```
 
 ### Compare Multiple ABR Algorithms
 
 All supported algorithms:
 ```bash
-python run_comparison.py -a all -o comparison_results
+python run_comparison.py -n synthetic/network.json -m synthetic/movie.json -a all -o comparison_results
 ```
 
 Specific algorithms:
 ```bash
-python run_comparison.py -a bola,bolae,dynamic,dynamicdash,throughput -o comparison_results.json
+python run_comparison.py -n synthetic/network.json -m synthetic/movie.json -a bola,bolae,dynamic,dynamicdash,throughput -o comparison_results.json
 ```
 
 ### With Seek Configuration
 ```bash
-python run_comparison.py -a bola -sc seeks.json -o my_comparison.json
+python run_comparison.py -n synthetic/network.json -m synthetic/movie.json -a bola -sc synthetic/seeks.json -o my_comparison.json
 ```
 
 ### With Prefetch + Seek (All ABR Algorithms, Multiple Seek Scenarios)
 
-The canonical workflow — runs all ABR algorithms against three seek scenarios at once:
+The canonical synthetic workflow — runs all ABR algorithms against all five seek scenarios at once:
 
 ```bash
-python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json,seeks_mixed.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+python run_comparison.py \
+  -n synthetic/network.json -m synthetic/movie.json \
+  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_dynamic_miss.json,synthetic/seeks_linear_miss_dynamic_hit.json \
+  -pc synthetic/test_prefetch_config.json \
+  -a all -o synthetic/results
 ```
 
-Results are grouped in subfolders named after each seek file’s stem:
-
-- **`seeks/`** — from `seeks.json` (seeks that *miss* prefetched segments; prefetch rarely improves rebuffering).
-- **`seeks_prefetch_hit/`** — from `seeks_prefetch_hit.json` (seeks aligned with prefetch; dynamic buffering can reduce stalls).
-- **`seeks_mixed/`** — from `seeks_mixed.json` (random mix of hit and miss seeks).
-
-This creates `prefetch_comparison_results/<scenario>/comparison_<abr>.json` for each algorithm and scenario, plus `comparison_summary.json` at the top level. Load `prefetch_comparison_results/comparison_summary.json` in `view_comparison.html` for a cross-run table and charts.
-
-### Batch Comparisons
-```bash
-for abr in bola bolae dynamic throughput; do
-    python run_comparison.py -a $abr -o comparison_${abr}.json
-done
-```
+Results are grouped in subfolders named after each seek file's stem under `synthetic/results/`. Load `synthetic/results/comparison_summary.json` in the viewer for a cross-run table and charts.
 
 ### Command Parameters
 
@@ -253,65 +229,44 @@ When **multiple** ABR algorithms or **multiple** seek configs are used, `-o` mus
 
 ## Viewing Results
 
-1. **Start the web server** (from the directory that contains `view_comparison.html`, usually `src/`):
+1. **Start the web server** from the `src/` directory:
 
 ```bash
 python serve_viewer.py
 ```
 
-2. Open the viewer (browser may open automatically): `http://localhost:8000/view_comparison.html`
+2. Open the viewer (browser opens automatically): `http://localhost:8000/viewer/view_comparison.html`
 3. Click **Load Comparison Data** and pick a JSON file.
 
 ### Single-run comparison JSON
 
-Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json` or `comparison_results.json`.
+Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json`.
 
-- **Summary cards** — total rebuffering time/events, utility, rebuffer ratio, total play time (with improvement percentages where applicable)
-- **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band when data is present); quality over time; quality distribution
-- **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows a short summary and annotations on the time-series charts
+- **Summary cards** — total rebuffering time/events, utility, rebuffer ratio, total play time
+- **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band); quality over time; quality distribution
+- **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows annotations on the time-series charts
 
 ### Multi-run summary (`comparison_summary.json`)
 
-When you run a **batch** comparison (multiple ABRs and/or multiple `-sc` seek configs), open the generated **`comparison_summary.json`** (e.g. `prefetch_comparison_results/comparison_summary.json`). The viewer shows:
+When you load a **`comparison_summary.json`** (synthetic or real trace), the viewer shows:
 
-- **Cross-Comparison Summary** — sortable-style table: rows are **seek scenario × ABR** (e.g. `seeks/bola`, `seeks_prefetch_hit/throughput`). Columns include rebuffer events/time, **rebuffer ratio**, utility and play time **without vs with** `buffer.py`, and **Change** columns (green = improved vs baseline, red = worse, gray = unchanged).
-- **Scenario legend** — explains which seek JSON each row (`seeks/`, `seeks_prefetch_hit/`, `seeks_mixed/`) corresponds to.
-- **Summary bar charts** — **Rebuffering Events** and **Rebuffering Time** across all runs; legend below the chart to avoid overlapping values.
-- **Row click (drill-down)** — click a row to scroll to the **per-run** detail charts (same as a single-run file). The summary table and summary bar charts **stay visible** above; only the detail charts refresh.
+- **Cross-Comparison Summary** — table with rows for each **scenario × ABR**. Columns include rebuffer events/time, rebuffer ratio, utility, and **Change** (green = improved vs baseline without `buffer.py`, red = worse, gray = unchanged).
+- **Scenario legend** — describes what each scenario's seek or prefetch config does.
+- **Summary bar charts** — Rebuffering Events and Rebuffering Time across all runs.
+- **Row click (drill-down)** — click a row to see per-run detail charts; summary stays visible.
 
-### Detail charts (single-run or drill-down)
+### Loading results in the viewer
 
-1. **Rebuffering Comparison** — bar chart of total rebuffering time and event count  
-2. **Buffer Level Over Time** — line chart; two traces (with / without `buffer.py`)  
-3. **Quality Over Time** — stepped line chart of quality decisions  
-4. **Quality Distribution** — bar chart of time spent at each quality level  
-
-### Example `run_comparison.py` console output
-
-```
-✓ Results saved to comparison_results.json
-
-Summary Comparison:
-Metric                          Without buffer.py    With buffer.py      Change
--------------------------------------------------------------------------------------
-total_rebuffer_time             2.5                 1.2                 -52.0%
-rebuffer_count                  3                   1                   -66.7%
-total_play_time                 120.0               120.0               0.0%
-played_utility                  8.5                 9.2                 +8.2%
-rebuffer_ratio                  0.02                0.01                -50.0%
-
-Open view_comparison.html in your browser and load comparison_results.json to see visualizations!
-```
+| Data | File to load |
+|------|-------------|
+| Synthetic scenarios | `synthetic/results/comparison_summary.json` |
+| Real trace scenarios | `real_trace/results/comparison_summary.json` |
+| Single synthetic run | `synthetic/results/<scenario>/comparison_<abr>.json` |
+| Single real trace run | `real_trace/results/<scenario>/comparison_<abr>.json` |
 
 ---
 
 ## Understanding Results
-
-### Single-run and summary table
-
-In the **detail** view and on **summary** cards, green / red indicators follow the usual QoE reading: less rebuffering is better, higher utility is better, lower rebuffer ratio is better.
-
-In the **Cross-Comparison Summary** table (when you load `comparison_summary.json`), each **Change** column is colored by **improvement vs the baseline (without `buffer.py`)**: **green** = improved for that metric, **red** = worse, **gray** = unchanged. (For example, utility uses “higher is better”; rebuffer count, rebuffer time, rebuffer ratio, and play time use “lower is better” where applicable.)
 
 ### Positive Indicators (Green)
 - **Lower rebuffering time/events** — `MultiRegionBuffer` preserves segments after seeks
@@ -319,33 +274,32 @@ In the **Cross-Comparison Summary** table (when you load `comparison_summary.jso
 - **Lower rebuffer ratio** — more efficient buffering with preserved segments
 
 ### Negative Indicators (Red)
-- **Higher rebuffering** — may indicate issues (rare)
-- **Lower utility** — quality decisions affected (unlikely)
+- **Higher rebuffering** — prefetch fired but targeted wrong segments, wasting bandwidth
+- **Lower utility** — quality decisions degraded
 
 > The comparison uses identical ABR algorithms and network conditions, so differences come purely from buffer management strategy.
 
 ### Expected Improvements
 
-With `buffer.py` (`MultiRegionBuffer`) you should typically see:
+With `buffer.py` (`MultiRegionBuffer`) and correct prefetch targets:
 
-- 20-40 % reduction in rebuffering events
+- 20–40% reduction in rebuffering events
 - Better buffer level maintenance
 - Preserved segments after seeks
-- Similar or better quality decisions
 - More efficient bandwidth utilisation
 
 ---
 
 ## Generating Seek & Prefetch Configs
 
-`generate_configs.py` reads `movie.json` and writes four files for **prefetch hit / miss / mixed** comparisons:
+`generate_configs.py` reads `synthetic/movie.json` and writes four files for **prefetch hit / miss / mixed** comparisons:
 
 | File | Role |
 |------|------|
-| `test_prefetch_config.json` | Spaced prefetch segment list + buffer threshold |
-| `seeks_prefetch_hit.json` | Seeks whose targets land on prefetched segments |
-| `seeks.json` | Seeks whose targets **miss** the prefetch list |
-| `seeks_mixed.json` | Random mix of hit and miss seeks |
+| `synthetic/test_prefetch_config.json` | Spaced prefetch segment list + buffer threshold |
+| `synthetic/seeks_prefetch_hit.json` | Seeks whose targets land on prefetched segments |
+| `synthetic/seeks.json` | Seeks whose targets **miss** the prefetch list |
+| `synthetic/seeks_mixed.json` | Random mix of hit and miss seeks |
 
 ```bash
 python generate_configs.py --num-seeks 30 --prefetch-count 35 --buffer-threshold 15000
@@ -369,29 +323,47 @@ python generate_configs.py --num-seeks 30 --prefetch-count 35 --buffer-threshold
 
 ---
 
-## Prefetch Comparison Workflow
+## Prefetch Comparison Workflow (Synthetic)
 
-The **prefetch comparison** shows where dynamic buffering diverges from the linear baseline: when seeks land on pre-downloaded segments, stalls can be reduced or avoided. Each run still executes **two** simulations — **without** `buffer.py` (no prefetch) and **with** `buffer.py` + prefetch (when `-pc` is set).
+The synthetic workflow varies the **seek pattern** across 5 scenarios with a fixed prefetch config and generated network. Each run executes two simulations — **without** `buffer.py` (baseline) and **with** `buffer.py` + prefetch.
+
+### 5 Synthetic Seek Scenarios
+
+| Scenario folder | Seek file | What it tests |
+|----------------|-----------|--------------|
+| `seeks/` | `seeks.json` | Both buffer modes miss the prefetch cache |
+| `seeks_prefetch_hit/` | `seeks_prefetch_hit.json` | Seeks land on prefetched segments; dynamic wins |
+| `seeks_mixed/` | `seeks_mixed.json` | Mix of hits and misses |
+| `seeks_linear_hit_dynamic_miss/` | `seeks_linear_hit_dynamic_miss.json` | Short seeks within linear buffer range; prefetch targets wrong segments |
+| `seeks_linear_miss_dynamic_hit/` | `seeks_linear_miss_dynamic_hit.json` | Long seeks beyond linear range; prefetch targets correct segments |
 
 ### 1. Create seek + prefetch files
 
-Use [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs) (`generate_configs.py`) **or** write a prefetch JSON yourself (`buffer_level_threshold` + `prefetch` list of `{ "segment": n }`).
-
-### 2. Run `run_comparison.py`
-
-Run all ABR algorithms against all three seek scenarios at once:
-
 ```bash
-python run_comparison.py -sc seeks.json,seeks_prefetch_hit.json,seeks_mixed.json,seeks_linear_hit_dynamic_miss.json,seeks_linear_miss_dynamic_hit.json -pc test_prefetch_config.json -a all -o prefetch_comparison_results
+python generate_configs.py --num-seeks 30 --prefetch-count 35 --buffer-threshold 15000
 ```
 
-This produces `seeks/comparison_*.json`, `seeks_prefetch_hit/comparison_*.json`, `seeks_mixed/comparison_*.json`, `seeks_linear_hit_dynamic_miss/comparison_*.json`, `seeks_linear_miss_dynamic_hit/comparison_*.json`, and **`comparison_summary.json`** under the output directory.
+Move outputs to `synthetic/`:
+```bash
+mv test_prefetch_config.json seeks.json seeks_prefetch_hit.json seeks_mixed.json synthetic/
+```
 
-See [Command Parameters](#running-buffer-comparisons) under **Running Buffer Comparisons** for full flags (`-n`, `-m`, `-pc`, `-nm`, `-o`, etc.).
+### 2. Run all scenarios
+
+```bash
+python run_comparison.py \
+  -n synthetic/network.json -m synthetic/movie.json \
+  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_dynamic_miss.json,synthetic/seeks_linear_miss_dynamic_hit.json \
+  -pc synthetic/test_prefetch_config.json \
+  -a all -o synthetic/results
+```
 
 ### 3. View results
-S
-Use **`serve_viewer.py`** and load either a **single** comparison JSON or **`comparison_summary.json`** — see [Viewing Results](#viewing-results).
+
+```bash
+python serve_viewer.py
+# Load: synthetic/results/comparison_summary.json
+```
 
 ---
 
@@ -409,13 +381,6 @@ python test_buffer_equivalence.py
 - `--abr <algorithm>` — test specific ABR algorithm
 - `-v, --verbose` — verbose output
 
-**Examples:**
-```bash
-python test_buffer_equivalence.py --quick
-python test_buffer_equivalence.py --abr bola
-python test_buffer_equivalence.py -v
-```
-
 ### Dynamic Buffer Case Tests
 
 Run case-based tests that verify the dynamic buffer algorithm handles each scenario correctly:
@@ -430,7 +395,7 @@ python test_dynamic_buffer_cases.py -v
 
 The suite contains 14 tests across two test classes:
 
-**TestDynamicBuffering** (Tests 1-10) — buffer seek and prefetch logic:
+**TestDynamicBuffering** (Tests 1–10) — buffer seek and prefetch logic:
 
 | # | Test | What it verifies |
 |---|------|------------------|
@@ -445,7 +410,7 @@ The suite contains 14 tests across two test classes:
 | 9 | Non-prefetch regions after seek preserved | Regions after the seek position are kept regardless of prefetch |
 | 10 | Prefetch in same region preserved | Prefetch chunks before seek position are saved as a separate region |
 
-**TestPrefetchModule** (Tests 11-14) — `PrefetchModule` API:
+**TestPrefetchModule** (Tests 11–14) — `PrefetchModule` API:
 
 | # | Test | What it verifies |
 |---|------|------------------|
@@ -454,7 +419,7 @@ The suite contains 14 tests across two test classes:
 | 13 | Segment exhaustion | Returns `None` after all segments are prefetched |
 | 14 | Skip already-prefetched | Linear download loop skips prefetched segments |
 
-**Required fixture:** `test_prefetch_config.json` (included in `src/`).
+**Required fixture:** `synthetic/test_prefetch_config_fixture.json`.
 
 ---
 
@@ -468,14 +433,6 @@ Each use case shows the **linear buffer** path side-by-side with the **dynamic b
 
 **Trigger:** Sequential segment download during normal playback
 **Location:** `sabre.py` → `process_download_loop()`
-**Methods Involved:**
-1. `get_buffer_level()`
-2. `deplete_buffer()`
-3. `abr.get_quality_delay()`
-4. `replacer.check_replace()`
-5. `network.download()`
-6. `abr.check_abandon()`
-7. Buffer update (linear vs dynamic)
 
 #### Linear Buffer Behavior
 
@@ -485,24 +442,9 @@ Each use case shows the **linear buffer** path side-by-side with the **dynamic b
    └─ If buffer full → deplete_buffer(full_delay) → buffer_contents.pop(0)
 2. ABR selects quality for segment N
 3. replacer.check_replace(quality)
-   └─ Replace: update existing segment / No replace: proceed
 4. Download segment N
 5. gs.buffer_contents.append((N, quality))
 6. gs.next_segment = N + 1
-7. buffer_level = segment_time * (N+1) - buffer_fcc
-```
-
-**Buffer structure** (after segments 0-4):
-- `gs.buffer_contents = [(0, 2), (1, 3), (2, 3), (3, 4), (4, 4)]`
-- Sequential list, always contiguous
-- `gs.next_segment = 5`, `gs.buffer_fcc = 0`
-
-**Playback flow:**
-```
-deplete_buffer():
-  1. Play buffer_contents[0]
-  2. buffer_contents.pop(0)  →  [(1, q1), (2, q2), ...]
-  3. Update buffer_fcc
 ```
 
 **Code path:**
@@ -517,31 +459,12 @@ gs.next_segment += 1
 ```
 1. gs.multi_region_buffer.get_buffer_level()
    └─ get_contiguous_chunks_from_current_position()
-   └─ segment_time * len(playable_chunks) - buffer_fcc
 2. If buffer full → deplete_buffer() → multi_region_buffer.pop_chunk()
 3. ABR selects quality for segment N
-4. replacer.check_replace(quality)
-   └─ Reads playable chunks from MultiRegionBuffer
-5. Download segment N
-6. gs.multi_region_buffer.add_chunk(N, quality)
-   └─ buffer_by_pos(pos_ms, quality)
-   └─ cleanup_and_merge()
-7. gs.next_segment = N + 1
-8. buffer_level = segment_time * (N+1) - buffer_fcc  (same as linear)
-```
-
-**Buffer structure** (after segments 0-4):
-- 1 region `[0 ms → 5 * segment_time]`
-- `BufferRegion(start=0, end=5*segment_time, chunks=[2,3,3,4,4])`
-- Sequential segments merge automatically
-
-**Playback flow:**
-```
-deplete_buffer():
-  1. get_contiguous_chunks_from_current_position()
-  2. Play playable_chunks[0]
-  3. multi_region_buffer.pop_chunk()
-  4. current_playback_pos += segment_time
+4. Download segment N
+5. gs.multi_region_buffer.add_chunk(N, quality)
+   └─ buffer_by_pos(pos_ms, quality) → cleanup_and_merge()
+6. gs.next_segment = N + 1
 ```
 
 **Code path:**
@@ -549,38 +472,23 @@ deplete_buffer():
 gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
 ```
 
-**Methods called:**
-`add_chunk` → `buffer_by_pos` → `BufferRegion.add_chunk` → `cleanup_and_merge` → `merge_adjacent_regions`
-
-**Prefetch capability:** Can buffer non-sequential segments as separate regions (e.g. `[0-2]` and `[5-7]` simultaneously), enabling adaptive prefetching.
-
 ---
 
 ### Use Case 2: Download Chunk With Seek
 
 **Trigger:** User-initiated seek event during playback
 **Location:** `sabre.py` → `interrupted_by_seek()` / `update_buffer_during_seek()`
-**Methods Involved:**
-1. `interrupted_by_seek()`
-2. `update_buffer_during_seek()`
-3. `abr.report_seek()`
-4. `get_buffer_level()`
-5. `process_download_loop()`
 
 #### Linear Buffer Behavior
 
 **Flow** (seek from segment 5 to segment 20):
 ```
 1. interrupted_by_seek(delta, abr) detects seek event
-2. Target segment = 20
-3. update_buffer_during_seek()
-   a. buffer_base = gs.next_segment - len(buffer_contents)  →  10 - 5 = 5
-   b. Is 20 in [5, 10)?  →  NO
-   c. gs.buffer_contents.clear()
-   d. gs.next_segment = 20, gs.buffer_fcc = 0
-4. Buffer: [] (EMPTY — rebuffering required)
-5. abr.report_seek()
-6. Download loop resumes from segment 20
+2. update_buffer_during_seek()
+   a. Is segment 20 in [5, 10)?  →  NO
+   b. gs.buffer_contents.clear()
+   c. gs.next_segment = 20, gs.buffer_fcc = 0
+3. Buffer: [] (EMPTY — rebuffering required)
 ```
 
 **Seek scenarios:**
@@ -590,23 +498,12 @@ gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
 | Within range (5 → 7) | `[(5,q5)..(8,q8)]` | `[(7,q7),(8,q8)]` | No |
 | Outside range (5 → 20) | `[(5,q5)..(8,q8)]` | `[]` | Yes |
 
-**Code path:**
-```python
-if gs.buffer_contents and new_segment >= buffer_base and new_segment < gs.next_segment:
-    skip_count = new_segment - buffer_base
-    gs.buffer_contents = gs.buffer_contents[skip_count:]
-else:
-    gs.buffer_contents.clear()
-    gs.next_segment = new_segment
-```
-
 #### Dynamic Buffer Behavior
 
 **Flow** (seek from segment 5 to segment 20):
 ```
 1. interrupted_by_seek(delta, abr) detects seek event
-2. Target segment = 20
-3. update_buffer_during_seek()
+2. update_buffer_during_seek()
    a. seek_pos_ms = 20 * seg_time
    b. gs.current_playback_pos = seek_pos_ms
    c. region = multi_region_buffer._find_region_of(seek_pos_ms)
@@ -614,8 +511,6 @@ else:
    e. If miss: clear non-prefetch regions before seek; preserve
       regions after seek and all prefetch regions
    f. cleanup_and_merge()
-4. abr.report_seek()
-5. Download loop resumes from segment 20
 ```
 
 **Seek scenarios:**
@@ -626,36 +521,6 @@ else:
 | Outside range (5 → 20) | `[5*st → 10*st]` | *(cleared)* | Yes |
 | To prefetched chunk | `[0-8s]` + prefetch `[20-22s]` | prefetch region preserved | No |
 
-**Code path:**
-```python
-seek_pos_ms = new_segment * seg_time
-gs.current_playback_pos = seek_pos_ms
-region = gs.multi_region_buffer._find_region_of(seek_pos_ms)
-
-if region:
-    start_idx = int((seek_pos_ms - region.start) / seg_time)
-    region.chunks = region.chunks[start_idx:]
-    region.start = seek_pos_ms
-    if new_segment == floor_idx:
-        gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
-    else:
-        gs.buffer_fcc = 0
-else:
-    # preserve regions after seek + prefetch regions; clear the rest
-    gs.next_segment = new_segment
-
-gs.buffer_fcc = 0
-gs.multi_region_buffer.cleanup_and_merge()
-```
-
-**Methods called:**
-`current_playback_pos` update → `_find_region_of` → chunk trimming → `cleanup_and_merge` → `merge_adjacent_regions`
-
-**QoE improvements:**
-- 20-40 % reduction in rebuffering events
-- Faster seek response (preserved segments enable instant playback)
-- Better bandwidth utilisation (less wasted downloads)
-
 ---
 
 ### Method Call Chains (summary)
@@ -664,7 +529,7 @@ gs.multi_region_buffer.cleanup_and_merge()
 
 | Linear | Dynamic |
 |--------|---------|
-| `get_buffer_level()` → `deplete_buffer()` → `buffer_contents.pop(0)` → `abr.get_quality_delay()` → `network.download()` → `buffer_contents.append()` | `MultiRegionBuffer.get_buffer_level()` → `get_contiguous_chunks_from_current_position()` → `pop_chunk()` → `abr.get_quality_delay()` → `replacer.check_replace()` → `network.download()` → `add_chunk()` → `buffer_by_pos()` → `cleanup_and_merge()` |
+| `get_buffer_level()` → `deplete_buffer()` → `buffer_contents.pop(0)` → `abr.get_quality_delay()` → `network.download()` → `buffer_contents.append()` | `MultiRegionBuffer.get_buffer_level()` → `get_contiguous_chunks_from_current_position()` → `pop_chunk()` → `abr.get_quality_delay()` → `network.download()` → `add_chunk()` → `buffer_by_pos()` → `cleanup_and_merge()` |
 
 **Use Case 2 — Download With Seek:**
 
@@ -698,7 +563,6 @@ Dynamic buffering does not inflate buffer level with gaps between regions.
 | Forward seek outside | Clear buffer | Clear buffer, can prefetch |
 | Backward seek | Clear buffer | Clear buffer, preserve ahead if exists |
 | Multiple seeks | Always clear | Preserve segments across seeks |
-| Rebuffering | Always required | Reduced by 20-40 % |
 
 ### Performance Characteristics
 
@@ -716,21 +580,11 @@ Dynamic buffering does not inflate buffer level with gaps between regions.
 - Simple sequential playback
 - No seeks expected
 - Baseline comparison
-- Minimal overhead
 
 **Dynamic Buffering (with `buffer.py`):**
 - Scenarios with user seeks
 - Prefetching strategies
 - Non-sequential segment access
-- Better QoE requirements
-
-### Backward Compatibility
-
-The dynamic buffering implementation maintains backward compatibility:
-1. Identical buffer level calculation
-2. Existing ABR algorithms work without modification
-3. Replacement logic reads directly from `MultiRegionBuffer`
-4. Direct access to buffer state through `MultiRegionBuffer` methods
 
 ---
 
@@ -738,73 +592,225 @@ The dynamic buffering implementation maintains backward compatibility:
 
 ### Custom Metrics
 
-Modify `run_comparison.py` to capture additional fields from `sabre.py` output, merge them into the saved JSON (`without_buffer_py` / `with_buffer_py` summaries), and extend `view_comparison.html` (summary table row builder and/or detail cards) to display them.
+Modify `run_comparison.py` to capture additional fields from `sabre.py` output, merge them into the saved JSON, and extend `viewer/view_comparison.html` to display them.
 
-### Extending the viewer
+### Extending the Viewer
 
-`view_comparison.html` holds both the **summary dashboard** (for `comparison_summary.json`) and the **detail** charts (single-run JSON or drill-down). When adding Chart.js views:
-
-1. Prefer **separate** chart instances for summary vs detail (the detail path must not destroy summary charts — see `destroyDetailChartsOnly()` vs full teardown in `renderSummaryDashboard()`).
-2. Add any new DOM under the correct section (`#summaryDashboard` vs `#content`).
+`viewer/view_comparison.html` holds both the **summary dashboard** (for `comparison_summary.json`) and the **detail** charts (single-run JSON or drill-down). When adding new seek or prefetch scenarios, extend the `SEEK_SCENARIO_MAP` object in the viewer with the scenario's stem, title, short label, CSS class (`hit`, `miss`, or `mixed`), and description blurb.
 
 ---
 
 ## Troubleshooting
 
 **Simulation fails:**
-- Ensure `network.json` and `movie.json` exist
+- Ensure `synthetic/network.json` and `synthetic/movie.json` exist
 - Check ABR algorithm name is correct
 - Verify Python dependencies are installed
 
 **Web viewer doesn't load:**
 - Check port 8000 is available
-- Ensure `view_comparison.html` is in same directory
+- Ensure `serve_viewer.py` is run from `src/`
 - Check browser console for errors (F12)
 
 **No data / empty charts:**
 - Verify JSON file structure matches expected format
 - Check that simulations completed successfully
 - Ensure `time_series` data is present in JSON
-- Check browser console for JavaScript errors
-- Verify Chart.js library loaded (Network tab)
 
 **Summary bar charts disappear after clicking a table row:**
-- Fixed in current `view_comparison.html`: drill-down only destroys **detail** chart instances, not the summary dashboard charts. Use an up-to-date viewer; hard-refresh the page (`Ctrl+F5`) if you cached an old HTML file.
+- Fixed in current viewer: drill-down only destroys **detail** chart instances, not the summary dashboard. Hard-refresh the page (`Ctrl+F5`) if you cached an old HTML file.
 
 ---
 
-## File Structure
+# Part III — Real Trace Workflow
+
+Real traces capture actual YouTube viewing sessions (network conditions + seek events) from the browser. The workflow converts a raw CSV into simulation inputs, then runs the same 5-scenario prefetch comparison as the synthetic data — but with fixed real seeks and a varying prefetch strategy instead of varying seek patterns.
+
+---
+
+## Collecting Traces
+
+The `yt_trace_collector/` Chrome extension records bandwidth periods and seek events while watching YouTube.
+
+1. Load the extension in Chrome (Developer mode → Load unpacked → select `yt_trace_collector/`)
+2. Watch a YouTube video
+3. Export the collected trace as a CSV row (UUID, network periods, seek events, stall data)
+4. Save to `real_trace/yt_traces_<date>.csv`
+
+---
+
+## Parsing Traces
+
+`parse_real_traces.py` converts a CSV of traces into SABRE-compatible `network_<uuid>.json` and `seeks_<uuid>.json` files.
+
+```bash
+python parse_real_traces.py real_trace/yt_traces_2026-04-18.csv --output-dir real_trace/
+```
+
+**Options:**
+
+| Flag | Description | Default |
+|------|-------------|---------|
+| `--output-dir` | Where to write `network_<uuid>.json` and `seeks_<uuid>.json` | current directory |
+| `--viz-only` | Only write `traces_viz.json`; skip per-trace simulation files | off |
+| `--min-seek` | Minimum position gap (seconds) to count as a seek event | `0.5` |
+
+The parser also writes `real_trace/traces_viz.json` for use with `viewer/view_traces.html`.
+
+**View collected traces:**
+```bash
+python serve_viewer.py --traces
+# Opens: http://localhost:8000/viewer/view_traces.html
+```
+
+---
+
+## Real Trace Prefetch Scenarios
+
+For real traces the seeks are fixed (real user behaviour) so the 5 scenarios vary the **prefetch strategy** instead of the seek pattern. Each scenario corresponds to a prefetch config JSON in `real_trace/`.
+
+The example trace (UUID `56329467-babb-4d75-bb58-70f3906369fe`) has a significant 39.7 s forward seek from 148.6 s → 188.3 s, landing at **segment 62** (3 s segments). Network is throttled at 354–1346 kbps, so `buffer_level_threshold` must be ≤ 3500 ms for prefetch to fire.
+
+| Scenario | Config file | Threshold | Prefetch targets | What it tests |
+|----------|-------------|-----------|-----------------|--------------|
+| `base` | `prefetch_config_real_base.json` | 20 000 ms | segs 62–65 | Threshold above network capacity — prefetch never fires; baseline |
+| `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Narrow window right at seek destination; dynamic buffering hits the cache |
+| `mixed` | `prefetch_config_real_mixed.json` | 3 500 ms | segs 62–63 + 75–76 | Half the bandwidth goes to wrong segments; partial hit |
+| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Correct targets; linear must rebuffer, dynamic serves from cache |
+| `linear_hit_dynamic_miss` | `prefetch_config_real_linear_hit_dynamic_miss.json` | 3 500 ms | segs 75–79 | Wrong targets past the seek; dynamic wastes bandwidth and cannot benefit |
+
+To create a new prefetch config:
+```json
+{
+  "buffer_level_threshold": 3500,
+  "prefetch": [
+    { "segment": 62 },
+    { "segment": 63 }
+  ]
+}
+```
+
+**Key rules:**
+- `buffer_level_threshold` must be below what the throttled network can sustain (≤ 3500 ms for this trace).
+- Prefetch targets must be near the seek destination (segment = `floor(seek_to_seconds / 3)`).
+- Targeting too many segments on a throttled network starves the main stream.
+
+---
+
+## Running Real Trace Comparisons
+
+Run all 5 scenarios in one loop. The seeks and network files are fixed; only the prefetch config changes.
+
+```bash
+cd src/
+for scenario in base linear_hit_dynamic_miss linear_miss_dynamic_hit mixed prefetch_hit; do
+  python run_comparison.py \
+    -n real_trace/network_56329467-babb-4d75-bb58-70f3906369fe.json \
+    -m synthetic/movie.json \
+    -sc real_trace/seeks_56329467-babb-4d75-bb58-70f3906369fe.json \
+    -pc real_trace/prefetch_config_real_${scenario}.json \
+    -a all \
+    -o real_trace/results/${scenario}
+done
+```
+
+Each scenario writes `real_trace/results/<scenario>/comparison_<abr>.json` (5 ABR files) and a per-scenario `comparison_summary.json`.
+
+---
+
+## Merging Real Trace Results
+
+The viewer expects a single `comparison_summary.json` that aggregates all scenarios. Run `merge_real_trace_summaries.py` after completing all 5 scenario runs:
+
+```bash
+python merge_real_trace_summaries.py
+```
+
+This writes `real_trace/results/comparison_summary.json` with 25 entries (5 scenarios × 5 ABR algorithms), keyed as `<scenario>/<abr>` — the same pattern as the synthetic summary's `<seek_stem>/<abr>` keys.
+
+**View real trace results:**
+```bash
+python serve_viewer.py
+# Load: real_trace/results/comparison_summary.json
+```
+
+---
+
+# File Structure
 
 ```
 sabre/src/
-├── sabre.py                       # Core simulator
-├── buffer.py                      # MultiRegionBuffer (dynamic buffering)
-├── prefetch.py                    # PrefetchModule
-├── global_state.py                # GlobalState singleton
-├── run_comparison.py            # With vs without buffer.py; optional prefetch; writes comparison_summary.json for batch runs
-├── view_comparison.html         # Web viewer (single-run JSON + comparison_summary.json dashboard)
-├── serve_viewer.py              # HTTP server for the viewer
-├── test_buffer_equivalence.py   # Linear ↔ dynamic buffer equivalence tests
-├── test_dynamic_buffer_cases.py # Dynamic buffer algorithm case tests
-├── test_simulation_regression.py
-├── generate_configs.py          # Writes test_prefetch_config.json, seeks.json, seeks_prefetch_hit.json, seeks_mixed.json
-├── network_generator.py
-├── generate_abr_comparison.py
-├── graph_generate.py
-├── network.json
-├── movie.json
-├── seeks.json                   # Prefetch-miss seeks (regenerated by generate_configs.py)
-├── seeks_prefetch_hit.json      # Prefetch-hit seeks
-├── seeks_mixed.json             # Mixed hit/miss seeks
-├── test_prefetch_config.json    # Prefetch + threshold; demo/tests + generate_configs output
-└── prefetch_comparison_results/ # Batch output from: run_comparison.py -sc seeks.json,seeks_prefetch_hit.json,seeks_mixed.json ...
-    ├── comparison_summary.json  # Load this in the viewer for the cross-comparison table
-    ├── seeks/
-    │   └── comparison_<abr>.json
-    ├── seeks_prefetch_hit/
-    │   └── comparison_<abr>.json
-    └── seeks_mixed/
-        └── comparison_<abr>.json
+│
+├── sabre.py                          # Core simulator
+├── buffer.py                         # MultiRegionBuffer (dynamic buffering)
+├── prefetch.py                       # PrefetchModule
+├── global_state.py                   # GlobalState singleton
+├── abr_algorithms.py                 # ABR algorithm implementations
+│
+├── run_comparison.py                 # With vs without buffer.py; writes comparison_summary.json
+├── serve_viewer.py                   # HTTP server for the viewer (port 8000)
+├── network_generator.py              # Generates synthetic network.json
+├── generate_configs.py               # Generates seeks + prefetch configs for synthetic scenarios
+├── parse_real_traces.py              # Converts YouTube trace CSV → network/seeks JSON
+├── merge_real_trace_summaries.py     # Merges 5 real-trace scenario summaries into one
+│
+├── test_buffer_equivalence.py        # Linear ↔ dynamic buffer equivalence tests
+├── test_dynamic_buffer_cases.py      # Dynamic buffer algorithm case tests
+│
+├── viewer/
+│   ├── view_comparison.html          # Main viewer: single-run + comparison_summary.json dashboard
+│   ├── view_traces.html              # Trace browser (traces_viz.json)
+│   └── view_real_trace.html          # Individual real trace detail view
+│
+├── synthetic/                        # Synthetic scenario inputs and results
+│   ├── movie.json                    # Video manifest (shared by synthetic and real trace runs)
+│   ├── network.json                  # Generated synthetic network trace
+│   ├── seeks.json                    # Seeks that miss the prefetch list
+│   ├── seeks_prefetch_hit.json       # Seeks aligned with prefetch targets
+│   ├── seeks_mixed.json              # Random mix of hit and miss seeks
+│   ├── seeks_linear_hit_dynamic_miss.json
+│   ├── seeks_linear_miss_dynamic_hit.json
+│   ├── test_prefetch_config.json     # Prefetch config used for synthetic runs
+│   ├── test_prefetch_config_fixture.json  # Fixture for unit tests
+│   └── results/                      # Output from synthetic run_comparison.py
+│       ├── comparison_summary.json   # Load this in the viewer
+│       ├── seeks/
+│       │   └── comparison_<abr>.json
+│       ├── seeks_prefetch_hit/
+│       ├── seeks_mixed/
+│       ├── seeks_linear_hit_dynamic_miss/
+│       └── seeks_linear_miss_dynamic_hit/
+│
+├── real_trace/                       # Real YouTube trace inputs and results
+│   ├── yt_traces_2026-04-18.csv      # Raw trace CSV (throttled trace only)
+│   ├── traces_viz.json               # Visualization data for view_traces.html
+│   ├── network_56329467-babb-4d75-bb58-70f3906369fe.json
+│   ├── seeks_56329467-babb-4d75-bb58-70f3906369fe.json
+│   ├── prefetch_config_real_base.json
+│   ├── prefetch_config_real_prefetch_hit.json
+│   ├── prefetch_config_real_mixed.json
+│   ├── prefetch_config_real_linear_miss_dynamic_hit.json
+│   ├── prefetch_config_real_linear_hit_dynamic_miss.json
+│   └── results/                      # Output from real trace run_comparison.py loop
+│       ├── comparison_summary.json   # Load this in the viewer (merged by merge_real_trace_summaries.py)
+│       ├── base/
+│       │   └── comparison_<abr>.json
+│       ├── prefetch_hit/
+│       ├── mixed/
+│       ├── linear_miss_dynamic_hit/
+│       └── linear_hit_dynamic_miss/
+│
+├── yt_trace_collector/               # Chrome extension for collecting YouTube traces
+│   ├── manifest.json
+│   ├── collector.js
+│   ├── content.js
+│   ├── bridge.js
+│   ├── popup.html
+│   └── popup.js
+│
+└── sabre_only_abr_graph__seek_visualization/   # Legacy standalone graph generation
+    ├── generate_abr_comparison.py
+    ├── graph_generate.py
+    ├── extract_data.py
+    └── <abr>.csv
 ```
-
-Generated single-run files (e.g. `comparison_results.json` or `comparison_bola.json`) usually live in `src/` or a folder you pass to `-o`; names depend on flags.

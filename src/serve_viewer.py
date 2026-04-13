@@ -32,11 +32,16 @@ def main():
 
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         print(f"Server running at http://localhost:{PORT}/")
-        print(f"Open http://localhost:{PORT}/view_comparison.html in your browser")
+        print(f"  Simulation comparison : http://localhost:{PORT}/viewer/view_comparison.html")
+        print(f"  Real trace viewer     : http://localhost:{PORT}/viewer/view_traces.html")
         print("Press Ctrl+C to stop the server")
 
+        import sys
+        url = (f'http://localhost:{PORT}/viewer/view_traces.html'
+               if '--traces' in sys.argv
+               else f'http://localhost:{PORT}/viewer/view_comparison.html')
         try:
-            webbrowser.open(f'http://localhost:{PORT}/view_comparison.html')
+            webbrowser.open(url)
         except Exception:
             pass
 
