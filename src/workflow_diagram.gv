@@ -1,0 +1,81 @@
+digraph SABRE_DB_Workflow {
+  graph [
+    rankdir=LR,
+    splines=ortho,
+    nodesep=0.45,
+    ranksep=0.75,
+    fontname="Helvetica"
+  ];
+
+  node [
+    shape=box,
+    style="rounded",
+    fontname="Helvetica",
+    fontsize=10,
+    margin="0.10,0.06"
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    arrowsize=0.7
+  ];
+
+  subgraph cluster_inputs {
+    label="Inputs";
+    style="rounded,dashed";
+    video [label="Video metadata\nmovie.json"];
+    network [label="Network trace"];
+    seeks [label="Seek workload"];
+    prefetch [label="Prefetch config"];
+    realtrace [label="YouTube trace\nChrome collector"];
+  }
+
+  subgraph cluster_preprocess {
+    label="Workload preparation";
+    style="rounded,dashed";
+    gen [label="generate_configs.py\nsynthetic scenarios"];
+    parse [label="parse_real_traces.py\nreal-trace parser"];
+  }
+
+  subgraph cluster_sim {
+    label="Simulation";
+    style="rounded,dashed";
+    runner [label="run_comparison.py /\nrun_real_trace_comparison.py"];
+    abr [label="ABR policies\nBOLA, BOLAE, Dynamic,\nDynamicDash, Throughput"];
+    linear [label="Baseline SABRE\nlinear buffer"];
+    dynamic [label="SABRE-DB\nMultiRegionBuffer"];
+  }
+
+  subgraph cluster_outputs {
+    label="Outputs and inspection";
+    style="rounded,dashed";
+    json [label="Per-run JSON"];
+    summary [label="comparison_summary.json"];
+    viewer [label="Browser viewer"];
+    charts [label="QoE, rebuffering,\nbuffer level, quality"];
+  }
+
+  video -> gen;
+  gen -> seeks;
+  gen -> prefetch;
+
+  realtrace -> parse;
+  parse -> runner;
+
+  video -> runner;
+  network -> runner;
+  seeks -> runner;
+  prefetch -> runner;
+  abr -> runner;
+
+  runner -> linear;
+  runner -> dynamic;
+
+  linear -> json;
+  dynamic -> json;
+  json -> summary;
+  json -> viewer;
+  summary -> viewer;
+  viewer -> charts;
+}
