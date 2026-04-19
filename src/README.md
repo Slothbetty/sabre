@@ -698,11 +698,11 @@ The example trace (UUID `56329467-babb-4d75-bb58-70f3906369fe`) has a significan
 
 | Scenario | Config file | Threshold | Prefetch targets | What it tests |
 |----------|-------------|-----------|-----------------|--------------|
-| `seeks_miss` | `prefetch_config_real_seeks_miss.json` | 3 500 ms | segs 45–46 | Prefetch fires but targets miss all real seek destinations; both modes miss |
-| `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Narrow window right at seek destination; dynamic buffering hits the cache |
-| `mixed` | `prefetch_config_real_mixed.json` | 3 500 ms | segs 62–63 + 75–76 | Half the bandwidth goes to wrong segments; partial hit |
-| `linear_hit_dynamic_miss` | `prefetch_config_real_linear_hit_dynamic_miss.json` | 3 500 ms | segs 75–79 | Wrong targets past the seek; dynamic wastes bandwidth and cannot benefit |
-| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Correct targets; linear must rebuffer, dynamic serves from cache |
+| `seeks_miss` | `prefetch_config_real_seeks_miss.json` | 3 500 ms | segs 45–46 | Both linear and dynamic buffering miss the prefetch chunk |
+| `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Both linear and dynamic buffering hit the prefetch chunk |
+| `mixed` | `prefetch_config_real_mixed.json` | 3 500 ms | segs 62–63 + 75–76 | Some seeks hit the prefetch chunk; others miss it |
+| `linear_hit_dynamic_miss` | `prefetch_config_real_linear_hit_dynamic_miss.json` | 3 500 ms | segs 75–79 | Linear buffering hits the prefetch chunk; dynamic buffering misses it |
+| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Dynamic buffering hits the prefetch chunk; linear buffering misses it |
 
 To create a new prefetch config:
 ```json
