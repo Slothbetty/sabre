@@ -997,7 +997,7 @@
                 if (v0 === 0) return v1 === 0 ? '0%' : 'N/A';
                 return ((v1 - v0) / v0 * 100).toFixed(1) + '%';
             }
-            /** lowerBetter: true = smaller value is better (rebuffer, play time); false = larger is better (utility) */
+            /** lowerIsBetter: true = smaller is better (rebuffer metrics); false = larger is better (utility, QoE); neutral = no directional judgment */
             function metricChangeClass(v0, v1, lowerBetter) {
                 const eps = 1e-9;
                 if (Math.abs(Number(v0) - Number(v1)) <= eps) return 'metric-same';
@@ -1017,9 +1017,9 @@
                 <th title="Played utility, baseline (no buffer.py)">Utility (without)</th>
                 <th title="Played utility with buffer.py">Utility (with)</th>
                 <th title="Percent change vs baseline; green = higher utility (better), red = lower (worse)">Change</th>
-                <th title="Wall-clock time to finish, baseline">Play time (without)</th>
-                <th title="Wall-clock time to finish with dynamic buffering">Play time (with)</th>
-                <th title="Percent change vs baseline; green = shorter session (better), red = longer (worse)">Change</th>
+                <th title="QoE = Utility − γp × (Rebuffer Time / Segment Duration), baseline">QoE (without)</th>
+                <th title="QoE with dynamic buffering">QoE (with)</th>
+                <th title="Percent change vs baseline; green = higher QoE (better), red = lower (worse)">Change</th>
             </tr></thead><tbody>`;
             rows.forEach(r => {
                 const scen = r.scenario;
@@ -1032,8 +1032,8 @@
                 const rr1 = r.wi.rebuffer_ratio != null ? r.wi.rebuffer_ratio : 0;
                 const util0 = r.wo.played_utility || 0;
                 const util1 = r.wi.played_utility || 0;
-                const pt0 = r.wo.total_play_time || 0;
-                const pt1 = r.wi.total_play_time || 0;
+                const pt0 = r.wo.qoe_score || 0;
+                const pt1 = r.wi.qoe_score || 0;
                 const badgeClass = scen.css ? ('scenario-badge ' + scen.css) : 'scenario-badge';
                 thtml += `<tr class="clickable-row" data-stem="${scen.stem}" onclick="drillDown('${escKey}', this)">
                     <td>
@@ -1051,8 +1051,8 @@
                     <td class="${metricChangeClass(rr0, rr1, true)}">${pctChange(rr0, rr1)}</td>
                     <td>${util0.toFixed(1)}</td><td>${util1.toFixed(1)}</td>
                     <td class="${metricChangeClass(util0, util1, false)}">${pctChange(util0, util1)}</td>
-                    <td>${pt0.toFixed(1)}s</td><td>${pt1.toFixed(1)}s</td>
-                    <td class="${metricChangeClass(pt0, pt1, true)}">${pctChange(pt0, pt1)}</td>
+                    <td>${pt0.toFixed(1)}</td><td>${pt1.toFixed(1)}</td>
+                    <td class="${metricChangeClass(pt0, pt1, false)}">${pctChange(pt0, pt1)}</td>
                 </tr>`;
             });
             thtml += '</tbody>';
@@ -1299,8 +1299,8 @@
                   desc: 'Sum of per-segment quality scores over the session. Higher means the player selected better quality more often.' },
                 { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true,
                   desc: 'Rebuffering time divided by total play time. Measures what fraction of the session was spent stalled.' },
-                { label: 'Total Play Time', key: 'total_play_time', unit: 's', lowerIsBetter: false,
-                  desc: 'Total wall-clock duration of the playback session including any rebuffering delays.' }
+                { label: 'Quality of Experience', key: 'qoe_score', unit: '', lowerIsBetter: false,
+                  desc: 'QoE = Played Utility − γp × (Rebuffer Time / Segment Duration), where γp = 5 s (BOLA penalty coefficient). Combines quality and rebuffering into a single score — higher is better.' }
             ];
             
             const cardsHtml = metrics.map(metric => {
@@ -1311,7 +1311,11 @@
                 
                 let comparisonClass = 'comparison';
                 let comparisonText = '';
-                if (metric.lowerIsBetter) {
+                if (metric.neutral) {
+                    comparisonText = diff >= 0
+                        ? `\u2191 ${Math.abs(percentChange)}% vs without`
+                        : `\u2193 ${Math.abs(percentChange)}% vs without`;
+                } else if (metric.lowerIsBetter) {
                     comparisonClass += diff < 0 ? ' positive' : ' negative';
                     comparisonText = diff < 0 ? `\u2193 ${Math.abs(percentChange)}% improvement` : `\u2191 ${Math.abs(percentChange)}% worse`;
                 } else {

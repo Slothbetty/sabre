@@ -70,6 +70,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -2734,6 +2735,7 @@
           "total_rebuffer_time": 1.000103,
           "rebuffer_ratio": 0.001658,
           "rebuffer_count": 2,
+          "qoe_score": 244.392681,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -5401,6 +5403,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -8015,6 +8018,7 @@
           "total_rebuffer_time": 9.553184,
           "rebuffer_ratio": 0.015631,
           "rebuffer_count": 6,
+          "qoe_score": 220.653177,
           "rampup_time": 7.87058
         },
         "download_events": [
@@ -10682,6 +10686,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -13388,6 +13393,7 @@
           "total_rebuffer_time": 1.820503,
           "rebuffer_ratio": 0.002984,
           "rebuffer_count": 3,
+          "qoe_score": 243.022091,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -16045,6 +16051,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -18697,6 +18704,7 @@
           "total_rebuffer_time": 1.799063,
           "rebuffer_ratio": 0.002949,
           "rebuffer_count": 3,
+          "qoe_score": 255.482011,
           "rampup_time": 3.36871
         },
         "download_events": [
@@ -21346,6 +21354,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -23986,6 +23995,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001564,
           "rebuffer_count": 2,
+          "qoe_score": 193.715153,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -26657,6 +26667,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -29321,6 +29332,7 @@
           "total_rebuffer_time": 0.797918,
           "rebuffer_ratio": 0.001322,
           "rebuffer_count": 3,
+          "qoe_score": 247.654149,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -32054,6 +32066,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -34668,6 +34681,7 @@
           "total_rebuffer_time": 8.979768,
           "rebuffer_ratio": 0.014683,
           "rebuffer_count": 4,
+          "qoe_score": 236.217565,
           "rampup_time": 5.048409
         },
         "download_events": [
@@ -37363,6 +37377,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -40069,6 +40084,7 @@
           "total_rebuffer_time": 0.742307,
           "rebuffer_ratio": 0.001212,
           "rebuffer_count": 2,
+          "qoe_score": 249.923598,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -42752,6 +42768,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -45404,6 +45421,7 @@
           "total_rebuffer_time": 0.607174,
           "rebuffer_ratio": 0.001001,
           "rebuffer_count": 1,
+          "qoe_score": 257.466974,
           "rampup_time": 3.36871
         },
         "download_events": [
@@ -48049,6 +48067,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -50689,6 +50708,7 @@
           "total_rebuffer_time": 0.508206,
           "rebuffer_ratio": 0.000822,
           "rebuffer_count": 1,
+          "qoe_score": 194.114451,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -53374,6 +53394,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -56038,6 +56059,7 @@
           "total_rebuffer_time": 1.120225,
           "rebuffer_ratio": 0.001848,
           "rebuffer_count": 3,
+          "qoe_score": 233.962536,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -58743,6 +58765,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -61357,6 +61380,7 @@
           "total_rebuffer_time": 5.016696,
           "rebuffer_ratio": 0.008284,
           "rebuffer_count": 4,
+          "qoe_score": 234.057308,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -64032,6 +64056,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -66738,6 +66763,7 @@
           "total_rebuffer_time": 1.859972,
           "rebuffer_ratio": 0.003049,
           "rebuffer_count": 3,
+          "qoe_score": 240.399847,
           "rampup_time": 6.312513
         },
         "download_events": [
@@ -69423,6 +69449,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -72075,6 +72102,7 @@
           "total_rebuffer_time": 0.754377,
           "rebuffer_ratio": 0.001238,
           "rebuffer_count": 2,
+          "qoe_score": 257.591475,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -74714,6 +74742,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -77354,6 +77383,7 @@
           "total_rebuffer_time": 0.508206,
           "rebuffer_ratio": 0.000822,
           "rebuffer_count": 1,
+          "qoe_score": 190.463317,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -80031,6 +80061,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -82695,6 +82726,7 @@
           "total_rebuffer_time": 1.967958,
           "rebuffer_ratio": 0.003262,
           "rebuffer_count": 3,
+          "qoe_score": 243.879707,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -85316,6 +85348,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -87930,6 +87963,7 @@
           "total_rebuffer_time": 8.010841,
           "rebuffer_ratio": 0.013155,
           "rebuffer_count": 5,
+          "qoe_score": 233.816878,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -90539,6 +90573,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -93245,6 +93280,7 @@
           "total_rebuffer_time": 2.417631,
           "rebuffer_ratio": 0.003963,
           "rebuffer_count": 4,
+          "qoe_score": 239.470441,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -95920,6 +95956,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -98572,6 +98609,7 @@
           "total_rebuffer_time": 1.201249,
           "rebuffer_ratio": 0.001971,
           "rebuffer_count": 3,
+          "qoe_score": 252.834026,
           "rampup_time": 3.36871
         },
         "download_events": [
@@ -101221,6 +101259,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -103861,6 +103900,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001564,
           "rebuffer_count": 2,
+          "qoe_score": 187.140929,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -106516,6 +106556,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -109180,6 +109221,7 @@
           "total_rebuffer_time": 1.186155,
           "rebuffer_ratio": 0.001966,
           "rebuffer_count": 2,
+          "qoe_score": 236.776596,
           "rampup_time": 6.36871
         },
         "download_events": [
@@ -111879,6 +111921,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -114493,6 +114536,7 @@
           "total_rebuffer_time": 8.528669,
           "rebuffer_ratio": 0.014003,
           "rebuffer_count": 5,
+          "qoe_score": 229.661191,
           "rampup_time": 5.072444
         },
         "download_events": [
@@ -117142,6 +117186,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -119848,6 +119893,7 @@
           "total_rebuffer_time": 1.120225,
           "rebuffer_ratio": 0.001839,
           "rebuffer_count": 2,
+          "qoe_score": 241.99261,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -122547,6 +122593,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -125199,6 +125246,7 @@
           "total_rebuffer_time": 1.306049,
           "rebuffer_ratio": 0.002141,
           "rebuffer_count": 2,
+          "qoe_score": 259.58999,
           "rampup_time": 6.3138
         },
         "download_events": [
@@ -127826,6 +127874,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -130466,6 +130515,7 @@
           "total_rebuffer_time": 0.508206,
           "rebuffer_ratio": 0.000822,
           "rebuffer_count": 1,
+          "qoe_score": 190.096572,
           "rampup_time": 12.269742
         },
         "download_events": [

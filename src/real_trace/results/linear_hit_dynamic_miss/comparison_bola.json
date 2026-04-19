@@ -39,6 +39,7 @@
       "total_rebuffer_time": 2.195665,
       "rebuffer_ratio": 0.003672,
       "rebuffer_count": 4,
+      "qoe_score": 237.291796,
       "rampup_time": 6.282527
     },
     "download_events": [
@@ -2703,6 +2704,7 @@
       "total_rebuffer_time": 1.967958,
       "rebuffer_ratio": 0.003262,
       "rebuffer_count": 3,
+      "qoe_score": 243.879707,
       "rampup_time": 6.30278
     },
     "download_events": [

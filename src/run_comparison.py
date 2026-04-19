@@ -34,6 +34,7 @@ _SUMMARY_KEYS = [
     ('played_bitrate',      'total played bitrate:'),
     ('rebuffer_ratio',      'rebuffer ratio:'),
     ('rampup_time',         'rampup time:'),
+    ('qoe_score',           'qoe score:'),
 ]
 
 SUPPORTED_ABRS = ['bola', 'bolae', 'dynamic', 'dynamicdash', 'throughput']
@@ -192,7 +193,7 @@ def print_summary(abr, metrics_without, metrics_with, has_prefetch):
     print("-" * 85)
 
     for key in ['total_rebuffer_time', 'rebuffer_count', 'total_play_time',
-                'played_utility', 'rebuffer_ratio']:
+                'played_utility', 'rebuffer_ratio', 'qoe_score']:
         v0 = metrics_without.get('summary', {}).get(key, 0)
         v1 = metrics_with.get('summary', {}).get(key, 0)
         if v0 != 0:

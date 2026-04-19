@@ -1534,6 +1534,9 @@ if __name__ == "__main__":
         print("rebuffer ratio: %f" % (gs.rebuffer_time / gs.total_play_time))
         print("time average rebuffer: %f" % (gs.rebuffer_time / 1000 * to_time_average))
         print("total rebuffer events: %f" % gs.rebuffer_event_count)
+        print("qoe score: %f" % (
+            gs.played_utility - args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
+        ))
         print(
             "rebuffer_starts_ms: "
             + ",".join(str(int(t)) for t in gs.rebuffer_event_starts_ms)

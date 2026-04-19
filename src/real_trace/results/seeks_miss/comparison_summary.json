@@ -60,6 +60,7 @@
           "total_rebuffer_time": 2.195665,
           "rebuffer_ratio": 0.003672,
           "rebuffer_count": 4,
+          "qoe_score": 237.291796,
           "rampup_time": 6.282527
         },
         "download_events": [
@@ -2724,6 +2725,7 @@
           "total_rebuffer_time": 1.000103,
           "rebuffer_ratio": 0.001658,
           "rebuffer_count": 2,
+          "qoe_score": 244.392681,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -5391,6 +5393,7 @@
           "total_rebuffer_time": 3.957406,
           "rebuffer_ratio": 0.006601,
           "rebuffer_count": 3,
+          "qoe_score": 251.1546,
           "rampup_time": 5.140458
         },
         "download_events": [
@@ -8005,6 +8008,7 @@
           "total_rebuffer_time": 9.553184,
           "rebuffer_ratio": 0.015631,
           "rebuffer_count": 6,
+          "qoe_score": 220.653177,
           "rampup_time": 7.87058
         },
         "download_events": [
@@ -10672,6 +10676,7 @@
           "total_rebuffer_time": 1.558305,
           "rebuffer_ratio": 0.002609,
           "rebuffer_count": 3,
+          "qoe_score": 235.064423,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -13378,6 +13383,7 @@
           "total_rebuffer_time": 1.820503,
           "rebuffer_ratio": 0.002984,
           "rebuffer_count": 3,
+          "qoe_score": 243.022091,
           "rampup_time": 6.30278
         },
         "download_events": [
@@ -16035,6 +16041,7 @@
           "total_rebuffer_time": 2.331211,
           "rebuffer_ratio": 0.003898,
           "rebuffer_count": 4,
+          "qoe_score": 248.391141,
           "rampup_time": 6.313149
         },
         "download_events": [
@@ -18687,6 +18694,7 @@
           "total_rebuffer_time": 1.799063,
           "rebuffer_ratio": 0.002949,
           "rebuffer_count": 3,
+          "qoe_score": 255.482011,
           "rampup_time": 3.36871
         },
         "download_events": [
@@ -21336,6 +21344,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001619,
           "rebuffer_count": 2,
+          "qoe_score": 190.433378,
           "rampup_time": 12.269742
         },
         "download_events": [
@@ -23976,6 +23985,7 @@
           "total_rebuffer_time": 0.966989,
           "rebuffer_ratio": 0.001564,
           "rebuffer_count": 2,
+          "qoe_score": 193.715153,
           "rampup_time": 12.269742
         },
         "download_events": [

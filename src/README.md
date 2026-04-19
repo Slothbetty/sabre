@@ -241,7 +241,7 @@ python serve_viewer.py
 
 Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json`.
 
-- **Summary cards** — total rebuffering time/events, utility, rebuffer ratio, total play time
+- **Summary cards** — total rebuffering time/events, played utility, rebuffer ratio, Quality of Experience (QoE)
 - **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band); quality over time; quality distribution
 - **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows annotations on the time-series charts
 
@@ -249,7 +249,7 @@ Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek con
 
 When you load a **`comparison_summary.json`** (synthetic or real trace), the viewer shows:
 
-- **Cross-Comparison Summary** — table with rows for each **scenario × ABR**. Columns include rebuffer events/time, rebuffer ratio, utility, and **Change** (green = improved vs baseline without `buffer.py`, red = worse, gray = unchanged).
+- **Cross-Comparison Summary** — table with rows for each **scenario × ABR**. Columns include rebuffer events/time, rebuffer ratio, utility, QoE, and **Change** (green = improved vs baseline without `buffer.py`, red = worse).
 - **Scenario legend** — describes what each scenario's seek or prefetch config does.
 - **Summary bar charts** — Rebuffering Events and Rebuffering Time across all runs.
 - **Row click (drill-down)** — click a row to see per-run detail charts; summary stays visible.
@@ -267,14 +267,30 @@ When you load a **`comparison_summary.json`** (synthetic or real trace), the vie
 
 ## Understanding Results
 
+### Quality of Experience (QoE)
+
+The primary single-number metric combining quality and rebuffering:
+
+```
+QoE = Played Utility − γp × (Rebuffer Time / Segment Duration)
+```
+
+- **Played Utility** — sum of per-segment quality scores
+- **γp = 5 s** — BOLA rebuffering penalty coefficient
+- **Rebuffer Time / Segment Duration** — rebuffering expressed as equivalent number of segments lost
+
+Higher QoE is better. A run that gains utility but adds rebuffering will only show a net improvement if the utility gain outweighs the penalty.
+
 ### Positive Indicators (Green)
 - **Lower rebuffering time/events** — `MultiRegionBuffer` preserves segments after seeks
 - **Higher utility** — better quality decisions from improved buffer management
 - **Lower rebuffer ratio** — more efficient buffering with preserved segments
+- **Higher QoE** — combined improvement across quality and rebuffering
 
 ### Negative Indicators (Red)
 - **Higher rebuffering** — prefetch fired but targeted wrong segments, wasting bandwidth
 - **Lower utility** — quality decisions degraded
+- **Lower QoE** — combined degradation outweighs any partial gains
 
 > The comparison uses identical ABR algorithms and network conditions, so differences come purely from buffer management strategy.
 
