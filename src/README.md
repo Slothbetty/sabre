@@ -241,7 +241,7 @@ python serve_viewer.py
 
 Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json`.
 
-- **Summary cards** — total rebuffering time/events, played utility, rebuffer ratio, Quality of Experience (QoE)
+- **Summary cards** — total rebuffering time, rebuffering events, played utility, rebuffer ratio, Quality of Experience (QoE)
 - **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band); quality over time; quality distribution
 - **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows annotations on the time-series charts
 
@@ -249,8 +249,9 @@ Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek con
 
 When you load a **`comparison_summary.json`** (synthetic or real trace), the viewer shows:
 
-- **Cross-Comparison Summary** — table with rows for each **scenario × ABR**. Columns include rebuffer events/time, rebuffer ratio, utility, QoE, and **Change** (green = improved vs baseline without `buffer.py`, red = worse).
-- **Scenario legend** — describes what each scenario's seek or prefetch config does.
+- **Summary run header** — network, movie, prefetch config, and ABR algorithms. For real trace summaries (one prefetch config per scenario) this shows `one config per scenario (5 total)` instead of a single filename.
+- **Scenario legend cards** — one card per scenario, each showing its prefetch config and a one-line description of which buffering mode hits or misses the prefetch chunk.
+- **Cross-Comparison Summary** — table with rows for each **scenario × ABR**. Each metric column shows `without → with` values plus a **Change** column (green = improved, red = worse). Columns: Rebuf Events, Rebuf Time, Utility, QoE.
 - **Summary bar charts** — Rebuffering Events and Rebuffering Time across all runs.
 - **Row click (drill-down)** — click a row to see per-run detail charts; summary stays visible.
 
