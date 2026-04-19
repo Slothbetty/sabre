@@ -256,8 +256,13 @@ class MultiRegionBuffer:
         if not region:
             return []
         
-        chunks = list(region.chunks)
-        
+        # Slice from pos_idx within the region: after a prefetch hit + merge,
+        # region.start_idx can be behind pos_idx (saved prefetch re-inserted before
+        # current position). Returning all chunks would cause phantom replay of
+        # already-past segments and an inflated buffer level.
+        pos_in_region = pos_idx - region.start_idx
+        chunks = list(region.chunks[pos_in_region:])
+
         # Collect chunks from subsequent contiguous regions
         valid_starts = sorted([s for s in self.region_starts if s in self.region_map])
         try:

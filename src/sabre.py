@@ -250,10 +250,18 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
                 gs.next_segment = region.end_idx
             else:
                 gs.next_segment = new_segment
-            if new_segment == floor_idx:
-                gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
         else:
             gs.next_segment = new_segment
+
+        # When the seek lands mid-segment (new_segment == floor_idx), align
+        # current_playback_pos with the actual seek position so that deplete_buffer's
+        # buffer_fcc path advances to the exact next segment boundary on pop_chunk().
+        # Without this, current_playback_pos sits at the segment boundary and
+        # pop_chunk() targets pos_idx-1 (the prior segment) which no longer exists,
+        # silently failing and inflating the buffer level by one segment.
+        if new_segment == floor_idx:
+            gs.buffer_fcc = pos_seek_to_ms - (floor_idx * seg_time)
+            gs.current_playback_pos = pos_seek_to_ms
     else:
         # Original linear buffering logic
         # Compute the segment index corresponding to the first element in the buffer.

@@ -5,11 +5,11 @@ import json
 import os
 
 SCENARIOS = [
-    "base",
+    "seeks_miss",
+    "prefetch_hit",
+    "mixed",
     "linear_hit_dynamic_miss",
     "linear_miss_dynamic_hit",
-    "mixed",
-    "prefetch_hit",
 ]
 
 BASE_DIR = os.path.join(os.path.dirname(__file__), "real_trace", "results")
