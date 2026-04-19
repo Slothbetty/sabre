@@ -1,9 +1,9 @@
 {
   "config": {
-    "network": "network.json",
-    "movie": "movie.json",
+    "network": "synthetic/network.json",
+    "movie": "synthetic/movie.json",
     "abr": "bola",
-    "seek_config": "seeks_linear_hit_dynamic_miss.json",
+    "seek_config": "synthetic/seeks_linear_hit_dynamic_miss.json",
     "seek_config_data": {
       "seeks": [
         {
@@ -128,7 +128,7 @@
         }
       ]
     },
-    "prefetch_config": "test_prefetch_config.json",
+    "prefetch_config": "synthetic/test_prefetch_config.json",
     "network_multiplier": 1.0
   },
   "without_buffer_py": {
@@ -3019,12 +3019,12 @@
   },
   "with_buffer_py": {
     "summary": {
-      "played_utility": 510.589792,
-      "played_bitrate": 801794.0,
+      "played_utility": 506.51549,
+      "played_bitrate": 806306.0,
       "total_play_time": 592.5,
-      "total_rebuffer_time": 1.222794,
-      "rebuffer_ratio": 0.002064,
-      "rebuffer_count": 6,
+      "total_rebuffer_time": 0.963806,
+      "rebuffer_ratio": 0.001627,
+      "rebuffer_count": 5,
       "rampup_time": 2.2
     },
     "download_events": [
@@ -3045,92 +3045,92 @@
         "buffer_level_after": 2886
       },
       {
-        "start_time": 2074,
-        "end_time": 2753,
+        "start_time": 1339,
+        "end_time": 3013,
         "segment": 2,
-        "quality": 5,
-        "buffer_level_before": 3457,
-        "buffer_level_after": 3457
+        "quality": 7,
+        "buffer_level_before": 3197,
+        "buffer_level_after": 3197
       },
       {
-        "start_time": 2753,
-        "end_time": 6884,
+        "start_time": 5263,
+        "end_time": 6027,
         "segment": 3,
-        "quality": 9,
-        "buffer_level_before": 2326,
-        "buffer_level_after": 2326
+        "quality": 4,
+        "buffer_level_before": 3183,
+        "buffer_level_after": 3183
       },
       {
-        "start_time": 7684,
-        "end_time": 8811,
+        "start_time": 6027,
+        "end_time": 8852,
         "segment": 4,
-        "quality": 6,
-        "buffer_level_before": 3399,
-        "buffer_level_after": 3399
+        "quality": 9,
+        "buffer_level_before": 3358,
+        "buffer_level_after": 3358
       },
       {
-        "start_time": 8811,
-        "end_time": 11492,
+        "start_time": 8852,
+        "end_time": 11533,
         "segment": 5,
         "quality": 9,
-        "buffer_level_before": 3718,
-        "buffer_level_after": 3718
+        "buffer_level_before": 3677,
+        "buffer_level_after": 3677
       },
       {
-        "start_time": 11492,
-        "end_time": 15084,
+        "start_time": 11533,
+        "end_time": 15125,
         "segment": 6,
         "quality": 9,
-        "buffer_level_before": 3126,
-        "buffer_level_after": 3126
+        "buffer_level_before": 3085,
+        "buffer_level_after": 3085
       },
       {
-        "start_time": 15084,
-        "end_time": 17127,
+        "start_time": 15125,
+        "end_time": 17168,
         "segment": 7,
         "quality": 7,
-        "buffer_level_before": 4082,
-        "buffer_level_after": 4082
+        "buffer_level_before": 4042,
+        "buffer_level_after": 4042
       },
       {
-        "start_time": 17127,
-        "end_time": 18492,
+        "start_time": 17168,
+        "end_time": 18532,
         "segment": 8,
         "quality": 7,
-        "buffer_level_before": 5718,
-        "buffer_level_after": 5718
+        "buffer_level_before": 5678,
+        "buffer_level_after": 5678
       },
       {
-        "start_time": 18492,
-        "end_time": 21332,
+        "start_time": 18582,
+        "end_time": 20401,
         "segment": 9,
-        "quality": 8,
-        "buffer_level_before": 5878,
-        "buffer_level_after": 5878
+        "quality": 7,
+        "buffer_level_before": 6809,
+        "buffer_level_after": 6809
       },
       {
-        "start_time": 21332,
-        "end_time": 22611,
+        "start_time": 20401,
+        "end_time": 22220,
         "segment": 10,
-        "quality": 6,
-        "buffer_level_before": 7599,
-        "buffer_level_after": 7599
+        "quality": 7,
+        "buffer_level_before": 7990,
+        "buffer_level_after": 7990
       },
       {
-        "start_time": 22611,
-        "end_time": 24212,
+        "start_time": 22220,
+        "end_time": 23821,
         "segment": 11,
         "quality": 7,
-        "buffer_level_before": 8998,
-        "buffer_level_after": 8998
+        "buffer_level_before": 9389,
+        "buffer_level_after": 9389
       },
       {
-        "start_time": 24212,
-        "end_time": 25974,
+        "start_time": 23821,
+        "end_time": 26563,
         "segment": 12,
-        "quality": 7,
-        "buffer_level_before": 10236,
-        "buffer_level_after": 10236
+        "quality": 8,
+        "buffer_level_before": 9647,
+        "buffer_level_after": 9647
       },
       {
         "start_time": 28600,
@@ -3214,11 +3214,11 @@
       },
       {
         "start_time": 59666,
-        "end_time": 63649,
+        "end_time": 63658,
         "segment": 23,
         "quality": 9,
-        "buffer_level_before": 2951,
-        "buffer_level_after": 2951
+        "buffer_level_before": 2942,
+        "buffer_level_after": 2942
       },
       {
         "start_time": 65000,
@@ -3518,67 +3518,35 @@
       },
       {
         "start_time": 177100,
-        "end_time": 177359,
-        "segment": 62,
-        "quality": 0,
-        "buffer_level_before": 0,
-        "buffer_level_after": 0
-      },
-      {
-        "start_time": 177359,
-        "end_time": 177552,
-        "segment": 63,
-        "quality": 0,
-        "buffer_level_before": 2807,
-        "buffer_level_after": 2807
-      },
-      {
-        "start_time": 179128,
-        "end_time": 180449,
-        "segment": 64,
-        "quality": 5,
-        "buffer_level_before": 2909,
-        "buffer_level_after": 2909
-      },
-      {
-        "start_time": 180449,
-        "end_time": 184022,
-        "segment": 65,
-        "quality": 8,
-        "buffer_level_before": 2336,
-        "buffer_level_after": 2336
-      },
-      {
-        "start_time": 185085,
-        "end_time": 186324,
+        "end_time": 180944,
         "segment": 66,
-        "quality": 5,
-        "buffer_level_before": 3035,
-        "buffer_level_after": 3035
+        "quality": 9,
+        "buffer_level_before": 10355,
+        "buffer_level_after": 10355
       },
       {
-        "start_time": 186324,
-        "end_time": 189802,
+        "start_time": 180944,
+        "end_time": 185036,
         "segment": 67,
-        "quality": 8,
-        "buffer_level_before": 2556,
-        "buffer_level_after": 2556
+        "quality": 9,
+        "buffer_level_before": 9263,
+        "buffer_level_after": 9263
       },
       {
-        "start_time": 190915,
-        "end_time": 192501,
+        "start_time": 185036,
+        "end_time": 190164,
         "segment": 68,
-        "quality": 6,
-        "buffer_level_before": 2857,
-        "buffer_level_after": 2857
+        "quality": 9,
+        "buffer_level_before": 7136,
+        "buffer_level_after": 7136
       },
       {
-        "start_time": 192501,
-        "end_time": 194557,
+        "start_time": 190164,
+        "end_time": 195083,
         "segment": 69,
-        "quality": 7,
-        "buffer_level_before": 3802,
-        "buffer_level_after": 3802
+        "quality": 9,
+        "buffer_level_before": 5216,
+        "buffer_level_after": 5216
       },
       {
         "start_time": 196213,
@@ -3662,11 +3630,11 @@
       },
       {
         "start_time": 228258,
-        "end_time": 233042,
+        "end_time": 232956,
         "segment": 80,
         "quality": 8,
-        "buffer_level_before": 4657,
-        "buffer_level_after": 4657
+        "buffer_level_before": 4744,
+        "buffer_level_after": 4744
       },
       {
         "start_time": 233850,
@@ -3814,11 +3782,11 @@
       },
       {
         "start_time": 284428,
-        "end_time": 287864,
+        "end_time": 287930,
         "segment": 99,
         "quality": 9,
-        "buffer_level_before": 5836,
-        "buffer_level_after": 5836
+        "buffer_level_before": 5769,
+        "buffer_level_after": 5769
       },
       {
         "start_time": 290105,
@@ -3974,51 +3942,51 @@
       },
       {
         "start_time": 345512,
-        "end_time": 347354,
+        "end_time": 347330,
         "segment": 119,
         "quality": 7,
-        "buffer_level_before": 3045,
-        "buffer_level_after": 3045
+        "buffer_level_before": 3069,
+        "buffer_level_after": 3069
       },
       {
-        "start_time": 347354,
-        "end_time": 349544,
+        "start_time": 347330,
+        "end_time": 349520,
         "segment": 120,
         "quality": 8,
-        "buffer_level_before": 6855,
-        "buffer_level_after": 6855
+        "buffer_level_before": 6879,
+        "buffer_level_after": 6879
       },
       {
-        "start_time": 349544,
-        "end_time": 352981,
+        "start_time": 349520,
+        "end_time": 352957,
         "segment": 121,
         "quality": 8,
-        "buffer_level_before": 6418,
-        "buffer_level_after": 6418
+        "buffer_level_before": 6442,
+        "buffer_level_after": 6442
       },
       {
-        "start_time": 352981,
-        "end_time": 356106,
+        "start_time": 352957,
+        "end_time": 356082,
         "segment": 122,
         "quality": 8,
-        "buffer_level_before": 6293,
-        "buffer_level_after": 6293
+        "buffer_level_before": 6317,
+        "buffer_level_after": 6317
       },
       {
-        "start_time": 356106,
-        "end_time": 358585,
+        "start_time": 356082,
+        "end_time": 358561,
         "segment": 123,
         "quality": 8,
-        "buffer_level_before": 6815,
-        "buffer_level_after": 6815
+        "buffer_level_before": 6839,
+        "buffer_level_after": 6839
       },
       {
-        "start_time": 358585,
-        "end_time": 360964,
+        "start_time": 358561,
+        "end_time": 360940,
         "segment": 124,
         "quality": 8,
-        "buffer_level_before": 7435,
-        "buffer_level_after": 7435
+        "buffer_level_before": 7459,
+        "buffer_level_after": 7459
       },
       {
         "start_time": 364650,
@@ -4126,35 +4094,35 @@
       },
       {
         "start_time": 403127,
-        "end_time": 406537,
+        "end_time": 406546,
         "segment": 138,
         "quality": 8,
-        "buffer_level_before": 5863,
-        "buffer_level_after": 5863
+        "buffer_level_before": 5853,
+        "buffer_level_after": 5853
       },
       {
-        "start_time": 406537,
-        "end_time": 409360,
+        "start_time": 406546,
+        "end_time": 409370,
         "segment": 139,
         "quality": 8,
-        "buffer_level_before": 6039,
-        "buffer_level_after": 6039
+        "buffer_level_before": 6030,
+        "buffer_level_after": 6030
       },
       {
-        "start_time": 409360,
-        "end_time": 414602,
+        "start_time": 409370,
+        "end_time": 414611,
         "segment": 140,
         "quality": 8,
-        "buffer_level_before": 3798,
-        "buffer_level_after": 3798
+        "buffer_level_before": 3788,
+        "buffer_level_after": 3788
       },
       {
-        "start_time": 414602,
-        "end_time": 417258,
+        "start_time": 414611,
+        "end_time": 417267,
         "segment": 141,
         "quality": 8,
-        "buffer_level_before": 4142,
-        "buffer_level_after": 4142
+        "buffer_level_before": 4132,
+        "buffer_level_after": 4132
       },
       {
         "start_time": 419900,
@@ -4302,35 +4270,35 @@
       },
       {
         "start_time": 462554,
-        "end_time": 464865,
+        "end_time": 464847,
         "segment": 157,
         "quality": 8,
-        "buffer_level_before": 7665,
-        "buffer_level_after": 7665
+        "buffer_level_before": 7683,
+        "buffer_level_after": 7683
       },
       {
-        "start_time": 464865,
-        "end_time": 467701,
+        "start_time": 464847,
+        "end_time": 467683,
         "segment": 158,
         "quality": 8,
-        "buffer_level_before": 7829,
-        "buffer_level_after": 7829
+        "buffer_level_before": 7847,
+        "buffer_level_after": 7847
       },
       {
-        "start_time": 467701,
-        "end_time": 470459,
+        "start_time": 467683,
+        "end_time": 470441,
         "segment": 159,
         "quality": 8,
-        "buffer_level_before": 8071,
-        "buffer_level_after": 8071
+        "buffer_level_before": 8089,
+        "buffer_level_after": 8089
       },
       {
-        "start_time": 470459,
-        "end_time": 473288,
+        "start_time": 470441,
+        "end_time": 473270,
         "segment": 160,
         "quality": 8,
-        "buffer_level_before": 8242,
-        "buffer_level_after": 8242
+        "buffer_level_before": 8260,
+        "buffer_level_after": 8260
       },
       {
         "start_time": 475900,
@@ -4446,35 +4414,35 @@
       },
       {
         "start_time": 519084,
-        "end_time": 522962,
+        "end_time": 522977,
         "segment": 177,
         "quality": 9,
-        "buffer_level_before": 2493,
-        "buffer_level_after": 2493
+        "buffer_level_before": 2478,
+        "buffer_level_after": 2478
       },
       {
-        "start_time": 523716,
-        "end_time": 525477,
+        "start_time": 523731,
+        "end_time": 525491,
         "segment": 178,
         "quality": 7,
-        "buffer_level_before": 2978,
-        "buffer_level_after": 2978
+        "buffer_level_before": 2964,
+        "buffer_level_after": 2964
       },
       {
-        "start_time": 527181,
-        "end_time": 528046,
+        "start_time": 527146,
+        "end_time": 528011,
         "segment": 179,
         "quality": 5,
-        "buffer_level_before": 3409,
-        "buffer_level_after": 3409
+        "buffer_level_before": 3444,
+        "buffer_level_after": 3444
       },
       {
-        "start_time": 529201,
-        "end_time": 530143,
+        "start_time": 529465,
+        "end_time": 530130,
         "segment": 180,
-        "quality": 5,
-        "buffer_level_before": 4312,
-        "buffer_level_after": 4312
+        "quality": 4,
+        "buffer_level_before": 4325,
+        "buffer_level_after": 4325
       },
       {
         "start_time": 532654,
@@ -4614,14 +4582,55 @@
       },
       {
         "start_time": 580807,
-        "end_time": 583621,
+        "end_time": 583613,
         "segment": 198,
         "quality": 8,
-        "buffer_level_before": 5879,
-        "buffer_level_after": 5879
+        "buffer_level_before": 5886,
+        "buffer_level_after": 5886
       }
     ],
-    "prefetch_events": [],
+    "prefetch_events": [
+      {
+        "start_time": 324,
+        "end_time": 491,
+        "segment": 61,
+        "quality": 0,
+        "buffer_level_before": 5886,
+        "buffer_level_after": 5719
+      },
+      {
+        "start_time": 491,
+        "end_time": 688,
+        "segment": 62,
+        "quality": 0,
+        "buffer_level_before": 5719,
+        "buffer_level_after": 5522
+      },
+      {
+        "start_time": 688,
+        "end_time": 832,
+        "segment": 63,
+        "quality": 0,
+        "buffer_level_before": 5522,
+        "buffer_level_after": 5377
+      },
+      {
+        "start_time": 832,
+        "end_time": 1026,
+        "segment": 64,
+        "quality": 0,
+        "buffer_level_before": 5377,
+        "buffer_level_after": 5184
+      },
+      {
+        "start_time": 1026,
+        "end_time": 1189,
+        "segment": 65,
+        "quality": 0,
+        "buffer_level_before": 5184,
+        "buffer_level_after": 5020
+      }
+    ],
     "seek_events": [
       {
         "seek_when_s": 27.7,
@@ -4806,7 +4815,6 @@
     ],
     "rebuffer_starts_s": [
       65.205,
-      177.358,
       308.001,
       438.77,
       457.53,
@@ -4814,7 +4822,6 @@
     ],
     "rebuffer_durations_s": [
       0.205,
-      0.258,
       0.201,
       0.17,
       0.23,
@@ -4824,19 +4831,18 @@
       "time_points": [
         0.21,
         0.324,
-        2.753,
-        5.079,
-        6.884,
-        8.811,
-        11.492,
+        3.013,
+        6.027,
+        8.852,
+        11.533,
         14.618,
-        15.084,
-        17.127,
-        18.492,
-        21.332,
-        22.611,
-        24.212,
-        25.974,
+        15.125,
+        17.168,
+        18.532,
+        20.401,
+        22.22,
+        23.821,
+        26.563,
         29.519,
         33.078,
         37.268,
@@ -4847,8 +4853,8 @@
         52.439,
         56.063,
         59.666,
-        62.617,
-        63.649,
+        62.608,
+        63.658,
         65.206,
         65.406,
         67.967,
@@ -4889,16 +4895,10 @@
         167.631,
         170.608,
         174.276,
-        177.359,
-        177.552,
-        180.449,
-        182.785,
-        184.022,
-        186.324,
-        188.88,
-        189.802,
-        192.501,
-        194.557,
+        180.944,
+        185.036,
+        190.164,
+        195.083,
         198.567,
         201.138,
         204.496,
@@ -4910,8 +4910,7 @@
         221.139,
         224.478,
         228.258,
-        232.915,
-        233.042,
+        232.956,
         234.581,
         236.814,
         238.787,
@@ -4930,7 +4929,7 @@
         277.906,
         281.928,
         284.428,
-        287.864,
+        287.93,
         292.08,
         295.824,
         298.884,
@@ -4958,12 +4957,12 @@
         343.325,
         344.284,
         345.41,
-        347.354,
-        349.544,
-        352.981,
-        356.106,
-        358.585,
-        360.964,
+        347.33,
+        349.52,
+        352.957,
+        356.082,
+        358.561,
+        360.94,
         366.064,
         369.027,
         371.725,
@@ -4977,11 +4976,11 @@
         395.749,
         399.385,
         403.127,
-        406.537,
-        409.36,
+        406.546,
+        409.37,
         413.158,
-        414.602,
-        417.258,
+        414.611,
+        417.267,
         420.117,
         422.335,
         424.549,
@@ -5001,10 +5000,10 @@
         457.531,
         460.297,
         462.554,
-        464.865,
-        467.701,
-        470.459,
-        473.288,
+        464.847,
+        467.683,
+        470.441,
+        473.27,
         479.665,
         482.5,
         486.001,
@@ -5020,11 +5019,11 @@
         516.257,
         516.827,
         519.084,
-        521.577,
-        522.962,
-        525.477,
-        528.046,
-        530.143,
+        521.562,
+        522.977,
+        525.491,
+        528.011,
+        530.13,
         533.981,
         537.106,
         540.161,
@@ -5042,24 +5041,23 @@
         574.497,
         577.637,
         580.807,
-        583.621
+        583.613
       ],
       "buffer_levels": [
         0.0,
         2.886,
-        3.457,
+        3.197,
+        3.183,
+        3.358,
+        3.677,
         0.0,
-        2.326,
-        3.399,
-        3.718,
-        0.0,
-        3.126,
-        4.082,
-        5.718,
-        5.878,
-        7.599,
-        8.998,
-        10.236,
+        3.085,
+        4.042,
+        5.678,
+        6.809,
+        7.99,
+        9.389,
+        9.647,
         3.381,
         5.821,
         4.632,
@@ -5071,7 +5069,7 @@
         4.536,
         3.934,
         0.0,
-        2.951,
+        2.942,
         0.0,
         2.799,
         0.0,
@@ -5112,16 +5110,10 @@
         4.969,
         4.991,
         4.324,
-        0.0,
-        2.807,
-        2.909,
-        0.0,
-        2.336,
-        3.035,
-        0.0,
-        2.556,
-        2.857,
-        3.802,
+        10.355,
+        9.263,
+        7.136,
+        5.216,
         5.433,
         5.861,
         5.503,
@@ -5133,8 +5125,7 @@
         7.561,
         7.221,
         6.441,
-        0.0,
-        4.657,
+        4.744,
         3.718,
         7.486,
         8.513,
@@ -5153,7 +5144,7 @@
         6.794,
         5.771,
         6.271,
-        5.836,
+        5.769,
         5.32,
         4.575,
         4.516,
@@ -5181,12 +5172,12 @@
         0.0,
         2.415,
         1.99,
-        3.045,
-        6.855,
-        6.418,
-        6.293,
-        6.815,
-        7.435,
+        3.069,
+        6.879,
+        6.442,
+        6.317,
+        6.839,
+        7.459,
         3.035,
         6.073,
         6.375,
@@ -5200,11 +5191,11 @@
         6.95,
         6.314,
         3.272,
-        5.863,
-        6.039,
+        5.853,
+        6.03,
         0.0,
-        3.798,
-        4.142,
+        3.788,
+        4.132,
         1.982,
         5.765,
         6.551,
@@ -5224,10 +5215,10 @@
         0.0,
         6.233,
         6.976,
-        7.665,
-        7.829,
-        8.071,
-        8.242,
+        7.683,
+        7.847,
+        8.089,
+        8.26,
         7.435,
         7.6,
         7.098,
@@ -5244,10 +5235,10 @@
         2.628,
         3.371,
         0.0,
-        2.493,
-        2.978,
-        3.409,
-        4.312,
+        2.478,
+        2.964,
+        3.444,
+        4.325,
         3.219,
         6.093,
         6.038,
@@ -5265,24 +5256,23 @@
         6.003,
         5.862,
         5.692,
-        5.879
+        5.886
       ],
       "qualities": [
         0,
         0,
-        5,
+        7,
+        4,
         9,
         9,
-        6,
         9,
         9,
-        9,
+        7,
+        7,
+        7,
         7,
         7,
         8,
-        6,
-        7,
-        7,
         5,
         9,
         9,
@@ -5335,16 +5325,10 @@
         9,
         9,
         9,
-        0,
-        0,
-        5,
-        8,
-        8,
-        5,
-        8,
-        8,
-        6,
-        7,
+        9,
+        9,
+        9,
+        9,
         7,
         8,
         8,
@@ -5352,7 +5336,6 @@
         8,
         8,
         5,
-        8,
         8,
         8,
         8,
@@ -5470,7 +5453,7 @@
         9,
         7,
         5,
-        5,
+        4,
         6,
         8,
         8,
@@ -5494,7 +5477,6 @@
         0,
         1,
         2,
-        3,
         3,
         4,
         5,
@@ -5558,13 +5540,7 @@
         58,
         59,
         60,
-        62,
-        63,
-        64,
-        65,
-        65,
         66,
-        67,
         67,
         68,
         69,
@@ -5579,7 +5555,6 @@
         77,
         78,
         79,
-        80,
         80,
         81,
         82,

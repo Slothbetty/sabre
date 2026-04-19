@@ -36,7 +36,6 @@ This guide is split into three parts:
 18. [Parsing Traces](#parsing-traces)
 19. [Real Trace Prefetch Scenarios](#real-trace-prefetch-scenarios)
 20. [Running Real Trace Comparisons](#running-real-trace-comparisons)
-21. [Merging Real Trace Results](#merging-real-trace-results)
 
 ### Reference
 
@@ -630,12 +629,30 @@ Real traces capture actual YouTube viewing sessions (network conditions + seek e
 
 ## Collecting Traces
 
-The `yt_trace_collector/` Chrome extension records bandwidth periods and seek events while watching YouTube.
+The `yt_trace_collector/` Chrome extension records bandwidth conditions and seek events while watching YouTube.
 
-1. Load the extension in Chrome (Developer mode → Load unpacked → select `yt_trace_collector/`)
-2. Watch a YouTube video
-3. Export the collected trace as a CSV row (UUID, network periods, seek events, stall data)
-4. Save to `real_trace/yt_traces_<date>.csv`
+### One-time setup
+
+1. Open Chrome and go to `chrome://extensions`
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** and select the `src/yt_trace_collector/` folder
+4. The "YouTube Trace Collector" icon appears in the toolbar
+
+### Collecting a trace
+
+1. Go to YouTube and open any video
+2. Watch it — the extension records network conditions, seek events, and stall times automatically
+3. Seek, pause, or skip around as desired; all events are captured
+
+### Exporting
+
+1. Click the extension icon in the toolbar
+2. The popup shows how many traces have been collected
+3. Click **Export CSV** — downloads `yt_traces_<date>.csv`
+4. Move the file to `src/real_trace/`
+5. Optionally click **Clear all traces** to reset for the next session
+
+> Each YouTube session produces one trace (one UUID). Watching multiple videos before exporting produces multiple traces in one CSV — `parse_real_traces.py` processes all of them and you pick the UUID you want to simulate.
 
 ---
 
@@ -652,16 +669,7 @@ python parse_real_traces.py real_trace/yt_traces_2026-04-18.csv --output-dir rea
 | Flag | Description | Default |
 |------|-------------|---------|
 | `--output-dir` | Where to write `network_<uuid>.json` and `seeks_<uuid>.json` | current directory |
-| `--viz-only` | Only write `traces_viz.json`; skip per-trace simulation files | off |
 | `--min-seek` | Minimum position gap (seconds) to count as a seek event | `0.5` |
-
-The parser also writes `real_trace/traces_viz.json` for use with `viewer/view_traces.html`.
-
-**View collected traces:**
-```bash
-python serve_viewer.py --traces
-# Opens: http://localhost:8000/viewer/view_traces.html
-```
 
 ---
 
@@ -673,11 +681,11 @@ The example trace (UUID `56329467-babb-4d75-bb58-70f3906369fe`) has a significan
 
 | Scenario | Config file | Threshold | Prefetch targets | What it tests |
 |----------|-------------|-----------|-----------------|--------------|
-| `base` | `prefetch_config_real_base.json` | 20 000 ms | segs 62–65 | Threshold above network capacity — prefetch never fires; baseline |
+| `seeks_miss` | `prefetch_config_real_seeks_miss.json` | 3 500 ms | segs 45–46 | Prefetch fires but targets miss all real seek destinations; both modes miss |
 | `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Narrow window right at seek destination; dynamic buffering hits the cache |
 | `mixed` | `prefetch_config_real_mixed.json` | 3 500 ms | segs 62–63 + 75–76 | Half the bandwidth goes to wrong segments; partial hit |
-| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Correct targets; linear must rebuffer, dynamic serves from cache |
 | `linear_hit_dynamic_miss` | `prefetch_config_real_linear_hit_dynamic_miss.json` | 3 500 ms | segs 75–79 | Wrong targets past the seek; dynamic wastes bandwidth and cannot benefit |
+| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Correct targets; linear must rebuffer, dynamic serves from cache |
 
 To create a new prefetch config:
 ```json
@@ -699,34 +707,19 @@ To create a new prefetch config:
 
 ## Running Real Trace Comparisons
 
-Run all 5 scenarios in one loop. The seeks and network files are fixed; only the prefetch config changes.
+After parsing a new trace, generate its prefetch configs and set the active UUID:
 
 ```bash
-cd src/
-for scenario in base linear_hit_dynamic_miss linear_miss_dynamic_hit mixed prefetch_hit; do
-  python run_comparison.py \
-    -n real_trace/network_56329467-babb-4d75-bb58-70f3906369fe.json \
-    -m synthetic/movie.json \
-    -sc real_trace/seeks_56329467-babb-4d75-bb58-70f3906369fe.json \
-    -pc real_trace/prefetch_config_real_${scenario}.json \
-    -a all \
-    -o real_trace/results/${scenario}
-done
+python setup_real_trace.py <uuid>
 ```
 
-Each scenario writes `real_trace/results/<scenario>/comparison_<abr>.json` (5 ABR files) and a per-scenario `comparison_summary.json`.
-
----
-
-## Merging Real Trace Results
-
-The viewer expects a single `comparison_summary.json` that aggregates all scenarios. Run `merge_real_trace_summaries.py` after completing all 5 scenario runs:
+Then run all 5 scenarios and merge the results:
 
 ```bash
-python merge_real_trace_summaries.py
+python run_real_trace_comparison.py
 ```
 
-This writes `real_trace/results/comparison_summary.json` with 25 entries (5 scenarios × 5 ABR algorithms), keyed as `<scenario>/<abr>` — the same pattern as the synthetic summary's `<seek_stem>/<abr>` keys.
+This runs each scenario via `run_comparison.py` (with all ABR algorithms), then calls `merge_real_trace_summaries.py` to produce the merged summary. Each scenario writes `real_trace/results/<scenario>/comparison_<abr>.json` (5 ABR files) and a per-scenario `comparison_summary.json`. The final merged file is `real_trace/results/comparison_summary.json`.
 
 **View real trace results:**
 ```bash
@@ -748,6 +741,8 @@ sabre/src/
 ├── abr_algorithms.py                 # ABR algorithm implementations
 │
 ├── run_comparison.py                 # With vs without buffer.py; writes comparison_summary.json
+├── run_real_trace_comparison.py      # Runs all 5 real-trace scenarios + merges results
+├── setup_real_trace.py               # Generates prefetch configs from a trace UUID; updates run_real_trace_comparison.py
 ├── serve_viewer.py                   # HTTP server for the viewer (port 8000)
 ├── network_generator.py              # Generates synthetic network.json
 ├── generate_configs.py               # Generates seeks + prefetch configs for synthetic scenarios
@@ -759,7 +754,6 @@ sabre/src/
 │
 ├── viewer/
 │   ├── view_comparison.html          # Main viewer: single-run + comparison_summary.json dashboard
-│   ├── view_traces.html              # Trace browser (traces_viz.json)
 │   └── view_real_trace.html          # Individual real trace detail view
 │
 ├── synthetic/                        # Synthetic scenario inputs and results
@@ -783,22 +777,21 @@ sabre/src/
 │
 ├── real_trace/                       # Real YouTube trace inputs and results
 │   ├── yt_traces_2026-04-18.csv      # Raw trace CSV (throttled trace only)
-│   ├── traces_viz.json               # Visualization data for view_traces.html
 │   ├── network_56329467-babb-4d75-bb58-70f3906369fe.json
 │   ├── seeks_56329467-babb-4d75-bb58-70f3906369fe.json
-│   ├── prefetch_config_real_base.json
+│   ├── prefetch_config_real_seeks_miss.json
 │   ├── prefetch_config_real_prefetch_hit.json
 │   ├── prefetch_config_real_mixed.json
-│   ├── prefetch_config_real_linear_miss_dynamic_hit.json
 │   ├── prefetch_config_real_linear_hit_dynamic_miss.json
-│   └── results/                      # Output from real trace run_comparison.py loop
-│       ├── comparison_summary.json   # Load this in the viewer (merged by merge_real_trace_summaries.py)
-│       ├── base/
+│   ├── prefetch_config_real_linear_miss_dynamic_hit.json
+│   └── results/                      # Output from run_real_trace_comparison.py
+│       ├── comparison_summary.json   # Load this in the viewer (merged across all 5 scenarios)
+│       ├── seeks_miss/
 │       │   └── comparison_<abr>.json
 │       ├── prefetch_hit/
 │       ├── mixed/
-│       ├── linear_miss_dynamic_hit/
-│       └── linear_hit_dynamic_miss/
+│       ├── linear_hit_dynamic_miss/
+│       └── linear_miss_dynamic_hit/
 │
 ├── yt_trace_collector/               # Chrome extension for collecting YouTube traces
 │   ├── manifest.json

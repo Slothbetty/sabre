@@ -564,41 +564,48 @@
                 css: 'hit',
                 blurb: 'Far forward seeks (20–37 s ahead) jump well beyond the linear buffer window, forcing linear buffering to clear and rebuffer. Targets are prefetched segments, so dynamic buffering can resume immediately from the prefetch cache.'
             },
-            // Real-trace prefetch config scenarios (fixed seeks, varying prefetch strategy)
-            base: {
-                title: 'Base (no effective prefetch)',
-                short: 'Base',
-                file: 'prefetch_config_real_base.json',
+            // Real-trace prefetch config scenarios (fixed seeks, varying prefetch strategy).
+            // Ordered to mirror synthetic: miss → hit → mixed → lin-hit → dyn-hit.
+            // kind:'real' tells the card renderer to show "Prefetch config:" instead of "(folder:...)"
+            seeks_miss: {
+                title: 'Seeks miss prefetch',
+                short: 'Miss PF',
+                file: 'prefetch_config_real_seeks_miss.json',
                 css: 'miss',
-                blurb: 'Threshold set above what the throttled network can sustain (20 s), so prefetch never fires. Serves as the real-trace baseline — no prefetch benefit for either buffering mode.'
+                kind: 'real',
+                blurb: 'Prefetch fires but targets segments away from every seek destination. Dynamic buffering wastes bandwidth on wrong segments; both buffering modes must rebuffer after each seek.'
             },
             prefetch_hit: {
-                title: 'Prefetch hit (segs 62–63)',
-                short: 'PF Hit',
+                title: 'Seeks hit prefetch',
+                short: 'Hit PF',
                 file: 'prefetch_config_real_prefetch_hit.json',
                 css: 'hit',
-                blurb: 'Threshold 3.5 s; prefetches segments 62–63 which sit right at the real seek destination (188 s). Dynamic buffering can serve the seek from cache, reducing rebuffering.'
+                kind: 'real',
+                blurb: 'Prefetch targets land exactly at the seek destination. Dynamic buffering serves the seek from cache, reducing or eliminating post-seek rebuffering.'
             },
             mixed: {
-                title: 'Mixed (partial hit)',
+                title: 'Seeks mixed',
                 short: 'Mixed',
                 file: 'prefetch_config_real_mixed.json',
                 css: 'mixed',
-                blurb: 'Threshold 3.5 s; prefetches segs 62–63 (hit) and 75–76 (past the seek destination). Half the prefetch bandwidth is wasted on segments that will not be used at seek time.'
-            },
-            linear_miss_dynamic_hit: {
-                title: 'Linear miss, dynamic hit',
-                short: 'Dyn Hit',
-                file: 'prefetch_config_real_linear_miss_dynamic_hit.json',
-                css: 'hit',
-                blurb: 'Threshold 3.5 s; prefetches segs 62–65 at the exact seek destination. Linear buffering must clear its buffer and rebuffer; dynamic buffering hits the prefetch cache and resumes immediately.'
+                kind: 'real',
+                blurb: 'Some prefetch targets align with the seek destination (hits); others do not (misses). A portion of prefetch bandwidth is wasted on segments not needed at seek time.'
             },
             linear_hit_dynamic_miss: {
                 title: 'Linear hit, dynamic miss',
                 short: 'Lin Hit',
                 file: 'prefetch_config_real_linear_hit_dynamic_miss.json',
                 css: 'miss',
-                blurb: 'Threshold 3.5 s; prefetches segs 75–79 which are past the seek destination. Dynamic buffering wastes bandwidth on wrong segments and cannot benefit from its cache; linear buffering is unaffected.'
+                kind: 'real',
+                blurb: 'Prefetch targets are past the seek destination. Dynamic buffering wastes bandwidth on wrong segments and gains no cache benefit; linear buffering is unaffected.'
+            },
+            linear_miss_dynamic_hit: {
+                title: 'Linear miss, dynamic hit',
+                short: 'Dyn Hit',
+                file: 'prefetch_config_real_linear_miss_dynamic_hit.json',
+                css: 'hit',
+                kind: 'real',
+                blurb: 'Prefetch targets cover the seek destination. Linear buffering must clear its buffer and rebuffer after the seek; dynamic buffering hits the prefetch cache and resumes immediately.'
             }
         };
 
@@ -966,10 +973,13 @@
             stemsSeen.forEach(function(stem) {
                 const m = SEEK_SCENARIO_MAP[stem];
                 if (m) {
+                    const subtitle = m.kind === 'real'
+                        ? `<span style="color:#7f8c8d;">Prefetch config:</span> <code>${m.file}</code>`
+                        : `<code>${m.file}</code> <span style="color:#7f8c8d;">(folder: ${stem}/)</span>`;
                     legendHtml += `
                         <div class="seek-legend-card ${m.css}">
                             <h4>${m.title}</h4>
-                            <div><code>${m.file}</code> <span style="color:#7f8c8d;">(folder: ${stem}/)</span></div>
+                            <div>${subtitle}</div>
                             <p style="margin:8px 0 0 0;color:#555;">${m.blurb}</p>
                         </div>`;
                 } else {
