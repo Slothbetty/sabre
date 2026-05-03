@@ -1,11 +1,45 @@
-# SABRE Simulation Guide
+# STREAMBUFFER-VIS Simulation Guide
 
-This guide is split into four parts:
+STREAMBUFFER-VIS is a Python-based simulation environment for evaluating Adaptive Bitrate (ABR) streaming algorithms under realistic seek and prefetch conditions. It extends the original SABRE simulator with a dynamic multi-region buffer (`MultiRegionBuffer`) that preserves buffered segments across seek events and supports out-of-order prefetch downloads.
 
-- **Part I** covers the core SABRE simulator — setup, running simulations, graph generation, and regression testing. No `buffer.py` knowledge required.
-- **Part II** covers dynamic buffering with `buffer.py` (`MultiRegionBuffer`) — comparison tooling, prefetch/seek unit tests, detailed use-case flows, and technical reference.
-- **Part III** covers the real trace workflow — collecting YouTube traces, parsing them into simulation inputs, running the 5 prefetch scenarios, and viewing results.
-- **Part IV** covers the chunks-based workflow — running the same 5-scenario comparison using a video from `chunks_1_200.json` with a fully synthetic network and seeks. No browser trace required.
+---
+
+## Table of Contents
+
+- [System Architecture](#system-architecture)
+- [Comparison Workflows](#comparison-workflows)
+- [Workflow Summary](#workflow-summary)
+- **Part I — Core Simulation**
+  - [Setup & Prerequisites](#setup--prerequisites)
+  - [Network Configuration](#network-configuration)
+  - [Running Simulations](#running-simulations)
+  - [Graph Generation](#graph-generation)
+  - [Regression Testing](#regression-testing)
+- **Part II — Dynamic Buffering (`buffer.py`)**
+  - [Overview](#overview)
+  - [Running Buffer Comparisons](#running-buffer-comparisons)
+  - [Viewing Results](#viewing-results)
+  - [Understanding Results](#understanding-results)
+  - [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs)
+  - [Prefetch Comparison Workflow (Synthetic)](#prefetch-comparison-workflow-synthetic)
+  - [Testing](#testing)
+  - [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
+  - [Technical Reference](#technical-reference)
+  - [Advanced Usage](#advanced-usage)
+  - [Troubleshooting](#troubleshooting)
+- **Part III — Real-trace Workflow**
+  - [Collecting Traces](#collecting-traces)
+  - [Parsing Traces](#parsing-traces)
+  - [Real Trace Prefetch Scenarios](#real-trace-prefetch-scenarios)
+  - [Running Real Trace Comparisons](#running-real-trace-comparisons)
+- **Part IV — Chunks-based Workflow**
+  - [Chunks Video Library](#chunks-video-library)
+  - [Running Chunks Comparisons](#running-chunks-comparisons)
+  - [Chunks Comparison Options](#chunks-comparison-options)
+- **Reference**
+  - [File Structure](#file-structure)
+
+---
 
 ## System Architecture
 
@@ -13,66 +47,26 @@ The diagram below shows the module structure and component relationships of STRE
 
 ![System Architecture](architecture_diagram.png)
 
+---
+
 ## Comparison Workflows
 
-STREAMBUFFER-VIS supports three comparison workflows — Synthetic, Real-trace, and Chunks-based — all converging into a shared simulation core.
+STREAMBUFFER-VIS supports three comparison workflows — **Synthetic**, **Real-trace**, and **Chunks-based** — all converging into a shared simulation core that runs each scenario with and without `MultiRegionBuffer`.
 
 ![Comparison Workflows](workflow_diagram.png)
 
-## Two Comparison Pipelines
+---
 
-| | Pipeline 1 — Real Trace | Pipeline 2 — Chunks-based |
-|---|---|---|
-| **Movie** | Any (`synthetic/movie.json` default) | Entry from `chunks_1_200.json` |
-| **Network** | Real (`network_<uuid>.json`) | Synthetic (generated) |
-| **Seeks** | Real (`seeks_<uuid>.json`) | Synthetic (generated from video content) |
-| **Prefetch configs** | Derived from real seek destinations | Derived from video segment structure |
-| **Runner** | `run_real_trace_comparison.py` | `run_chunks_comparison.py` |
-| **Results** | `real_trace/results/` | `chunks_trace/results/` |
+## Workflow Summary
 
-## Table of Contents
-
-- [System Architecture](#system-architecture)
-- [Comparison Workflows](#comparison-workflows)
-
-### Part I — Core Simulation
-
-1. [Setup & Prerequisites](#setup--prerequisites)
-2. [Network Configuration](#network-configuration)
-3. [Running Simulations](#running-simulations)
-4. [Graph Generation](#graph-generation)
-5. [Regression Testing](#regression-testing)
-
-### Part II — Dynamic Buffering (`buffer.py`)
-
-6. [Overview](#overview)
-7. [Running Buffer Comparisons](#running-buffer-comparisons)
-8. [Viewing Results](#viewing-results)
-9. [Understanding Results](#understanding-results)
-10. [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs)
-11. [Prefetch Comparison Workflow (Synthetic)](#prefetch-comparison-workflow-synthetic)
-12. [Testing](#testing)
-13. [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
-14. [Technical Reference](#technical-reference)
-15. [Advanced Usage](#advanced-usage)
-16. [Troubleshooting](#troubleshooting)
-
-### Part III — Real Trace Workflow
-
-17. [Collecting Traces](#collecting-traces)
-18. [Parsing Traces](#parsing-traces)
-19. [Real Trace Prefetch Scenarios](#real-trace-prefetch-scenarios)
-20. [Running Real Trace Comparisons](#running-real-trace-comparisons)
-
-### Part IV — Chunks-based Workflow
-
-21. [Chunks Video Library](#chunks-video-library)
-22. [Running Chunks Comparisons](#running-chunks-comparisons)
-23. [Chunks Comparison Options](#chunks-comparison-options)
-
-### Reference
-
-24. [File Structure](#file-structure)
+| | Synthetic | Real-trace | Chunks-based |
+|---|---|---|---|
+| **Movie** | `synthetic/movie.json` | Any `movie.json` | Entry from `chunks_1_200.json` |
+| **Network** | Synthetic (`network_generator.py`) | Real (`network_<uuid>.json`) | Synthetic (generated) |
+| **Seeks** | Generated (`generate_configs.py`) | Real (`seeks_<uuid>.json`) | Generated (`generate_configs.py`) |
+| **Prefetch configs** | Generated from video structure | Derived from real seek destinations | Generated from video structure |
+| **Runner** | `run_comparison.py` | `run_real_trace_comparison.py` | `run_chunks_comparison.py` |
+| **Results** | `synthetic/results/` | `real_trace/results/` | `chunks_trace/results/` |
 
 ---
 
