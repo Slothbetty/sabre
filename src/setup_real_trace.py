@@ -5,6 +5,7 @@ and update TRACE_UUID in run_real_trace_comparison.py.
 
 Usage:
     python setup_real_trace.py <uuid>
+    python setup_real_trace.py <uuid> --movie path/to/movie.json
 
 Run parse_real_traces.py first to produce seeks_<uuid>.json and
 network_<uuid>.json, then run this script before run_real_trace_comparison.py.
@@ -64,9 +65,98 @@ def find_miss_segs(all_dest_segs, num_segments):
     return [mid, mid + 1]
 
 
+def build_prefetch_configs(movie_data, seeks, buffer_threshold=BUFFER_THRESHOLD):
+    """
+    Generate all 5 prefetch scenario configs for the given movie and seek events.
+
+    Works correctly for any movie length — seek destinations and prefetch indices
+    are clamped to the valid segment range, and seeks that fire after the movie
+    ends are ignored.
+
+    Returns a dict keyed by scenario name:
+        "seeks_miss", "prefetch_hit", "mixed",
+        "linear_hit_dynamic_miss", "linear_miss_dynamic_hit"
+    """
+    seg_s = movie_data["segment_duration_ms"] / 1000.0
+    num_segments = len(movie_data["segment_sizes_bits"])
+    movie_duration_s = num_segments * seg_s
+
+    # Ignore seeks that would fire after the movie ends
+    valid_seeks = [s for s in seeks if s.get("seek_when", 0) < movie_duration_s]
+
+    def clamp(seg):
+        return max(0, min(num_segments - 1, int(seg)))
+
+    def clamp_unique(segs):
+        seen, out = set(), []
+        for s in segs:
+            s = clamp(s)
+            if s not in seen:
+                seen.add(s)
+                out.append(s)
+        return out
+
+    all_dest_segs = [clamp(math.floor(s["seek_to"] / seg_s)) for s in valid_seeks]
+
+    main_seek = max(
+        valid_seeks,
+        key=lambda s: s["seek_to"] - s["seek_when"],
+        default=None,
+    )
+    if main_seek is None or (main_seek["seek_to"] - main_seek["seek_when"]) < MIN_SIGNIFICANT_SEEK_S:
+        print("WARNING: No forward seek > 5 s found within movie duration. "
+              "Prefetch configs may not be meaningful.")
+
+    main_dest = (
+        clamp(math.floor(main_seek["seek_to"] / seg_s))
+        if main_seek else num_segments // 2
+    )
+    far_miss = clamp(min(main_dest + FAR_MISS_OFFSET, num_segments - 5))
+
+    try:
+        miss_segs = find_miss_segs(all_dest_segs, num_segments)
+    except ValueError:
+        # Fallback: quarter- and three-quarter points of the movie
+        miss_segs = [num_segments // 4, num_segments * 3 // 4]
+
+    configs = {
+        "seeks_miss": make_config(
+            buffer_threshold,
+            clamp_unique(miss_segs),
+        ),
+        "prefetch_hit": make_config(
+            buffer_threshold,
+            clamp_unique([main_dest, main_dest + 1]),
+        ),
+        "mixed": make_config(
+            buffer_threshold,
+            clamp_unique([main_dest, main_dest + 1, far_miss, far_miss + 1]),
+        ),
+        "linear_hit_dynamic_miss": make_config(
+            buffer_threshold,
+            clamp_unique(range(far_miss, far_miss + 5)),
+        ),
+        "linear_miss_dynamic_hit": make_config(
+            buffer_threshold,
+            clamp_unique(range(main_dest, main_dest + 4)),
+        ),
+    }
+
+    print(f"  Movie: {num_segments} segs x {movie_data['segment_duration_ms']} ms "
+          f"= {movie_duration_s:.1f} s")
+    print(f"  Valid seeks: {len(valid_seeks)}/{len(seeks)}, "
+          f"destinations: {sorted(set(all_dest_segs))}")
+    print(f"  Main dest seg: {main_dest},  far-miss seg: {far_miss}")
+    for name, cfg in configs.items():
+        segs = [p["segment"] for p in cfg["prefetch"]]
+        print(f"    {name}: prefetch {segs}")
+
+    return configs
+
+
 def main():
     if len(sys.argv) < 2:
-        print("Usage: python setup_real_trace.py <uuid>")
+        print("Usage: python setup_real_trace.py <uuid> [--movie path/to/movie.json]")
         sys.exit(1)
 
     uuid = sys.argv[1]
@@ -76,52 +166,34 @@ def main():
         print(f"ERROR: {seeks_path} not found. Run parse_real_traces.py first.")
         sys.exit(1)
 
+    # Allow overriding the movie via --movie
+    movie_path = SCRIPT_DIR / "synthetic" / "movie.json"
+    if "--movie" in sys.argv:
+        idx = sys.argv.index("--movie")
+        if idx + 1 < len(sys.argv):
+            movie_path = Path(sys.argv[idx + 1])
+
     seeks = load_json(seeks_path).get("seeks", [])
+    movie_data = load_json(movie_path)
 
-    movie = load_json(SCRIPT_DIR / "synthetic" / "movie.json")
-    seg_s = movie["segment_duration_ms"] / 1000.0
-    num_segments = len(movie["segment_sizes_bits"])
+    print(f"UUID:      {uuid}")
+    print(f"Movie:     {movie_path}")
 
-    all_dest_segs = [math.floor(s["seek_to"] / seg_s) for s in seeks]
-
-    main_seek = max(seeks, key=lambda s: s["seek_to"] - s["seek_when"], default=None)
-    if main_seek is None or (main_seek["seek_to"] - main_seek["seek_when"]) < MIN_SIGNIFICANT_SEEK_S:
-        print("WARNING: No forward seek > 5 s found. Prefetch configs may not be meaningful.")
-
-    main_dest = math.floor(main_seek["seek_to"] / seg_s) if main_seek else 0
-    far_miss = min(main_dest + FAR_MISS_OFFSET, num_segments - 5)
-
-    print(f"UUID:              {uuid}")
-    print(f"Segment duration:  {seg_s}s  ({num_segments} segments total)")
-    print(f"Seek destinations: {all_dest_segs} (segments)")
-    if main_seek:
-        print(f"Main seek:         {main_seek['seek_when']:.1f}s → {main_seek['seek_to']:.1f}s  (segment {main_dest})")
-    print()
+    configs = build_prefetch_configs(movie_data, seeks)
 
     cfg_dir = SCRIPT_DIR / "real_trace"
-
-    miss_segs = find_miss_segs(all_dest_segs, num_segments)
-    write_json(cfg_dir / "prefetch_config_real_seeks_miss.json",
-               make_config(BUFFER_THRESHOLD, miss_segs))
-
-    write_json(cfg_dir / "prefetch_config_real_prefetch_hit.json",
-               make_config(BUFFER_THRESHOLD, [main_dest, main_dest + 1]))
-
-    write_json(cfg_dir / "prefetch_config_real_mixed.json",
-               make_config(BUFFER_THRESHOLD, [main_dest, main_dest + 1, far_miss, far_miss + 1]))
-
-    write_json(cfg_dir / "prefetch_config_real_linear_hit_dynamic_miss.json",
-               make_config(BUFFER_THRESHOLD, list(range(far_miss, far_miss + 5))))
-
-    write_json(cfg_dir / "prefetch_config_real_linear_miss_dynamic_hit.json",
-               make_config(BUFFER_THRESHOLD, list(range(main_dest, main_dest + 4))))
+    write_json(cfg_dir / "prefetch_config_real_seeks_miss.json",           configs["seeks_miss"])
+    write_json(cfg_dir / "prefetch_config_real_prefetch_hit.json",         configs["prefetch_hit"])
+    write_json(cfg_dir / "prefetch_config_real_mixed.json",                configs["mixed"])
+    write_json(cfg_dir / "prefetch_config_real_linear_hit_dynamic_miss.json", configs["linear_hit_dynamic_miss"])
+    write_json(cfg_dir / "prefetch_config_real_linear_miss_dynamic_hit.json", configs["linear_miss_dynamic_hit"])
 
     # Update TRACE_UUID in run_real_trace_comparison.py
     runner = SCRIPT_DIR / "run_real_trace_comparison.py"
     text = runner.read_text()
     updated = re.sub(r'TRACE_UUID\s*=\s*"[^"]*"', f'TRACE_UUID = "{uuid}"', text)
     runner.write_text(updated)
-    print(f"\n  updated TRACE_UUID in run_real_trace_comparison.py → {uuid}")
+    print(f"\n  updated TRACE_UUID in run_real_trace_comparison.py -> {uuid}")
     print("\nDone. Run: python run_real_trace_comparison.py")
 
 

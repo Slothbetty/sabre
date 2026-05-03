@@ -1,10 +1,22 @@
 # SABRE Simulation Guide
 
-This guide is split into three parts:
+This guide is split into four parts:
 
 - **Part I** covers the core SABRE simulator — setup, running simulations, graph generation, and regression testing. No `buffer.py` knowledge required.
 - **Part II** covers dynamic buffering with `buffer.py` (`MultiRegionBuffer`) — comparison tooling, prefetch/seek unit tests, detailed use-case flows, and technical reference.
 - **Part III** covers the real trace workflow — collecting YouTube traces, parsing them into simulation inputs, running the 5 prefetch scenarios, and viewing results.
+- **Part IV** covers the chunks-based workflow — running the same 5-scenario comparison using a video from `chunks_1_200.json` with a fully synthetic network and seeks. No browser trace required.
+
+## Two Comparison Pipelines
+
+| | Pipeline 1 — Real Trace | Pipeline 2 — Chunks-based |
+|---|---|---|
+| **Movie** | Any (`synthetic/movie.json` default) | Entry from `chunks_1_200.json` |
+| **Network** | Real (`network_<uuid>.json`) | Synthetic (generated) |
+| **Seeks** | Real (`seeks_<uuid>.json`) | Synthetic (generated from video content) |
+| **Prefetch configs** | Derived from real seek destinations | Derived from video segment structure |
+| **Runner** | `run_real_trace_comparison.py` | `run_chunks_comparison.py` |
+| **Results** | `real_trace/results/` | `chunks_trace/results/` |
 
 ## Table of Contents
 
@@ -37,9 +49,15 @@ This guide is split into three parts:
 19. [Real Trace Prefetch Scenarios](#real-trace-prefetch-scenarios)
 20. [Running Real Trace Comparisons](#running-real-trace-comparisons)
 
+### Part IV — Chunks-based Workflow
+
+21. [Chunks Video Library](#chunks-video-library)
+22. [Running Chunks Comparisons](#running-chunks-comparisons)
+23. [Chunks Comparison Options](#chunks-comparison-options)
+
 ### Reference
 
-22. [File Structure](#file-structure)
+24. [File Structure](#file-structure)
 
 ---
 
@@ -746,6 +764,102 @@ python serve_viewer.py
 
 ---
 
+# Part IV — Chunks-based Workflow
+
+The chunks-based pipeline runs the same 5-scenario prefetch comparison as the real trace workflow, but derives everything — network conditions, seek events, and prefetch configs — synthetically from the video's own content data. No browser session or trace collection is needed.
+
+---
+
+## Chunks Video Library
+
+`real_trace/chunks_1_200.json` contains **387 YouTube video entries** collected via yt-dlp. Each entry includes the full segment size matrix (`segment_sizes_bits`), bitrate ladder, resolution list, and viewer retention curve — everything needed to run a simulation.
+
+Browse available videos:
+
+```bash
+python chunks_to_movie.py real_trace/chunks_1_200.json --list
+```
+
+Output columns: index, video ID, duration, segment count, max resolution, title.
+
+---
+
+## Running Chunks Comparisons
+
+One command runs the full pipeline for any video in the library:
+
+```bash
+# By index
+python run_chunks_comparison.py --index 0
+
+# By video ID
+python run_chunks_comparison.py --video-id Qg9LxRHLbAk
+```
+
+**What happens automatically:**
+
+1. Extracts `chunks_trace/movie.json` from the chosen video entry
+2. Generates `chunks_trace/network.json` — 120 synthetic network entries × 5 s each
+3. Generates 5 seek files + `chunks_trace/prefetch_config.json` via `generate_configs.py`
+4. Runs `run_comparison.py` for all 5 scenarios × all 5 ABR algorithms
+5. Results land in `chunks_trace/results/comparison_summary.json`
+
+**View results:**
+
+```bash
+python serve_viewer.py
+# Load: chunks_trace/results/comparison_summary.json
+```
+
+---
+
+## Chunks Comparison Options
+
+| Flag | Description | Default |
+|---|---|---|
+| `--chunks PATH` | Chunks JSON file | `real_trace/chunks_1_200.json` |
+| `--index N` | 0-based video index | *(required if no --video-id)* |
+| `--video-id ID` | video_id string | *(required if no --index)* |
+| `--bandwidth-mean` | Mean network bandwidth (kbps) | `4000` |
+| `--bandwidth-std` | Bandwidth std deviation (kbps) | `1500` |
+| `--latency-mean` | Mean latency (ms) | `80` |
+| `--latency-std` | Latency std deviation (ms) | `20` |
+| `--num-seeks` | Seek events per scenario | `6` |
+| `--prefetch-count` | Number of prefetch segments | `8` |
+| `--buffer-threshold` | Buffer level threshold for prefetch (ms) | `15000` |
+| `--seed` | Random seed for mixed-scenario shuffle | *(random)* |
+
+**Example — simulate a throttled mobile network:**
+
+```bash
+python run_chunks_comparison.py --index 0 --bandwidth-mean 1500 --bandwidth-std 400 --latency-mean 120 --latency-std 30
+```
+
+**Chunks trace directory layout after a run:**
+
+```
+chunks_trace/
+├── movie.json                        # Extracted from chunks entry
+├── network.json                      # Generated synthetic network
+├── seeks.json                        # Seeks that miss the prefetch list
+├── seeks_prefetch_hit.json           # Seeks aligned with prefetch targets
+├── seeks_mixed.json                  # Mix of hit and miss seeks
+├── seeks_linear_hit_dynamic_miss.json
+├── seeks_linear_miss_dynamic_hit.json
+├── prefetch_config.json              # Shared prefetch config for all scenarios
+└── results/
+    ├── comparison_summary.json       # Load this in the viewer
+    ├── seeks/
+    ├── seeks_prefetch_hit/
+    ├── seeks_mixed/
+    ├── seeks_linear_hit_dynamic_miss/
+    └── seeks_linear_miss_dynamic_hit/
+```
+
+Each run overwrites `chunks_trace/` with the new video's data.
+
+---
+
 # File Structure
 
 ```
@@ -758,10 +872,12 @@ sabre/src/
 ├── abr_algorithms.py                 # ABR algorithm implementations
 │
 ├── run_comparison.py                 # With vs without buffer.py; writes comparison_summary.json
-├── run_real_trace_comparison.py      # Runs all 5 real-trace scenarios + merges results
-├── setup_real_trace.py               # Generates prefetch configs from a trace UUID; updates run_real_trace_comparison.py
+├── run_real_trace_comparison.py      # Pipeline 1: runs 5 real-trace scenarios, regenerates prefetch configs per movie
+├── run_chunks_comparison.py          # Pipeline 2: runs 5 scenarios from chunks_1_200.json with synthetic network+seeks
+├── setup_real_trace.py               # Generates prefetch configs from trace UUID + movie; updates run_real_trace_comparison.py
+├── chunks_to_movie.py                # Converts a chunks JSON entry to movie.json; supports --list and --all
 ├── serve_viewer.py                   # HTTP server for the viewer (port 8000)
-├── network_generator.py              # Generates synthetic network.json
+├── network_generator.py              # Generates synthetic network.json (-o flag for output path)
 ├── generate_configs.py               # Generates seeks + prefetch configs for synthetic scenarios
 ├── parse_real_traces.py              # Converts YouTube trace CSV → network/seeks JSON
 ├── merge_real_trace_summaries.py     # Merges 5 real-trace scenario summaries into one
@@ -770,8 +886,7 @@ sabre/src/
 ├── test_dynamic_buffer_cases.py      # Dynamic buffer algorithm case tests
 │
 ├── viewer/
-│   ├── view_comparison.html          # Main viewer: single-run + comparison_summary.json dashboard
-│   └── view_real_trace.html          # Individual real trace detail view
+│   └── view_comparison.html          # Main viewer: single-run + comparison_summary.json dashboard
 │
 ├── synthetic/                        # Synthetic scenario inputs and results
 │   ├── movie.json                    # Video manifest (shared by synthetic and real trace runs)
@@ -792,23 +907,41 @@ sabre/src/
 │       ├── seeks_linear_hit_dynamic_miss/
 │       └── seeks_linear_miss_dynamic_hit/
 │
-├── real_trace/                       # Real YouTube trace inputs and results
-│   ├── yt_traces_2026-04-18.csv      # Raw trace CSV (throttled trace only)
-│   ├── network_56329467-babb-4d75-bb58-70f3906369fe.json
-│   ├── seeks_56329467-babb-4d75-bb58-70f3906369fe.json
-│   ├── prefetch_config_real_seeks_miss.json
-│   ├── prefetch_config_real_prefetch_hit.json
+├── real_trace/                       # Pipeline 1: real YouTube trace inputs and results
+│   ├── yt_traces_2026-04-18.csv      # Raw trace CSV from the browser extension
+│   ├── chunks_1_200.json             # 387 YouTube video entries from yt-dlp (movie library)
+│   ├── network_<uuid>.json           # Real network trace (from parse_real_traces.py)
+│   ├── seeks_<uuid>.json             # Real seek events (from parse_real_traces.py)
+│   ├── prefetch_config_real_seeks_miss.json          # Regenerated by run_real_trace_comparison.py
+│   ├── prefetch_config_real_prefetch_hit.json        #   whenever a new movie is used
 │   ├── prefetch_config_real_mixed.json
 │   ├── prefetch_config_real_linear_hit_dynamic_miss.json
 │   ├── prefetch_config_real_linear_miss_dynamic_hit.json
 │   └── results/                      # Output from run_real_trace_comparison.py
-│       ├── comparison_summary.json   # Load this in the viewer (merged across all 5 scenarios)
+│       ├── comparison_summary.json   # Load this in the viewer
 │       ├── seeks_miss/
 │       │   └── comparison_<abr>.json
 │       ├── prefetch_hit/
 │       ├── mixed/
 │       ├── linear_hit_dynamic_miss/
 │       └── linear_miss_dynamic_hit/
+│
+├── chunks_trace/                     # Pipeline 2: generated by run_chunks_comparison.py (git-ignored)
+│   ├── movie.json                    # Extracted from chunks entry
+│   ├── network.json                  # Generated synthetic network
+│   ├── seeks.json                    # Generated seeks (miss scenario)
+│   ├── seeks_prefetch_hit.json
+│   ├── seeks_mixed.json
+│   ├── seeks_linear_hit_dynamic_miss.json
+│   ├── seeks_linear_miss_dynamic_hit.json
+│   ├── prefetch_config.json          # Shared prefetch config for all scenarios
+│   └── results/
+│       ├── comparison_summary.json   # Load this in the viewer
+│       ├── seeks/
+│       ├── seeks_prefetch_hit/
+│       ├── seeks_mixed/
+│       ├── seeks_linear_hit_dynamic_miss/
+│       └── seeks_linear_miss_dynamic_hit/
 │
 ├── yt_trace_collector/               # Chrome extension for collecting YouTube traces
 │   ├── manifest.json

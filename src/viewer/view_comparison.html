@@ -449,21 +449,24 @@
             
             <div class="chart-container">
                 <h2>Rebuffering Comparison</h2>
+                <p id="rebufferChartSubtitle" class="summary-table-caption" style="margin:-6px 0 10px 0;"></p>
                 <div class="chart-wrapper">
                     <canvas id="rebufferChart"></canvas>
                 </div>
             </div>
-            
+
             <div class="chart-container">
                 <h2>Buffer Level Over Time</h2>
-                <p id="bufferChartCaption" class="summary-table-caption" style="margin:-6px 0 10px 0;"></p>
+                <p id="bufferChartSubtitle" class="summary-table-caption" style="margin:-6px 0 4px 0;"></p>
+                <p id="bufferChartCaption" class="summary-table-caption" style="margin:0 0 10px 0;"></p>
                 <div class="chart-wrapper">
                     <canvas id="bufferChart"></canvas>
                 </div>
             </div>
-            
+
             <div class="chart-container">
                 <h2>Quality Over Time</h2>
+                <p id="qualityChartSubtitle" class="summary-table-caption" style="margin:-6px 0 10px 0;"></p>
                 <div class="chart-wrapper">
                     <canvas id="qualityChart"></canvas>
                 </div>
@@ -538,35 +541,35 @@
                 short: 'Miss PF',
                 file: 'seeks.json',
                 css: 'miss',
-                blurb: 'Seek targets are chosen so playback jumps to segments that are not in the prefetch list. Linear and dynamic buffering both miss the cache — expect little or no improvement from prefetch.'
+                blurb: 'Seeks land on non-prefetched segments. Both linear and dynamic buffering must re-download after every seek — prefetch provides no benefit here.'
             },
             seeks_prefetch_hit: {
                 title: 'Seeks hit prefetch',
                 short: 'Hit PF',
                 file: 'seeks_prefetch_hit.json',
                 css: 'hit',
-                blurb: 'Seek targets align with prefetched segments. Dynamic buffering can serve from disk without rebuffering; you should see fewer stalls vs. linear buffer.'
+                blurb: 'Seeks land exactly on prefetched segments. Dynamic buffering resumes instantly from cache; linear buffering must still re-download — expect clear stall reduction with dynamic.'
             },
             seeks_mixed: {
                 title: 'Seeks mixed',
                 short: 'Mixed',
                 file: 'seeks_mixed.json',
                 css: 'mixed',
-                blurb: 'Seek targets are a random mix — some land on prefetched segments (hits) and some do not (misses). Shows the intermediate case where prefetch helps for only a subset of seeks.'
+                blurb: 'Half of seeks hit prefetched segments, half miss. Dynamic buffering gains a partial advantage — intermediate improvement between the full-hit and full-miss cases.'
             },
             seeks_linear_hit_dynamic_miss: {
                 title: 'Linear hit, dynamic miss',
                 short: 'Lin Hit',
                 file: 'seeks_linear_hit_dynamic_miss.json',
                 css: 'miss',
-                blurb: 'Short forward seeks (2–10 s ahead) land within the normal forward buffer, so linear buffering can resume without clearing. Targets are non-prefetched segments, so dynamic buffering gets no prefetch benefit and must also rebuffer.'
+                blurb: 'Linear buffering hits the prefetch chunk when seeking; dynamic buffering misses the prefetch chunk when seeking.'
             },
             seeks_linear_miss_dynamic_hit: {
                 title: 'Linear miss, dynamic hit',
                 short: 'Dyn Hit',
                 file: 'seeks_linear_miss_dynamic_hit.json',
                 css: 'hit',
-                blurb: 'Far forward seeks (20–37 s ahead) jump well beyond the linear buffer window, forcing linear buffering to clear and rebuffer. Targets are prefetched segments, so dynamic buffering can resume immediately from the prefetch cache.'
+                blurb: 'Linear buffering misses the prefetch chunk when seeking; dynamic buffering hits the prefetch chunk when seeking.'
             },
             // Real-trace prefetch config scenarios (fixed seeks, varying prefetch strategy).
             // Ordered to mirror synthetic: miss → hit → mixed → lin-hit → dyn-hit.
@@ -601,7 +604,7 @@
                 file: 'prefetch_config_real_linear_hit_dynamic_miss.json',
                 css: 'miss',
                 kind: 'real',
-                blurb: 'Linear buffering hits the prefetch chunk; dynamic buffering misses it.'
+                blurb: 'Linear buffering hits the prefetch chunk when seeking; dynamic buffering misses the prefetch chunk when seeking.'
             },
             linear_miss_dynamic_hit: {
                 title: 'Linear miss, dynamic hit',
@@ -609,7 +612,7 @@
                 file: 'prefetch_config_real_linear_miss_dynamic_hit.json',
                 css: 'hit',
                 kind: 'real',
-                blurb: 'Dynamic buffering hits the prefetch chunk; linear buffering misses it.'
+                blurb: 'Linear buffering misses the prefetch chunk when seeking; dynamic buffering hits the prefetch chunk when seeking.'
             }
         };
 
@@ -1001,7 +1004,11 @@
             document.getElementById('seekLegend').innerHTML = legendHtml;
 
             function pctChange(v0, v1) {
-                if (v0 === 0) return v1 === 0 ? '0%' : 'N/A';
+                if (v0 === 0) {
+                    if (v1 === 0) return '0%';
+                    const sign = v1 > 0 ? '+' : '';
+                    return `${sign}${Number.isInteger(v1) ? v1 : v1.toFixed(2)} (from 0)`;
+                }
                 return ((v1 - v0) / v0 * 100).toFixed(1) + '%';
             }
             /** lowerIsBetter: true = smaller is better (rebuffer metrics); false = larger is better (utility, QoE); neutral = no directional judgment */
@@ -1464,6 +1471,19 @@
             const with_ = comparisonData.with_buffer_py;
             const label = withLabel();
             const baseAnnotations = allAnnotations();
+
+            // Populate chart subtitles with ABR + seek scenario context
+            const cfg = comparisonData.config || {};
+            const scen = seekScenarioFromSeekFile(cfg.seek_config);
+            const abrLabel = cfg.abr ? `ABR: <strong>${cfg.abr}</strong>` : '';
+            const scenLabel = scen
+                ? `Seek scenario: <strong>${scen.title}</strong>`
+                : (cfg.seek_config ? `Seek config: <strong>${cfg.seek_config.split(/[\\/]/).pop()}</strong>` : '');
+            const subtitleHtml = [abrLabel, scenLabel].filter(Boolean).join(' &nbsp;|&nbsp; ');
+            ['rebufferChartSubtitle', 'bufferChartSubtitle', 'qualityChartSubtitle'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.innerHTML = subtitleHtml;
+            });
             const pf = (with_.prefetch_events || []).filter(e => e.end_time !== undefined);
             const skData = getSeekData();
 

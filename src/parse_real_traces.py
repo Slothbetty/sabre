@@ -1,12 +1,7 @@
 #!/usr/bin/env python3
 """
-Parse real playback trace CSV files and convert them to:
-
-  1. A per-trace seeks JSON file (compatible with sabre.py -sc) for each trace
-     that contains at least one seek event.
-
-  2. A combined visualisation JSON file (traces_viz.json) consumed by
-     view_traces.html.
+Parse real playback trace CSV files and convert them to SABRE-compatible
+network and seeks JSON files.
 
 CSV columns expected (order matters only for the first header row):
     browserInfo, osInfo, timeSincePageLoad, modified, uuid,
@@ -20,7 +15,6 @@ Usage
 -----
     python parse_real_traces.py traces.csv
     python parse_real_traces.py traces.csv --output-dir out/
-    python parse_real_traces.py traces.csv --viz-only        # skip per-trace seeks files
     python parse_real_traces.py traces.csv --min-seek 0.5   # gap >= 0.5 s counts as a seek
 """
 
@@ -193,30 +187,6 @@ def write_network_file(trace: dict, output_dir: Path, min_duration_ms: int = 0) 
     return out_path
 
 
-def write_viz_json(traces: list, output_path: Path) -> None:
-    """Write the combined visualisation JSON consumed by view_traces.html."""
-    payload = {
-        'traces': [
-            {
-                'uuid':                  t['uuid'],
-                'videoId':               t['videoId'],
-                'timestamp':             t['timestamp'],
-                'browserInfo':           t['browserInfo'],
-                'osInfo':                t['osInfo'],
-                'timeSincePageLoad':     t['timeSincePageLoad'],
-                'totalWatchTimeSeconds': t['totalWatchTimeSeconds'],
-                'watchRanges':           t['watchRanges'],
-                'stallDiffs':            t['stallDiffs'],
-                'seeks':                 t['seeks'],
-            }
-            for t in traces
-        ]
-    }
-    with open(output_path, 'w') as fh:
-        json.dump(payload, fh, indent=2)
-        fh.write('\n')
-
-
 # ---------------------------------------------------------------------------
 # Main
 # ---------------------------------------------------------------------------
@@ -231,14 +201,6 @@ def main():
     parser.add_argument(
         '-o', '--output-dir', default=None,
         help='Directory to write output files (default: same as CSV file)',
-    )
-    parser.add_argument(
-        '--viz-output', default='traces_viz.json',
-        help='Filename for the combined visualisation JSON (default: traces_viz.json)',
-    )
-    parser.add_argument(
-        '--viz-only', action='store_true',
-        help='Only write the visualisation JSON; skip per-trace seeks files',
     )
     parser.add_argument(
         '--min-seek', type=float, default=0.1,
@@ -265,35 +227,29 @@ def main():
     network_written = 0
     network_paths   = {}   # uuid -> Path, for the final command hints
 
-    if not args.viz_only:
-        for t in traces:
-            safe_id = re.sub(r'[^\w\-]', '_', t['uuid'] or t['videoId'] or 'trace')
+    for t in traces:
+        safe_id = re.sub(r'[^\w\-]', '_', t['uuid'] or t['videoId'] or 'trace')
 
-            out_seek = write_seeks_file(t, output_dir)
-            if out_seek:
-                print(f'  Seeks JSON:   {out_seek}  ({len(t["seeks"])} seek(s))')
-                seeks_written += 1
+        out_seek = write_seeks_file(t, output_dir)
+        if out_seek:
+            print(f'  Seeks JSON:   {out_seek}  ({len(t["seeks"])} seek(s))')
+            seeks_written += 1
 
-            out_net = write_network_file(t, output_dir)
-            if out_net:
-                total_ms = sum(p['duration_ms'] for p in t['networkPeriods'])
-                covered_ms = sum(p['duration_ms'] for p in json.loads(out_net.read_text()))
-                print(f'  Network JSON: {out_net}  '
-                      f'({len(t["networkPeriods"])} recorded period(s), '
-                      f'{total_ms / 1000:.1f}s tiled to {covered_ms / 1000:.1f}s)')
-                network_written += 1
-                network_paths[t['uuid']] = out_net
-            else:
-                print(f'  Network JSON: (no networkPeriodsString captured — use default network.json)')
+        out_net = write_network_file(t, output_dir)
+        if out_net:
+            total_ms = sum(p['duration_ms'] for p in t['networkPeriods'])
+            covered_ms = sum(p['duration_ms'] for p in json.loads(out_net.read_text()))
+            print(f'  Network JSON: {out_net}  '
+                  f'({len(t["networkPeriods"])} recorded period(s), '
+                  f'{total_ms / 1000:.1f}s tiled to {covered_ms / 1000:.1f}s)')
+            network_written += 1
+            network_paths[t['uuid']] = out_net
+        else:
+            print(f'  Network JSON: (no networkPeriodsString captured — use default network.json)')
 
-        if seeks_written == 0:
-            print('  (No seeks detected — no per-trace seeks files written)')
-        print(f'Wrote {seeks_written} seeks file(s), {network_written} network file(s)')
-
-    # --- Visualisation JSON ---
-    viz_path = output_dir / args.viz_output
-    write_viz_json(traces, viz_path)
-    print(f'Wrote visualisation JSON: {viz_path}')
+    if seeks_written == 0:
+        print('  (No seeks detected — no per-trace seeks files written)')
+    print(f'Wrote {seeks_written} seeks file(s), {network_written} network file(s)')
 
     # --- Summary ---
     print()
