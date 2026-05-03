@@ -1,0 +1,205 @@
+digraph STREAMBUFFER_VIS_Architecture {
+  graph [
+    rankdir=TB,
+    nodesep=0.6,
+    ranksep=0.55,
+    fontname="Helvetica",
+    label="STREAMBUFFER-VIS  System Architecture",
+    labelloc=t,
+    fontsize=16,
+    splines=polyline
+  ];
+
+  node [
+    shape=box,
+    style="rounded,filled",
+    fontname="Helvetica",
+    fontsize=11,
+    margin="0.18,0.10",
+    fillcolor="#FFFFFF"
+  ];
+
+  edge [
+    fontname="Helvetica",
+    fontsize=9,
+    arrowsize=0.7
+  ];
+
+  // ── Orchestration ──────────────────────────────────────────────────────────
+  subgraph cluster_orch {
+    label="Orchestration";
+    style="rounded,dashed";
+    color="#555555";
+    fontcolor="#555555";
+    fontsize=11;
+    fillcolor="#F5F5F5";
+
+    rcc [label="run_chunks_comparison",     fillcolor="#E2E2E2"];
+    rrt [label="run_real_trace_comparison", fillcolor="#E2E2E2"];
+    rc  [label="run_comparison",            fillcolor="#E2E2E2"];
+
+    { rank=same; rcc; rrt; rc; }
+  }
+
+  // ── Input Preparation ──────────────────────────────────────────────────────
+  subgraph cluster_prep {
+    label="Input Preparation";
+    style="rounded,dashed";
+    color="#555555";
+    fontcolor="#555555";
+    fontsize=11;
+    fillcolor="#FAFAFA";
+
+    ptr  [label="parse_real_traces"];
+    c2m  [label="chunks_to_movie"];
+    gc   [label="generate_configs"];
+    ngen [label="network_generator"];
+
+    { rank=same; ptr; c2m; gc; ngen; }
+  }
+
+  // ── Simulation Engine ──────────────────────────────────────────────────────
+  subgraph cluster_sabre {
+    label="Simulation Engine  (sabre.py)";
+    style="rounded,filled";
+    color="#3366CC";
+    fontcolor="#3366CC";
+    fontsize=11;
+    fillcolor="#EEF3FF";
+
+    sim_loop  [label="Download Loop",    fillcolor="#C8D8F8", fontsize=12, margin="0.22,0.12"];
+    net_model [label="Network Model",    fillcolor="#D8E5F8"];
+    deplete   [label="Buffer Depletion", fillcolor="#D8E5F8"];
+    seek_int  [label="Seek Interrupt",   fillcolor="#D8E5F8"];
+    seek_fn   [label="Seek Hit/Miss",    fillcolor="#D8E5F8"];
+
+    { rank=same; net_model; deplete; seek_int; seek_fn; }
+
+    sim_loop -> net_model [label="download"];
+    sim_loop -> deplete   [label="play"];
+    sim_loop -> seek_fn   [label="seek"];
+    deplete  -> seek_int [label="check per delta"];
+    seek_int -> seek_fn  [label="trigger"];
+  }
+
+  // ── ABR Module ─────────────────────────────────────────────────────────────
+  subgraph cluster_abr {
+    label="ABR Module  (abr_algorithms.py)";
+    style="rounded,dashed";
+    color="#AA3366";
+    fontcolor="#AA3366";
+    fontsize=11;
+    fillcolor="#FFF0F5";
+
+    abr_base  [label="Abr (base)",                              fillcolor="#FADDEA"];
+    abr_algos [label="Bola · BolaEnh\nThroughput · Dynamic · DynamicDash",
+                                                                fillcolor="#FADDEA"];
+    tput_hist [label="Throughput History\n(SlidingWindow / Ewma)", fillcolor="#FADDEA"];
+    replacer  [label="Replacement",                             fillcolor="#FADDEA"];
+
+    abr_algos -> abr_base  [arrowhead=empty, label="extends"];
+    abr_algos -> tput_hist [label="uses"];
+  }
+
+  // ── Buffer Module ──────────────────────────────────────────────────────────
+  subgraph cluster_buf {
+    label="Buffer Module  (buffer.py)";
+    style="rounded,dashed";
+    color="#2E8B57";
+    fontcolor="#2E8B57";
+    fontsize=11;
+    fillcolor="#F0FFF4";
+
+    mrb [label="MultiRegionBuffer", fillcolor="#C8EDDA"];
+    br  [label="BufferRegion",      fillcolor="#C8EDDA"];
+
+    mrb -> br [label="contains", arrowhead=odiamond];
+  }
+
+  // ── Prefetch Module ────────────────────────────────────────────────────────
+  subgraph cluster_pf {
+    label="Prefetch Module  (prefetch.py)";
+    style="rounded,dashed";
+    color="#B8860B";
+    fontcolor="#B8860B";
+    fontsize=11;
+    fillcolor="#FFFBEA";
+
+    pf [label="PrefetchModule", fillcolor="#FFF0A0"];
+  }
+
+  // ── Global State ───────────────────────────────────────────────────────────
+  subgraph cluster_gs {
+    label="Global State  (global_state.py  ·  singleton gs)";
+    style="rounded,filled";
+    color="#555555";
+    fontcolor="#555555";
+    fontsize=11;
+    fillcolor="#EEEEEE";
+
+    gs_buf  [label="Buffer State",     fillcolor="#D8D8D8"];
+    gs_net  [label="Network State",    fillcolor="#D8D8D8"];
+    gs_play [label="Playback Metrics", fillcolor="#D8D8D8"];
+    gs_seek [label="Seek State",       fillcolor="#D8D8D8"];
+    gs_mani [label="Manifest",         fillcolor="#D8D8D8"];
+
+    { rank=same; gs_buf; gs_net; gs_play; gs_seek; gs_mani; }
+  }
+
+  // ── Results ────────────────────────────────────────────────────────────────
+  subgraph cluster_out {
+    label="Results";
+    style="rounded,dashed";
+    color="#555555";
+    fontcolor="#555555";
+    fontsize=11;
+
+    json_out [label="per-run JSON",            fillcolor="#FFFDE7"];
+    summary  [label="comparison_summary.json", fillcolor="#FFFDE7"];
+    viewer   [label="Browser Viewer",          fillcolor="#FFFDE7"];
+
+    { rank=same; json_out; summary; viewer; }
+  }
+
+  // ── Inter-layer edges ──────────────────────────────────────────────────────
+
+  // Orchestration wiring
+  rrt -> ptr  [label="real trace"];
+  rcc -> c2m  [label="chunks JSON"];
+  rcc -> ngen [label="generate network"];
+  rcc -> gc   [label="generate configs"];
+  ptr -> rc   [label="parsed inputs"];
+  gc  -> rc   [label="seek + prefetch configs"];
+  c2m -> rc   [style=dashed, label="movie.json"];
+  rcc -> rc   [label="delegates"];
+
+  // Into engine
+  rc -> sim_loop [label="invoke simulation"];
+
+  // Engine ↔ ABR
+  sim_loop  -> abr_base [color="#AA3366", fontcolor="#AA3366", label="quality / report"];
+  sim_loop  -> replacer  [color="#AA3366", fontcolor="#AA3366", label="replace?"];
+  net_model -> abr_base  [color="#AA3366", fontcolor="#AA3366", label="abandon?"];
+
+  // Engine ↔ Buffer
+  sim_loop -> mrb [color="#2E8B57", fontcolor="#2E8B57", label="add chunk"];
+  deplete  -> mrb [color="#2E8B57", fontcolor="#2E8B57", label="pop / read"];
+  seek_fn  -> mrb [color="#2E8B57", fontcolor="#2E8B57", label="seek"];
+
+  // Engine ↔ Prefetch
+  sim_loop -> pf [color="#B8860B", fontcolor="#B8860B", label="prefetch?"];
+
+  // Engine → Global State
+  sim_loop  -> gs_buf  [style=dashed, color="#999999", label="update buffer"];
+  sim_loop  -> gs_play [style=dashed, color="#999999", label="update metrics"];
+  sim_loop  -> gs_seek [style=dashed, color="#999999", label="update seek"];
+  net_model -> gs_net  [style=dashed, color="#999999", label="update network"];
+  tput_hist -> gs_net  [style=dashed, color="#999999", label="write throughput"];
+  mrb       -> gs_buf  [style=dashed, color="#999999", label="sync buffer"];
+
+  // Engine → Results
+  rc       -> json_out [label="output results"];
+  json_out -> summary  [label="aggregate"];
+  json_out -> viewer   [label="load"];
+  summary  -> viewer   [label="load"];
+}

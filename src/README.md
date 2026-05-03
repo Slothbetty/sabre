@@ -7,6 +7,18 @@ This guide is split into four parts:
 - **Part III** covers the real trace workflow — collecting YouTube traces, parsing them into simulation inputs, running the 5 prefetch scenarios, and viewing results.
 - **Part IV** covers the chunks-based workflow — running the same 5-scenario comparison using a video from `chunks_1_200.json` with a fully synthetic network and seeks. No browser trace required.
 
+## System Architecture
+
+The diagram below shows the module structure and component relationships of STREAMBUFFER-VIS.
+
+![System Architecture](architecture_diagram.png)
+
+## Comparison Workflows
+
+STREAMBUFFER-VIS supports three comparison workflows — Synthetic, Real-trace, and Chunks-based — all converging into a shared simulation core.
+
+![Comparison Workflows](workflow_diagram.png)
+
 ## Two Comparison Pipelines
 
 | | Pipeline 1 — Real Trace | Pipeline 2 — Chunks-based |
@@ -19,6 +31,9 @@ This guide is split into four parts:
 | **Results** | `real_trace/results/` | `chunks_trace/results/` |
 
 ## Table of Contents
+
+- [System Architecture](#system-architecture)
+- [Comparison Workflows](#comparison-workflows)
 
 ### Part I — Core Simulation
 

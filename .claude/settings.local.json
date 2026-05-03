@@ -5,7 +5,10 @@
       "Bash(python test_dynamic_buffer_cases.py)",
       "Bash(python /c/Users/sloth/Documents/sabre/src/prefetch_comparison_results/seeks/comparison_bola.json)",
       "Bash(python parse_real_traces.py yt_traces_2026-04-18.csv)",
-      "Bash(cmd /c \"dir \\\\\"C:\\\\Program Files\\\\Graphviz\\\\\" /b 2>nul\")"
+      "Bash(cmd /c \"dir \\\\\"C:\\\\Program Files\\\\Graphviz\\\\\" /b 2>nul\")",
+      "PowerShell(winget uninstall Graphviz.Graphviz --accept-source-agreements 2>&1)",
+      "PowerShell(winget install Graphviz.Graphviz --accept-package-agreements --accept-source-agreements --force 2>&1)",
+      "PowerShell(& \"C:\\\\Program Files\\\\Graphviz\\\\bin\\\\dot.exe\" -Tpng \"C:\\\\Users\\\\sloth\\\\Documents\\\\sabre\\\\src\\\\workflow_diagram.gv\" -o \"C:\\\\Users\\\\sloth\\\\Documents\\\\sabre\\\\src\\\\workflow_diagram.png\" 2>&1; echo \"Exit: $LASTEXITCODE\")"
     ]
   }
 }

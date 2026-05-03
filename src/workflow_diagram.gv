@@ -1,18 +1,21 @@
-digraph SABRE_DB_Workflow {
+digraph STREAMBUFFER_VIS_Workflow {
   graph [
-    rankdir=LR,
-    splines=ortho,
-    nodesep=0.45,
-    ranksep=0.75,
-    fontname="Helvetica"
+    rankdir=TB,
+    nodesep=0.55,
+    ranksep=0.65,
+    fontname="Helvetica",
+    label="STREAMBUFFER-VIS  —  Comparison Workflows",
+    labelloc=t,
+    fontsize=15
   ];
 
   node [
     shape=box,
-    style="rounded",
+    style="rounded,filled",
     fontname="Helvetica",
     fontsize=10,
-    margin="0.10,0.06"
+    margin="0.14,0.08",
+    fillcolor="#FFFFFF"
   ];
 
   edge [
@@ -21,61 +24,125 @@ digraph SABRE_DB_Workflow {
     arrowsize=0.7
   ];
 
-  subgraph cluster_inputs {
-    label="Inputs";
-    style="rounded,dashed";
-    video [label="Video metadata\nmovie.json"];
-    network [label="Network trace"];
-    seeks [label="Seek workload"];
-    prefetch [label="Prefetch config"];
-    realtrace [label="YouTube trace\nChrome collector"];
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WORKFLOW 1 — Synthetic
+  // ═══════════════════════════════════════════════════════════════════════════
+  subgraph cluster_w1 {
+    label="Synthetic Workflow";
+    style="rounded,filled";
+    color="#4477AA";
+    fontcolor="#4477AA";
+    fontsize=12;
+    fillcolor="#EEF3FF";
+
+    s_movie   [label="movie.json\n(synthetic video)",    fillcolor="#D8E5F8"];
+    s_network [label="network.json\n(synthetic trace)",  fillcolor="#D8E5F8"];
+    s_gen     [label="generate_configs.py\nseek + prefetch configs", fillcolor="#D8E5F8"];
+    s_runner  [label="run_comparison.py",
+               style="rounded,filled", fillcolor="#B8CCEE", fontsize=11];
+
+    s_movie   -> s_gen;
+    s_gen     -> s_runner [label="seeks + prefetch"];
+    s_movie   -> s_runner;
+    s_network -> s_runner;
   }
 
-  subgraph cluster_preprocess {
-    label="Workload preparation";
-    style="rounded,dashed";
-    gen [label="generate_configs.py\nsynthetic scenarios"];
-    parse [label="parse_real_traces.py\nreal-trace parser"];
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WORKFLOW 2 — Real-trace
+  // ═══════════════════════════════════════════════════════════════════════════
+  subgraph cluster_w2 {
+    label="Real-trace Workflow";
+    style="rounded,filled";
+    color="#AA4444";
+    fontcolor="#AA4444";
+    fontsize=12;
+    fillcolor="#FFF0F0";
+
+    r_trace   [label="YouTube trace\n(Chrome collector)", fillcolor="#F8D8D8"];
+    r_parse   [label="parse_real_traces.py",              fillcolor="#F8D8D8"];
+    r_inputs  [label="movie.json · network.json\nseeks.json · prefetch_config.json",
+               fillcolor="#F8D8D8"];
+    r_runner  [label="run_real_trace_comparison.py",
+               style="rounded,filled", fillcolor="#EEB8B8", fontsize=11];
+
+    r_trace  -> r_parse -> r_inputs -> r_runner;
   }
 
+  // ═══════════════════════════════════════════════════════════════════════════
+  // WORKFLOW 3 — Chunks-based
+  // ═══════════════════════════════════════════════════════════════════════════
+  subgraph cluster_w3 {
+    label="Chunks-based Workflow";
+    style="rounded,filled";
+    color="#44AA77";
+    fontcolor="#44AA77";
+    fontsize=12;
+    fillcolor="#F0FFF4";
+
+    c_chunks  [label="chunks_1_200.json\n(YouTube chunk data)", fillcolor="#C8EDDA"];
+    c2m       [label="chunks_to_movie.py\nmovie.json",          fillcolor="#C8EDDA"];
+    c_netgen  [label="network_generator.py\nsynth. network",    fillcolor="#C8EDDA"];
+    c_gen     [label="generate_configs.py\nseek + prefetch configs", fillcolor="#C8EDDA"];
+    c_runner  [label="run_chunks_comparison.py",
+               style="rounded,filled", fillcolor="#88CC99", fontsize=11];
+
+    c_chunks -> c2m     -> c_gen -> c_runner;
+    c_chunks -> c_netgen -> c_runner;
+    c2m      -> c_runner [xlabel="movie.json"];
+  }
+
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SHARED SIMULATION CORE
+  // ═══════════════════════════════════════════════════════════════════════════
   subgraph cluster_sim {
-    label="Simulation";
-    style="rounded,dashed";
-    runner [label="run_comparison.py /\nrun_real_trace_comparison.py"];
-    abr [label="ABR policies\nBOLA, BOLAE, Dynamic,\nDynamicDash, Throughput"];
-    linear [label="Baseline SABRE\nlinear buffer"];
-    dynamic [label="SABRE-DB\nMultiRegionBuffer"];
+    label="Shared Simulation Core";
+    style="rounded,filled";
+    color="#666666";
+    fontcolor="#666666";
+    fontsize=12;
+    fillcolor="#F5F5F5";
+
+    abr     [label="ABR Policies\nBOLA · BOLAE · Dynamic\nDynamicDash · Throughput",
+             fillcolor="#E0E0E0"];
+    rc      [label="run_comparison.py\n(5 scenarios × all ABRs)",
+             style="rounded,filled", fillcolor="#CCCCCC", fontsize=11];
+    linear  [label="Baseline SABRE\n(linear buffer)",       fillcolor="#E8E8E8"];
+    dynamic [label="STREAMBUFFER-VIS\n(MultiRegionBuffer)",  fillcolor="#E8E8E8"];
+
+    abr    -> rc;
+    rc     -> linear;
+    rc     -> dynamic;
   }
 
-  subgraph cluster_outputs {
-    label="Outputs and inspection";
+  // ═══════════════════════════════════════════════════════════════════════════
+  // OUTPUTS
+  // ═══════════════════════════════════════════════════════════════════════════
+  subgraph cluster_out {
+    label="Outputs";
     style="rounded,dashed";
-    json [label="Per-run JSON"];
-    summary [label="comparison_summary.json"];
-    viewer [label="Browser viewer"];
-    charts [label="QoE, rebuffering,\nbuffer level, quality"];
+    color="#AA7744";
+    fontcolor="#AA7744";
+    fontsize=12;
+
+    json_out [label="per-run JSON",            fillcolor="#FFFDE7"];
+    summary  [label="comparison_summary.json", fillcolor="#FFFDE7"];
+    viewer   [label="Browser Viewer\n(view_comparison.html)", fillcolor="#FFFDE7"];
+    charts   [label="QoE · rebuffering\nbuffer level · quality", fillcolor="#FFFDE7"];
+
+    { rank=same; json_out; summary; }
+
+    json_out -> summary;
+    json_out -> viewer;
+    summary  -> viewer -> charts;
   }
 
-  video -> gen;
-  gen -> seeks;
-  gen -> prefetch;
+  // ── Workflows → Simulation Core ───────────────────────────────────────────
+  s_runner -> rc  [label="direct"];
+  r_runner -> rc  [label="delegates"];
+  c_runner -> rc  [label="delegates"];
 
-  realtrace -> parse;
-  parse -> runner;
-
-  video -> runner;
-  network -> runner;
-  seeks -> runner;
-  prefetch -> runner;
-  abr -> runner;
-
-  runner -> linear;
-  runner -> dynamic;
-
-  linear -> json;
-  dynamic -> json;
-  json -> summary;
-  json -> viewer;
-  summary -> viewer;
-  viewer -> charts;
+  // ── Simulation Core → Outputs ─────────────────────────────────────────────
+  linear  -> json_out;
+  dynamic -> json_out;
 }
