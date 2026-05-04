@@ -1027,7 +1027,7 @@
                 <th title="Percent change; green = less stall time (better), red = more (worse)">Change</th>
                 <th title="Played utility: without → with buffer.py">Utility</th>
                 <th title="Percent change; green = higher utility (better), red = lower (worse)">Change</th>
-                <th title="QoE = Utility − γp × (Rebuffer Time / Segment Duration): without → with buffer.py">QoE</th>
+                <th title="QoE = mean utility − 10 × rebuf_ratio − switch_rate (SFS paper §5.1): without → with buffer.py">QoE</th>
                 <th title="Percent change; green = higher QoE (better), red = lower (worse)">Change</th>
             </tr></thead><tbody>`;
             rows.forEach(r => {
@@ -1305,7 +1305,7 @@
                 { label: 'Rebuffer Ratio', key: 'rebuffer_ratio', unit: '', lowerIsBetter: true,
                   desc: 'Rebuffering time divided by total play time. Measures what fraction of the session was spent stalled.' },
                 { label: 'Quality of Experience', key: 'qoe_score', unit: '', lowerIsBetter: false,
-                  desc: 'QoE = Played Utility − γp × (Rebuffer Time / Segment Duration), where γp = 5 s (BOLA penalty coefficient). Combines quality and rebuffering into a single score — higher is better.' }
+                  desc: 'QoE = v̄ − β·ρ_rebuf − γ·p_switch (SFS paper §5.1), where v̄ = time-average log-bitrate utility (per second), ρ_rebuf = rebuffer_time / total_play_time, p_switch = bitrate switches per second, β = 10, γ = 1. Higher is better.' }
             ];
             
             const cardsHtml = metrics.map(metric => {

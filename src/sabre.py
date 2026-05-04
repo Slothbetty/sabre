@@ -423,6 +423,7 @@ def deplete_buffer(time, abr):
             if gs.last_played is not None and quality != gs.last_played:
                 gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
                 gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+                gs.switch_count += 1
             gs.last_played = quality
 
             if gs.rampup_time is None:
@@ -496,6 +497,7 @@ def deplete_buffer(time, abr):
             if gs.last_played is not None and quality != gs.last_played:
                 gs.total_bitrate_change += abs(gs.manifest.bitrates[quality] - gs.manifest.bitrates[gs.last_played])
                 gs.total_log_bitrate_change += abs(math.log(gs.manifest.bitrates[quality] / gs.manifest.bitrates[gs.last_played]))
+                gs.switch_count += 1
             gs.last_played = quality
 
             if gs.rampup_time is None:
@@ -1345,6 +1347,7 @@ if __name__ == "__main__":
     gs.total_play_time = 0
     gs.total_bitrate_change = 0
     gs.total_log_bitrate_change = 0
+    gs.switch_count = 0
     gs.total_reaction_time = 0
     gs.last_played = None
 
@@ -1534,9 +1537,15 @@ if __name__ == "__main__":
         print("rebuffer ratio: %f" % (gs.rebuffer_time / gs.total_play_time))
         print("time average rebuffer: %f" % (gs.rebuffer_time / 1000 * to_time_average))
         print("total rebuffer events: %f" % gs.rebuffer_event_count)
-        print("qoe score: %f" % (
-            gs.played_utility - args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
-        ))
+        # QoE = mean_utility - beta * rebuf_ratio - gamma * switch_rate
+        # mean_utility: time-average (per second) log-bitrate utility
+        # rebuf_ratio: rebuffer_time / total_play_time
+        # switch_rate: bitrate switches per second (N_switch / T_seconds)
+        # beta=10, gamma=1  (SFS paper §5.1)
+        _mean_utility = gs.played_utility * to_time_average
+        _rebuf_ratio = gs.rebuffer_time / gs.total_play_time
+        _switch_rate = gs.switch_count / (gs.total_play_time / 1000)
+        print("qoe score: %f" % (_mean_utility - 10 * _rebuf_ratio - 1 * _switch_rate))
         print(
             "rebuffer_starts_ms: "
             + ",".join(str(int(t)) for t in gs.rebuffer_event_starts_ms)
@@ -1558,16 +1567,8 @@ if __name__ == "__main__":
             "time average log bitrate change: %f"
             % (gs.total_log_bitrate_change * to_time_average)
         )
-        print(
-            "time average score: %f"
-            % (
-                to_time_average
-                * (
-                    gs.played_utility
-                    - args.gamma_p * gs.rebuffer_time / gs.manifest.segment_time
-                )
-            )
-        )
+        print("total bitrate switches: %d" % gs.switch_count)
+        print("switch rate: %f" % (gs.switch_count / (gs.total_play_time / 1000)))
         if gs.overestimate_count == 0:
             print("over estimate count: 0")
             print("over estimate: 0")

@@ -300,12 +300,13 @@ When you load a **`comparison_summary.json`** (synthetic or real trace), the vie
 The primary single-number metric combining quality and rebuffering:
 
 ```
-QoE = Played Utility − γp × (Rebuffer Time / Segment Duration)
+QoE = v̄ − β·ρ_rebuf − γ·p_switch
 ```
 
-- **Played Utility** — sum of per-segment quality scores
-- **γp = 5 s** — BOLA rebuffering penalty coefficient
-- **Rebuffer Time / Segment Duration** — rebuffering expressed as equivalent number of segments lost
+- **v̄** — time-average log-bitrate utility, sampled once per second
+- **ρ_rebuf = rebuffer_time / total_play_time** — fraction of session spent stalled
+- **p_switch = N_switch / T_seconds** — bitrate switches per second
+- **β = 10, γ = 1** — penalty coefficients (SFS paper §5.1)
 
 Higher QoE is better. A run that gains utility but adds rebuffering will only show a net improvement if the utility gain outweighs the penalty.
 

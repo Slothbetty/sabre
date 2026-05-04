@@ -53,6 +53,7 @@ class GlobalState:
             self.played_bitrate = 0
             self.total_bitrate_change = 0
             self.total_log_bitrate_change = 0
+            self.switch_count = 0
             self.total_reaction_time = 0
             self.last_played = None
             
