@@ -34,7 +34,7 @@ from generate_configs import generate_comparison_bundle, movie_info
 SCRIPT_DIR  = Path(__file__).parent
 CHUNKS_DIR  = SCRIPT_DIR / "chunks_trace"
 
-DEFAULT_CHUNKS         = "real_trace/chunks_1_200.json"
+DEFAULT_CHUNKS         = "chunks_trace/chunks_1_200.json"
 DEFAULT_BANDWIDTH_MEAN = 4000   # kbps
 DEFAULT_BANDWIDTH_STD  = 1500
 DEFAULT_LATENCY_MEAN   = 80     # ms

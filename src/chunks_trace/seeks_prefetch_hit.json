@@ -6,22 +6,14 @@
     },
     {
       "seek_when": 62.0,
-      "seek_to": 86.0
+      "seek_to": 102.9
     },
     {
       "seek_when": 84.6,
-      "seek_to": 125.5
-    },
-    {
-      "seek_when": 107.2,
       "seek_to": 148.1
     },
     {
-      "seek_when": 129.7,
-      "seek_to": 170.6
-    },
-    {
-      "seek_when": 152.3,
+      "seek_when": 107.2,
       "seek_to": 170.6
     }
   ]

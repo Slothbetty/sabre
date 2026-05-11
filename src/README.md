@@ -1,6 +1,6 @@
-# STREAMBUFFER-VIS Simulation Guide
+# StreamLens Simulation Guide
 
-STREAMBUFFER-VIS is a Python-based simulation environment for evaluating Adaptive Bitrate (ABR) streaming algorithms under realistic seek and prefetch conditions. It extends the original SABRE simulator with a dynamic multi-region buffer (`MultiRegionBuffer`) that preserves buffered segments across seek events and supports out-of-order prefetch downloads.
+StreamLens is a Python-based simulation environment for evaluating Adaptive Bitrate (ABR) streaming algorithms under realistic seek and prefetch conditions. It extends the original SABRE simulator with a dynamic multi-region buffer (`MultiRegionBuffer`) that preserves buffered segments across seek events and supports out-of-order prefetch downloads.
 
 ---
 
@@ -43,7 +43,7 @@ STREAMBUFFER-VIS is a Python-based simulation environment for evaluating Adaptiv
 
 ## System Architecture
 
-The diagram below shows the module structure and component relationships of STREAMBUFFER-VIS.
+The diagram below shows the module structure and component relationships of StreamLens.
 
 ![System Architecture](architecture_diagram.png)
 
@@ -51,22 +51,17 @@ The diagram below shows the module structure and component relationships of STRE
 
 ## Comparison Workflows
 
-STREAMBUFFER-VIS supports three comparison workflows — **Synthetic**, **Real-trace**, and **Chunks-based** — all converging into a shared simulation core that runs each scenario with and without `MultiRegionBuffer`.
-
-![Comparison Workflows](workflow_diagram.png)
-
----
-
-## Workflow Summary
+StreamLens supports three comparison workflows — **Synthetic**, **Real-trace**, and **Chunks-based** — all converging into a shared simulation core that runs each scenario with and without `MultiRegionBuffer`.
 
 | | Synthetic | Real-trace | Chunks-based |
 |---|---|---|---|
-| **Movie** | `synthetic/movie.json` | Any `movie.json` | Entry from `chunks_1_200.json` |
-| **Network** | Synthetic (`network_generator.py`) | Real (`network_<uuid>.json`) | Synthetic (generated) |
-| **Seeks** | Generated (`generate_configs.py`) | Real (`seeks_<uuid>.json`) | Generated (`generate_configs.py`) |
-| **Prefetch configs** | Generated from video structure | Derived from real seek destinations | Generated from video structure |
-| **Runner** | `run_comparison.py` | `run_real_trace_comparison.py` | `run_chunks_comparison.py` |
-| **Results** | `synthetic/results/` | `real_trace/results/` | `chunks_trace/results/` |
+| **Video source** | A hand-crafted video description file | Extracted from a real YouTube playback session | Converted from real YouTube chunk download records |
+| **Network conditions** | Artificially generated bandwidth and latency patterns | Taken directly from the real YouTube session recording | Artificially generated bandwidth and latency patterns |
+| **User seek events** | Auto-generated based on the video structure | Taken directly from the real YouTube session recording | Auto-generated based on the video structure |
+| **Prefetch settings** | Auto-generated based on the video structure | Derived from real seek destinations in the recording | Auto-generated based on the video structure |
+| **How to run** | `run_comparison.py` | `run_real_trace_comparison.py` | `run_chunks_comparison.py` |
+| **Results saved to** | `synthetic/results/` | `real_trace/results/` | `chunks_trace/results/` |
+| **Best used when** | You want full control over test conditions | You want to replay a real user session | You want real video content with flexible network conditions |
 
 ---
 

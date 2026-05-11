@@ -44,8 +44,8 @@ class TestBufferComparison(unittest.TestCase):
         """Set up test configuration once for all tests."""
         cls.test_dir = Path(__file__).parent
         cls.config = {
-            'network': 'network.json',
-            'movie': 'movie.json',
+            'network': 'synthetic/network.json',
+            'movie': 'synthetic/movie.json',
             'abr': 'bola',  # Will be overridden per test
             'network_multiplier': 1.0
         }
@@ -293,8 +293,8 @@ class TestBufferComparisonQuick(unittest.TestCase):
         """Set up test configuration."""
         cls.test_dir = Path(__file__).parent
         cls.config = {
-            'network': 'network.json',
-            'movie': 'movie.json',
+            'network': 'synthetic/network.json',
+            'movie': 'synthetic/movie.json',
             'abr': 'bola',
             'network_multiplier': 1.0
         }

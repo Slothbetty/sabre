@@ -8,26 +8,22 @@
       "seeks": [
         {
           "seek_when": 39.5,
-          "seek_to": 63.5
+          "seek_to": 46.5
         },
         {
           "seek_when": 62.0,
-          "seek_to": 91.7
+          "seek_to": 102.9
         },
         {
           "seek_when": 84.6,
-          "seek_to": 125.5
+          "seek_to": 148.1
         },
         {
           "seek_when": 107.2,
-          "seek_to": 159.3
-        },
-        {
-          "seek_when": 129.7,
           "seek_to": 170.6
         },
         {
-          "seek_when": 152.3,
+          "seek_when": 129.7,
           "seek_to": 187.5
         }
       ]
@@ -37,279 +33,263 @@
   },
   "without_buffer_py": {
     "summary": {
-      "played_utility": 53.769159,
-      "played_bitrate": 61682.0,
-      "total_play_time": 129.7,
-      "total_rebuffer_time": 10.923796,
-      "rebuffer_ratio": 0.084224,
-      "rebuffer_count": 3,
-      "qoe_score": 1.411103,
+      "played_utility": 49.942204,
+      "played_bitrate": 59364.0,
+      "total_play_time": 107.2,
+      "total_rebuffer_time": 2.646748,
+      "rebuffer_ratio": 0.02469,
+      "rebuffer_count": 2,
+      "qoe_score": 2.306031,
       "rampup_time": 191.76
     },
     "download_events": [
       {
         "start_time": 0,
-        "end_time": 173,
+        "end_time": 198,
         "segment": 0,
         "quality": 0,
         "buffer_level_before": 0,
         "buffer_level_after": 0
       },
       {
-        "start_time": 173,
-        "end_time": 2047,
+        "start_time": 277,
+        "end_time": 1117,
         "segment": 1,
-        "quality": 5,
-        "buffer_level_before": 3765,
-        "buffer_level_after": 3765
+        "quality": 4,
+        "buffer_level_before": 4720,
+        "buffer_level_after": 4720
       },
       {
-        "start_time": 2047,
-        "end_time": 6403,
+        "start_time": 1117,
+        "end_time": 7033,
         "segment": 2,
         "quality": 5,
-        "buffer_level_before": 5050,
-        "buffer_level_after": 5050
+        "buffer_level_before": 4444,
+        "buffer_level_after": 4444
       },
       {
-        "start_time": 6403,
-        "end_time": 10012,
+        "start_time": 7033,
+        "end_time": 11032,
         "segment": 3,
         "quality": 5,
-        "buffer_level_before": 7081,
-        "buffer_level_after": 7081
+        "buffer_level_before": 6085,
+        "buffer_level_after": 6085
       },
       {
-        "start_time": 10012,
-        "end_time": 15796,
+        "start_time": 11032,
+        "end_time": 14857,
         "segment": 4,
         "quality": 5,
-        "buffer_level_before": 6936,
-        "buffer_level_after": 6936
+        "buffer_level_before": 7900,
+        "buffer_level_after": 7900
       },
       {
-        "start_time": 15796,
-        "end_time": 23329,
+        "start_time": 14857,
+        "end_time": 19924,
         "segment": 5,
         "quality": 5,
-        "buffer_level_before": 5043,
-        "buffer_level_after": 5043
+        "buffer_level_before": 8473,
+        "buffer_level_after": 8473
       },
       {
-        "start_time": 23329,
-        "end_time": 24687,
+        "start_time": 19924,
+        "end_time": 23368,
         "segment": 6,
-        "quality": 4,
-        "buffer_level_before": 9326,
-        "buffer_level_after": 9326
+        "quality": 5,
+        "buffer_level_before": 10669,
+        "buffer_level_after": 10669
       },
       {
-        "start_time": 24687,
-        "end_time": 26990,
+        "start_time": 23368,
+        "end_time": 26275,
         "segment": 7,
         "quality": 5,
-        "buffer_level_before": 12663,
-        "buffer_level_after": 12663
+        "buffer_level_before": 13402,
+        "buffer_level_after": 13402
       },
       {
-        "start_time": 26990,
-        "end_time": 31013,
+        "start_time": 26275,
+        "end_time": 31265,
         "segment": 8,
         "quality": 5,
-        "buffer_level_before": 14280,
-        "buffer_level_after": 14280
+        "buffer_level_before": 14052,
+        "buffer_level_after": 14052
       },
       {
-        "start_time": 31573,
-        "end_time": 35165,
+        "start_time": 31598,
+        "end_time": 35615,
         "segment": 9,
         "quality": 5,
-        "buffer_level_before": 15768,
-        "buffer_level_after": 15768
+        "buffer_level_before": 15342,
+        "buffer_level_after": 15342
       },
       {
         "start_time": 39500,
-        "end_time": 46722,
+        "end_time": 40577,
+        "segment": 10,
+        "quality": 4,
+        "buffer_level_before": 8823,
+        "buffer_level_after": 8823
+      },
+      {
+        "start_time": 40577,
+        "end_time": 46058,
         "segment": 11,
         "quality": 5,
-        "buffer_level_before": -1460,
-        "buffer_level_after": -1460
+        "buffer_level_before": 8981,
+        "buffer_level_after": 8981
       },
       {
-        "start_time": 46722,
-        "end_time": 48513,
+        "start_time": 48413,
+        "end_time": 51355,
         "segment": 12,
         "quality": 4,
-        "buffer_level_before": 2388,
-        "buffer_level_after": 2388
+        "buffer_level_before": 9325,
+        "buffer_level_after": 9325
       },
       {
-        "start_time": 48513,
-        "end_time": 50912,
+        "start_time": 51355,
+        "end_time": 53253,
         "segment": 13,
-        "quality": 5,
-        "buffer_level_before": 5629,
-        "buffer_level_after": 5629
+        "quality": 4,
+        "buffer_level_before": 13066,
+        "buffer_level_after": 13066
       },
       {
-        "start_time": 50912,
-        "end_time": 54112,
+        "start_time": 54428,
+        "end_time": 57114,
         "segment": 14,
-        "quality": 5,
-        "buffer_level_before": 8069,
-        "buffer_level_after": 8069
+        "quality": 4,
+        "buffer_level_before": 14845,
+        "buffer_level_after": 14845
       },
       {
-        "start_time": 54112,
-        "end_time": 59968,
+        "start_time": 58240,
+        "end_time": 59860,
         "segment": 15,
-        "quality": 5,
-        "buffer_level_before": 7853,
-        "buffer_level_after": 7853
+        "quality": 4,
+        "buffer_level_before": 17740,
+        "buffer_level_after": 17740
       },
       {
         "start_time": 62000,
-        "end_time": 64388,
-        "segment": 16,
+        "end_time": 62695,
+        "segment": 18,
+        "quality": 4,
+        "buffer_level_before": -1380,
+        "buffer_level_after": -1380
+      },
+      {
+        "start_time": 62695,
+        "end_time": 63993,
+        "segment": 19,
+        "quality": 4,
+        "buffer_level_before": 2962,
+        "buffer_level_after": 2962
+      },
+      {
+        "start_time": 63993,
+        "end_time": 65767,
+        "segment": 20,
         "quality": 5,
+        "buffer_level_before": 6827,
+        "buffer_level_after": 6827
+      },
+      {
+        "start_time": 65767,
+        "end_time": 70482,
+        "segment": 21,
+        "quality": 5,
+        "buffer_level_before": 7753,
+        "buffer_level_after": 7753
+      },
+      {
+        "start_time": 70482,
+        "end_time": 72971,
+        "segment": 22,
+        "quality": 5,
+        "buffer_level_before": 10903,
+        "buffer_level_after": 10903
+      },
+      {
+        "start_time": 72971,
+        "end_time": 76400,
+        "segment": 23,
+        "quality": 5,
+        "buffer_level_before": 13115,
+        "buffer_level_after": 13115
+      },
+      {
+        "start_time": 76400,
+        "end_time": 78899,
+        "segment": 24,
+        "quality": 5,
+        "buffer_level_before": 16256,
+        "buffer_level_after": 16256
+      },
+      {
+        "start_time": 84600,
+        "end_time": 86552,
+        "segment": 26,
+        "quality": 4,
         "buffer_level_before": -1460,
         "buffer_level_after": -1460
       },
       {
-        "start_time": 64388,
-        "end_time": 65462,
-        "segment": 17,
-        "quality": 4,
-        "buffer_level_before": 3106,
-        "buffer_level_after": 3106
-      },
-      {
-        "start_time": 65462,
-        "end_time": 67275,
-        "segment": 18,
-        "quality": 5,
-        "buffer_level_before": 6933,
-        "buffer_level_after": 6933
-      },
-      {
-        "start_time": 67275,
-        "end_time": 74987,
-        "segment": 19,
-        "quality": 5,
-        "buffer_level_before": 4861,
-        "buffer_level_after": 4861
-      },
-      {
-        "start_time": 74987,
-        "end_time": 76165,
-        "segment": 20,
-        "quality": 4,
-        "buffer_level_before": 9322,
-        "buffer_level_after": 9322
-      },
-      {
-        "start_time": 76165,
-        "end_time": 79622,
-        "segment": 21,
-        "quality": 5,
-        "buffer_level_before": 11505,
-        "buffer_level_after": 11505
-      },
-      {
-        "start_time": 79622,
-        "end_time": 81183,
-        "segment": 22,
-        "quality": 5,
-        "buffer_level_before": 15584,
-        "buffer_level_after": 15584
-      },
-      {
-        "start_time": 84720,
-        "end_time": 85539,
-        "segment": 23,
-        "quality": 4,
-        "buffer_level_before": 3280,
-        "buffer_level_after": 3280
-      },
-      {
-        "start_time": 85539,
-        "end_time": 87693,
-        "segment": 24,
-        "quality": 5,
-        "buffer_level_before": 6767,
-        "buffer_level_after": 6767
-      },
-      {
-        "start_time": 87693,
-        "end_time": 89314,
-        "segment": 25,
-        "quality": 5,
-        "buffer_level_before": 10786,
-        "buffer_level_after": 10786
-      },
-      {
-        "start_time": 89314,
-        "end_time": 96066,
-        "segment": 26,
-        "quality": 5,
-        "buffer_level_before": 9673,
-        "buffer_level_after": 9673
-      },
-      {
-        "start_time": 96066,
-        "end_time": 97876,
+        "start_time": 86552,
+        "end_time": 87395,
         "segment": 27,
-        "quality": 5,
-        "buffer_level_before": 13503,
-        "buffer_level_after": 13503
+        "quality": 4,
+        "buffer_level_before": 3336,
+        "buffer_level_after": 3336
       },
       {
-        "start_time": 97876,
-        "end_time": 105197,
+        "start_time": 87395,
+        "end_time": 92099,
         "segment": 28,
         "quality": 5,
-        "buffer_level_before": 11822,
-        "buffer_level_after": 11822
+        "buffer_level_before": 4273,
+        "buffer_level_after": 4273
       },
       {
-        "start_time": 107200,
-        "end_time": 112774,
+        "start_time": 92099,
+        "end_time": 96485,
         "segment": 29,
-        "quality": 4,
-        "buffer_level_before": 0,
-        "buffer_level_after": 0
+        "quality": 5,
+        "buffer_level_before": 5527,
+        "buffer_level_after": 5527
       },
       {
-        "start_time": 112774,
-        "end_time": 113217,
+        "start_time": 96485,
+        "end_time": 99341,
         "segment": 30,
-        "quality": 3,
-        "buffer_level_before": 5196,
-        "buffer_level_after": 5196
+        "quality": 5,
+        "buffer_level_before": 8310,
+        "buffer_level_after": 8310
       },
       {
-        "start_time": 113217,
-        "end_time": 114152,
+        "start_time": 99341,
+        "end_time": 102207,
         "segment": 31,
-        "quality": 4,
-        "buffer_level_before": 9902,
-        "buffer_level_after": 9902
+        "quality": 5,
+        "buffer_level_before": 11084,
+        "buffer_level_after": 11084
       },
       {
-        "start_time": 114152,
-        "end_time": 116502,
+        "start_time": 102207,
+        "end_time": 104319,
         "segment": 32,
         "quality": 5,
-        "buffer_level_before": 13191,
-        "buffer_level_after": 13191
+        "buffer_level_before": 14612,
+        "buffer_level_after": 14612
       },
       {
-        "start_time": 116502,
-        "end_time": 116915,
+        "start_time": 105212,
+        "end_time": 105665,
         "segment": 33,
         "quality": 5,
-        "buffer_level_before": 18419,
-        "buffer_level_after": 18419
+        "buffer_level_before": 18906,
+        "buffer_level_after": 18906
       }
     ],
     "prefetch_events": [],
@@ -317,121 +297,113 @@
       {
         "seek_when_s": 39.5,
         "from_segment": 6,
-        "seek_to_s": 63,
-        "segment": 11
+        "seek_to_s": 46,
+        "segment": 8
       },
       {
         "seek_when_s": 62.0,
-        "from_segment": 13,
-        "seek_to_s": 91,
-        "segment": 16
+        "from_segment": 12,
+        "seek_to_s": 102,
+        "segment": 18
       },
       {
         "seek_when_s": 84.6,
-        "from_segment": 19,
-        "seek_to_s": 125,
-        "segment": 22
+        "from_segment": 22,
+        "seek_to_s": 148,
+        "segment": 26
       },
       {
         "seek_when_s": 107.2,
-        "from_segment": 26,
-        "seek_to_s": 159,
-        "segment": 28
-      },
-      {
-        "seek_when_s": 129.699,
-        "from_segment": 33,
+        "from_segment": 29,
         "seek_to_s": 170,
         "segment": 30
       }
     ],
     "rebuffer_starts_s": [
-      46.721,
-      64.387,
-      112.774
+      62.695,
+      86.551
     ],
     "rebuffer_durations_s": [
-      7.221,
-      2.387,
-      1.314
+      0.695,
+      1.951
     ],
     "time_series": {
       "time_points": [
-        0.173,
-        2.047,
-        6.403,
-        10.012,
-        15.796,
-        20.839,
-        23.329,
-        24.687,
-        26.99,
-        31.013,
-        35.165,
-        46.722,
-        48.513,
-        50.912,
-        54.112,
-        59.968,
-        64.388,
-        65.462,
-        67.275,
-        72.136,
-        74.987,
-        76.165,
-        79.622,
-        81.183,
-        85.539,
-        87.693,
-        89.314,
-        96.066,
-        97.876,
-        105.197,
-        112.774,
-        113.217,
-        114.152,
-        116.502,
-        116.915
+        0.198,
+        1.117,
+        5.561,
+        7.033,
+        11.032,
+        14.857,
+        19.924,
+        23.368,
+        26.275,
+        31.265,
+        35.615,
+        40.577,
+        46.058,
+        51.355,
+        53.253,
+        57.114,
+        59.86,
+        62.695,
+        63.993,
+        65.767,
+        70.482,
+        72.971,
+        76.4,
+        78.899,
+        86.552,
+        87.395,
+        91.668,
+        92.099,
+        96.485,
+        99.341,
+        102.207,
+        104.319,
+        105.665
       ],
       "buffer_levels": [
         0.0,
-        3.765,
-        5.05,
-        7.081,
-        6.936,
+        4.72,
         0.0,
-        5.043,
-        9.326,
-        12.663,
-        14.28,
-        15.768,
+        4.444,
+        6.085,
+        7.9,
+        8.473,
+        10.669,
+        13.402,
+        14.052,
+        15.342,
+        8.823,
+        8.981,
+        9.325,
+        13.066,
+        14.845,
+        17.74,
         0.0,
-        2.388,
-        5.629,
-        8.069,
-        7.853,
+        2.962,
+        6.827,
+        7.753,
+        10.903,
+        13.115,
+        16.256,
         0.0,
-        3.106,
-        6.933,
+        3.336,
         0.0,
-        4.861,
-        9.322,
-        11.505,
-        15.584,
-        3.28,
-        6.767,
-        10.786,
-        9.673,
-        13.503,
-        11.822,
-        0.0,
-        5.196,
-        9.902,
-        13.191,
-        18.419
+        4.273,
+        5.527,
+        8.31,
+        11.084,
+        14.612,
+        18.906
       ],
       "qualities": [
         0,
+        4,
+        5,
+        5,
+        5,
         5,
         5,
         5,
@@ -440,21 +412,11 @@
         5,
         4,
         5,
-        5,
-        5,
-        5,
         4,
-        5,
-        5,
-        5,
-        5,
         4,
-        5,
-        5,
-        5,
         4,
-        5,
-        5,
+        4,
+        4,
         4,
         5,
         5,
@@ -462,8 +424,12 @@
         5,
         5,
         4,
-        3,
         4,
+        5,
+        5,
+        5,
+        5,
+        5,
         5,
         5
       ],
@@ -471,32 +437,30 @@
         0,
         1,
         2,
+        2,
         3,
         4,
-        5,
         5,
         6,
         7,
         8,
         9,
+        10,
         11,
         12,
         13,
         14,
         15,
-        16,
-        17,
         18,
-        19,
         19,
         20,
         21,
         22,
         23,
         24,
-        25,
         26,
         27,
+        28,
         28,
         29,
         30,
@@ -508,311 +472,281 @@
   },
   "with_buffer_py": {
     "summary": {
-      "played_utility": 60.246222,
-      "played_bitrate": 65996.0,
-      "total_play_time": 129.7,
+      "played_utility": 62.991238,
+      "played_bitrate": 76700.0,
+      "total_play_time": 128.36,
       "total_rebuffer_time": 0.0,
       "rebuffer_ratio": 0.0,
       "rebuffer_count": 0,
-      "qoe_score": 2.519574,
-      "rampup_time": 191.76
+      "qoe_score": 2.705442,
+      "rampup_time": 4.24
     },
     "download_events": [
       {
         "start_time": 0,
-        "end_time": 173,
+        "end_time": 198,
         "segment": 0,
         "quality": 0,
         "buffer_level_before": 0,
         "buffer_level_after": 0
       },
       {
-        "start_time": 173,
-        "end_time": 2047,
+        "start_time": 277,
+        "end_time": 1117,
         "segment": 1,
-        "quality": 5,
-        "buffer_level_before": 3765,
-        "buffer_level_after": 3765
+        "quality": 4,
+        "buffer_level_before": 4720,
+        "buffer_level_after": 4720
       },
       {
-        "start_time": 2047,
-        "end_time": 6403,
+        "start_time": 1117,
+        "end_time": 7033,
         "segment": 2,
         "quality": 5,
-        "buffer_level_before": 5050,
-        "buffer_level_after": 5050
+        "buffer_level_before": 4444,
+        "buffer_level_after": 4444
       },
       {
-        "start_time": 6403,
-        "end_time": 10012,
+        "start_time": 7033,
+        "end_time": 11032,
         "segment": 3,
         "quality": 5,
-        "buffer_level_before": 7081,
-        "buffer_level_after": 7081
+        "buffer_level_before": 6085,
+        "buffer_level_after": 6085
       },
       {
-        "start_time": 10012,
-        "end_time": 15796,
+        "start_time": 11032,
+        "end_time": 14857,
         "segment": 4,
         "quality": 5,
-        "buffer_level_before": 6936,
-        "buffer_level_after": 6936
+        "buffer_level_before": 7900,
+        "buffer_level_after": 7900
       },
       {
-        "start_time": 15796,
-        "end_time": 23329,
+        "start_time": 14857,
+        "end_time": 19924,
         "segment": 5,
         "quality": 5,
-        "buffer_level_before": 5043,
-        "buffer_level_after": 5043
+        "buffer_level_before": 8473,
+        "buffer_level_after": 8473
       },
       {
-        "start_time": 23329,
-        "end_time": 24687,
+        "start_time": 19924,
+        "end_time": 23368,
         "segment": 6,
-        "quality": 4,
-        "buffer_level_before": 9326,
-        "buffer_level_after": 9326
-      },
-      {
-        "start_time": 24687,
-        "end_time": 26990,
-        "segment": 7,
         "quality": 5,
-        "buffer_level_before": 12663,
-        "buffer_level_after": 12663
+        "buffer_level_before": 10669,
+        "buffer_level_after": 10669
       },
       {
-        "start_time": 38127,
-        "end_time": 39178,
+        "start_time": 32147,
+        "end_time": 37043,
         "segment": 8,
-        "quality": 4,
-        "buffer_level_before": 11755,
-        "buffer_level_after": 11755
+        "quality": 5,
+        "buffer_level_before": 8274,
+        "buffer_level_after": 8274
       },
       {
-        "start_time": 39500,
-        "end_time": 42384,
+        "start_time": 39595,
+        "end_time": 40445,
+        "segment": 9,
+        "quality": 4,
+        "buffer_level_before": 3315,
+        "buffer_level_after": 3315
+      },
+      {
+        "start_time": 40445,
+        "end_time": 43662,
+        "segment": 10,
+        "quality": 5,
+        "buffer_level_before": 5738,
+        "buffer_level_after": 5738
+      },
+      {
+        "start_time": 51261,
+        "end_time": 54093,
         "segment": 12,
         "quality": 4,
-        "buffer_level_before": 1295,
-        "buffer_level_after": 1295
+        "buffer_level_before": 6587,
+        "buffer_level_after": 6587
       },
       {
-        "start_time": 42384,
-        "end_time": 43590,
+        "start_time": 54093,
+        "end_time": 55999,
         "segment": 13,
         "quality": 4,
-        "buffer_level_before": 5729,
-        "buffer_level_after": 5729
+        "buffer_level_before": 10321,
+        "buffer_level_after": 10321
       },
       {
-        "start_time": 43590,
-        "end_time": 48339,
+        "start_time": 59861,
+        "end_time": 61288,
         "segment": 14,
-        "quality": 5,
-        "buffer_level_before": 6620,
-        "buffer_level_after": 6620
-      },
-      {
-        "start_time": 56312,
-        "end_time": 57245,
-        "segment": 16,
-        "quality": 3,
-        "buffer_level_before": 8994,
-        "buffer_level_after": 8994
-      },
-      {
-        "start_time": 57245,
-        "end_time": 59277,
-        "segment": 17,
         "quality": 4,
-        "buffer_level_before": 12603,
-        "buffer_level_after": 12603
+        "buffer_level_before": 10671,
+        "buffer_level_after": 10671
       },
       {
-        "start_time": 62608,
-        "end_time": 63185,
+        "start_time": 62000,
+        "end_time": 63298,
         "segment": 19,
-        "quality": 3,
-        "buffer_level_before": 14275,
-        "buffer_level_after": 14275
-      },
-      {
-        "start_time": 63740,
-        "end_time": 64206,
-        "segment": 20,
         "quality": 4,
-        "buffer_level_before": 18894,
-        "buffer_level_after": 18894
+        "buffer_level_before": 2962,
+        "buffer_level_after": 2962
       },
       {
-        "start_time": 69380,
-        "end_time": 76413,
+        "start_time": 63298,
+        "end_time": 65529,
+        "segment": 20,
+        "quality": 5,
+        "buffer_level_before": 6371,
+        "buffer_level_after": 6371
+      },
+      {
+        "start_time": 65529,
+        "end_time": 70429,
         "segment": 21,
         "quality": 5,
-        "buffer_level_before": 12327,
-        "buffer_level_after": 12327
+        "buffer_level_before": 7111,
+        "buffer_level_after": 7111
       },
       {
-        "start_time": 80660,
-        "end_time": 83428,
-        "segment": 23,
+        "start_time": 70429,
+        "end_time": 72929,
+        "segment": 22,
         "quality": 5,
-        "buffer_level_before": 16592,
-        "buffer_level_after": 16592
+        "buffer_level_before": 10250,
+        "buffer_level_after": 10250
       },
       {
         "start_time": 84600,
-        "end_time": 85875,
-        "segment": 24,
-        "quality": 4,
-        "buffer_level_before": 8585,
-        "buffer_level_after": 8585
-      },
-      {
-        "start_time": 85875,
-        "end_time": 88513,
-        "segment": 25,
-        "quality": 5,
-        "buffer_level_before": 11586,
-        "buffer_level_after": 11586
-      },
-      {
-        "start_time": 92020,
-        "end_time": 94415,
+        "end_time": 85444,
         "segment": 27,
-        "quality": 5,
-        "buffer_level_before": 16964,
-        "buffer_level_after": 16964
+        "quality": 4,
+        "buffer_level_before": 3336,
+        "buffer_level_after": 3336
       },
       {
-        "start_time": 97660,
-        "end_time": 101216,
+        "start_time": 85444,
+        "end_time": 89984,
         "segment": 28,
         "quality": 5,
-        "buffer_level_before": 15804,
-        "buffer_level_after": 15804
+        "buffer_level_before": 4435,
+        "buffer_level_after": 4435
       },
       {
-        "start_time": 107285,
-        "end_time": 108590,
+        "start_time": 89984,
+        "end_time": 94472,
         "segment": 29,
-        "quality": 4,
-        "buffer_level_before": 2870,
-        "buffer_level_after": 2870
+        "quality": 5,
+        "buffer_level_before": 5587,
+        "buffer_level_after": 5587
       },
       {
-        "start_time": 108590,
-        "end_time": 116403,
+        "start_time": 94472,
+        "end_time": 97329,
+        "segment": 30,
+        "quality": 5,
+        "buffer_level_before": 8370,
+        "buffer_level_after": 8370
+      },
+      {
+        "start_time": 97329,
+        "end_time": 100357,
         "segment": 31,
         "quality": 5,
-        "buffer_level_before": 6336,
-        "buffer_level_after": 6336
+        "buffer_level_before": 10982,
+        "buffer_level_after": 10982
       },
       {
-        "start_time": 116403,
-        "end_time": 117171,
+        "start_time": 103260,
+        "end_time": 105629,
         "segment": 32,
-        "quality": 4,
-        "buffer_level_before": 11209,
-        "buffer_level_after": 11209
-      },
-      {
-        "start_time": 117171,
-        "end_time": 117583,
-        "segment": 33,
         "quality": 5,
-        "buffer_level_before": 16436,
-        "buffer_level_after": 16436
+        "buffer_level_before": 16991,
+        "buffer_level_after": 16991
       }
     ],
     "prefetch_events": [
       {
-        "start_time": 26990,
-        "end_time": 29213,
+        "start_time": 23368,
+        "end_time": 26275,
         "segment": 7,
         "quality": 5,
-        "buffer_level_before": 18303,
-        "buffer_level_after": 21719
+        "buffer_level_before": 16309,
+        "buffer_level_after": 19042
       },
       {
-        "start_time": 29213,
-        "end_time": 34946,
+        "start_time": 26275,
+        "end_time": 32147,
         "segment": 11,
         "quality": 5,
-        "buffer_level_before": 21719,
-        "buffer_level_after": 15987
+        "buffer_level_before": 19042,
+        "buffer_level_after": 13171
       },
       {
-        "start_time": 34946,
-        "end_time": 38127,
+        "start_time": 43662,
+        "end_time": 51261,
         "segment": 15,
         "quality": 5,
-        "buffer_level_before": 15987,
-        "buffer_level_after": 12806
+        "buffer_level_before": 17018,
+        "buffer_level_after": 9418
       },
       {
-        "start_time": 48339,
-        "end_time": 49838,
+        "start_time": 55999,
+        "end_time": 59861,
         "segment": 18,
         "quality": 5,
-        "buffer_level_before": 17900,
-        "buffer_level_after": 16402
+        "buffer_level_before": 15961,
+        "buffer_level_after": 12099
       },
       {
-        "start_time": 49838,
-        "end_time": 51145,
+        "start_time": 72929,
+        "end_time": 74960,
         "segment": 22,
         "quality": 5,
-        "buffer_level_before": 16402,
-        "buffer_level_after": 15094
+        "buffer_level_before": 15890,
+        "buffer_level_after": 19499
       },
       {
-        "start_time": 51145,
-        "end_time": 56312,
+        "start_time": 74960,
+        "end_time": 79896,
         "segment": 26,
         "quality": 5,
-        "buffer_level_before": 15094,
-        "buffer_level_after": 9928
+        "buffer_level_before": 19499,
+        "buffer_level_after": 14564
       },
       {
-        "start_time": 62000,
-        "end_time": 62608,
+        "start_time": 100357,
+        "end_time": 102253,
         "segment": 30,
-        "quality": 4,
-        "buffer_level_before": 15460,
-        "buffer_level_after": 14852
+        "quality": 5,
+        "buffer_level_before": 16622,
+        "buffer_level_after": 20367
       }
     ],
     "seek_events": [
       {
         "seek_when_s": 39.5,
         "from_segment": 6,
-        "seek_to_s": 63,
-        "segment": 11
+        "seek_to_s": 46,
+        "segment": 8
       },
       {
         "seek_when_s": 62.0,
-        "from_segment": 15,
-        "seek_to_s": 91,
-        "segment": 16
+        "from_segment": 12,
+        "seek_to_s": 102,
+        "segment": 18
       },
       {
         "seek_when_s": 84.6,
-        "from_segment": 20,
-        "seek_to_s": 125,
-        "segment": 22
+        "from_segment": 22,
+        "seek_to_s": 148,
+        "segment": 26
       },
       {
         "seek_when_s": 107.2,
-        "from_segment": 26,
-        "seek_to_s": 159,
-        "segment": 28
-      },
-      {
-        "seek_when_s": 129.699,
-        "from_segment": 33,
+        "from_segment": 30,
         "seek_to_s": 170,
         "segment": 30
       }
@@ -821,69 +755,63 @@
     "rebuffer_durations_s": [],
     "time_series": {
       "time_points": [
-        0.173,
-        2.047,
-        6.403,
-        10.012,
-        15.796,
-        20.839,
-        23.329,
-        24.687,
-        26.99,
-        39.178,
-        40.795,
-        42.384,
-        43.59,
-        48.339,
-        57.245,
-        59.277,
-        63.185,
-        64.206,
-        76.413,
-        83.428,
-        85.875,
-        88.513,
-        94.415,
-        101.216,
-        108.59,
-        114.926,
-        116.403,
-        117.171,
-        117.583
+        0.198,
+        1.117,
+        5.561,
+        7.033,
+        11.032,
+        14.857,
+        19.924,
+        23.368,
+        37.043,
+        40.445,
+        43.662,
+        54.093,
+        55.999,
+        61.288,
+        63.298,
+        65.529,
+        70.429,
+        72.929,
+        85.444,
+        89.879,
+        89.984,
+        94.472,
+        97.329,
+        100.357,
+        105.629
       ],
       "buffer_levels": [
         0.0,
-        3.765,
-        5.05,
-        7.081,
-        6.936,
+        4.72,
         0.0,
-        5.043,
-        9.326,
-        12.663,
-        11.755,
+        4.444,
+        6.085,
+        7.9,
+        8.473,
+        10.669,
+        8.274,
+        3.315,
+        5.738,
+        6.587,
+        10.321,
+        10.671,
+        2.962,
+        6.371,
+        7.111,
+        10.25,
+        3.336,
         0.0,
-        1.295,
-        5.729,
-        6.62,
-        8.994,
-        12.603,
-        14.275,
-        18.894,
-        12.327,
-        16.592,
-        8.585,
-        11.586,
-        16.964,
-        15.804,
-        2.87,
-        0.0,
-        6.336,
-        11.209,
-        16.436
+        4.435,
+        5.587,
+        8.37,
+        10.982,
+        16.991
       ],
       "qualities": [
         0,
+        4,
+        5,
         5,
         5,
         5,
@@ -897,52 +825,42 @@
         4,
         4,
         5,
-        3,
-        4,
-        3,
-        4,
         5,
         5,
         4,
         5,
         5,
         5,
-        4,
         5,
         5,
-        4,
         5
       ],
       "segments": [
         0,
         1,
         2,
+        2,
         3,
         4,
         5,
-        5,
         6,
-        7,
         8,
-        12,
+        9,
+        10,
         12,
         13,
         14,
-        16,
-        17,
         19,
         20,
         21,
-        23,
-        24,
-        25,
+        22,
         27,
         28,
+        28,
         29,
+        30,
         31,
-        31,
-        32,
-        33
+        32
       ]
     }
   }

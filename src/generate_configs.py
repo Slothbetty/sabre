@@ -131,13 +131,15 @@ def build_seek_when_schedule(
 
 
 def generate_seeks_for_segment_targets(
-    segment_targets: list[int],
+    segment_targets: list[int | None],
     seek_when_times: list[float],
     seg_dur_ms: int,
     num_segments: int,
 ) -> list[dict]:
     seeks = []
     for i, seg_idx in enumerate(segment_targets):
+        if seg_idx is None:
+            continue
         seg_idx = max(0, min(num_segments - 1, seg_idx))
         st = seek_to_seconds_for_segment(seg_idx, seg_dur_ms)
         when = seek_when_times[i] if i < len(seek_when_times) else seek_when_times[-1]
@@ -149,29 +151,35 @@ def build_forward_seek_targets(
     candidates: list[int],
     seek_when_times: list[float],
     seg_dur_ms: int,
-) -> list[int]:
+) -> list[int | None]:
     """
     For each seek_when time W, pick one candidate segment whose seek_to time is
     strictly greater than W (forward-only).  Candidates are spread evenly across
     the valid forward pool at each seek position so the chosen seek_to values
     grow roughly in step with the seek_when schedule.
 
-    Falls back to the last candidate when the schedule reaches the end of the
-    movie and no forward option exists.
+    Returns None for positions where no valid forward candidate exists (e.g. when
+    a prior seek already jumped the player near the end of the movie).  Callers
+    must handle None entries.
     """
     pool = sorted(set(candidates))
     n = len(seek_when_times)
-    targets: list[int] = []
+    targets: list[int | None] = []
+    last_target = -1  # track last chosen target so each seek lands strictly ahead
     for i, when in enumerate(seek_when_times):
         # Current segment the player is on at seek_when time.
         current_seg = math.floor(when * 1000 / seg_dur_ms)
-        # Target must be a strictly later segment, not just a later timestamp.
-        valid = [s for s in pool if s > current_seg]
+        # After a prior seek the player's video position is the previous target,
+        # so require the new target to be strictly ahead of both.
+        effective_min = max(current_seg, last_target)
+        valid = [s for s in pool if s > effective_min]
         if not valid:
-            valid = [pool[-1]]
+            targets.append(None)
+            continue
         frac = i / max(n - 1, 1)
         idx = int(round(frac * (len(valid) - 1)))
         targets.append(valid[idx])
+        last_target = valid[idx]
     return targets
 
 
@@ -350,8 +358,14 @@ def generate_comparison_bundle(
     num_hits = max(0, min(num_seeks, round(num_seeks * mixed_hit_ratio)))
     assignment = [True] * num_hits + [False] * (num_seeks - num_hits)
     rng.shuffle(assignment)
-    mixed_targets = [hit_targets[i] if assignment[i] else miss_targets[i]
-                     for i in range(num_seeks)]
+    mixed_targets = []
+    for i in range(num_seeks):
+        h = hit_targets[i] if i < len(hit_targets) else None
+        m = miss_targets[i] if i < len(miss_targets) else None
+        if assignment[i]:
+            mixed_targets.append(h if h is not None else m)
+        else:
+            mixed_targets.append(m if m is not None else h)
     seeks_mixed = generate_seeks_for_segment_targets(
         mixed_targets, schedule, seg_dur_ms, num_segments
     )
@@ -443,12 +457,19 @@ def main():
         help="Random seed for the mixed scenario shuffle (default: random)",
     )
     parser.add_argument(
+        "--output-dir", default=None, metavar="DIR",
+        help="Directory to write all output files into (default: same directory as this script)",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print JSON to stdout; do not write files",
     )
     args = parser.parse_args()
 
     script_dir = Path(__file__).parent
+    out_dir = Path(args.output_dir) if args.output_dir else script_dir
+    out_dir.mkdir(parents=True, exist_ok=True)
+
     movie_path = script_dir / args.movie
     if not movie_path.exists():
         print(f"Error: Movie file not found: {movie_path}", file=sys.stderr)
@@ -531,12 +552,12 @@ def main():
         return
 
     paths = [
-        (script_dir / args.output_prefetch, prefetch_config),
-        (script_dir / args.output_prefetch_hit, seeks_hit_cfg),
-        (script_dir / args.output_seeks_miss, seeks_miss_cfg),
-        (script_dir / args.output_seeks_mixed, seeks_mixed_cfg),
-        (script_dir / args.output_linear_hit_dynamic_miss, seeks_lin_hit_dyn_miss_cfg),
-        (script_dir / args.output_linear_miss_dynamic_hit, seeks_lin_miss_dyn_hit_cfg),
+        (out_dir / args.output_prefetch, prefetch_config),
+        (out_dir / args.output_prefetch_hit, seeks_hit_cfg),
+        (out_dir / args.output_seeks_miss, seeks_miss_cfg),
+        (out_dir / args.output_seeks_mixed, seeks_mixed_cfg),
+        (out_dir / args.output_linear_hit_dynamic_miss, seeks_lin_hit_dyn_miss_cfg),
+        (out_dir / args.output_linear_miss_dynamic_hit, seeks_lin_miss_dyn_hit_cfg),
     ]
     for path, obj in paths:
         with open(path, "w") as f:
@@ -544,12 +565,22 @@ def main():
             f.write("\n")
         print(f"\n-> Wrote {path}")
 
+    sc_list = ",".join(str(out_dir / f) for f in [
+        args.output_seeks_miss,
+        args.output_prefetch_hit,
+        args.output_seeks_mixed,
+        args.output_linear_hit_dynamic_miss,
+        args.output_linear_miss_dynamic_hit,
+    ])
     print("\nRun multi-scenario comparison with:")
     print(
-        f"  python run_comparison.py -sc {args.output_seeks_miss},"
-        f"{args.output_prefetch_hit},{args.output_seeks_mixed},"
-        f"{args.output_linear_hit_dynamic_miss},{args.output_linear_miss_dynamic_hit}"
-        f" -pc {args.output_prefetch} -a all -o prefetch_comparison_results"
+        f"  python run_comparison.py"
+        f" -n {out_dir / 'network.json'}"
+        f" -m {movie_path}"
+        f" -sc {sc_list}"
+        f" -pc {out_dir / args.output_prefetch}"
+        f" -a all"
+        f" -o {out_dir / 'results'}"
     )
 
 
