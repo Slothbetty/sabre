@@ -1,13 +1,13 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Convert an entry from a chunks JSON (e.g. chunks_1_200.json) into a
 movie.json compatible with sabre.py.
 
 Usage:
     python chunks_to_movie.py <chunks_file> --list
-    python chunks_to_movie.py <chunks_file> --index 0 -o real_trace/movie.json
+    python chunks_to_movie.py <chunks_file> --index 0 -o session_replay/movie.json
     python chunks_to_movie.py <chunks_file> --video-id Qg9LxRHLbAk -o movie.json
-    python chunks_to_movie.py <chunks_file> --all -o real_trace/movies/
+    python chunks_to_movie.py <chunks_file> --all -o session_replay/movies/
 """
 
 import argparse
