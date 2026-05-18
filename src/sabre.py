@@ -631,6 +631,12 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                     get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc))):
             prefetch_seg = prefetch_module.get_next_prefetch_segment()
             if prefetch_seg is not None and prefetch_seg < len(gs.manifest.segments):
+                # If the segment was already downloaded as a normal segment, mark it
+                # prefetched and skip — avoids extending the wrong buffer region which
+                # would corrupt the buffer level reported to ABR algorithms.
+                if gs.multi_region_buffer._find_region_of_idx(prefetch_seg) is not None:
+                    prefetch_module.mark_prefetched(prefetch_seg)
+                    continue
                 pf_quality, pf_delay = abr.get_quality_delay(prefetch_seg)
                 pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
                 pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)

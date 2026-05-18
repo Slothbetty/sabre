@@ -151,12 +151,17 @@ def build_forward_seek_targets(
     candidates: list[int],
     seek_when_times: list[float],
     seg_dur_ms: int,
+    min_forward_ms: int = 0,
 ) -> list[int | None]:
     """
     For each seek_when time W, pick one candidate segment whose seek_to time is
     strictly greater than W (forward-only).  Candidates are spread evenly across
     the valid forward pool at each seek position so the chosen seek_to values
     grow roughly in step with the seek_when schedule.
+
+    min_forward_ms: if > 0, every chosen seek_to must be at least this many ms
+    ahead of seek_when.  Use the player's max buffer size to guarantee the target
+    lies outside the linear buffer window (so linear buffering always misses).
 
     Returns None for positions where no valid forward candidate exists (e.g. when
     a prior seek already jumped the player near the end of the movie).  Callers
@@ -172,6 +177,11 @@ def build_forward_seek_targets(
         # After a prior seek the player's video position is the previous target,
         # so require the new target to be strictly ahead of both.
         effective_min = max(current_seg, last_target)
+        # Enforce minimum forward distance so the seek lands beyond the linear
+        # buffer window (linear miss → dynamic prefetch hit is the desired test).
+        if min_forward_ms > 0:
+            min_seg = math.floor((when * 1000 + min_forward_ms) / seg_dur_ms)
+            effective_min = max(effective_min, min_seg)
         valid = [s for s in pool if s > effective_min]
         if not valid:
             targets.append(None)
@@ -319,6 +329,7 @@ def generate_comparison_bundle(
     prefetch_count: int,
     mixed_hit_ratio: float = 0.5,
     seed: int | None = None,
+    max_buffer_ms: int = 25000,
 ) -> tuple[dict, dict, dict, dict, dict, dict]:
     """
     Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss, seeks_mixed,
@@ -342,7 +353,11 @@ def generate_comparison_bundle(
     schedule = build_seek_when_schedule(num_seeks, total_s, seg_dur_ms)
 
     # Per-seek forward-only targets: each entry is for the corresponding seek_when.
-    hit_targets = build_forward_seek_targets(prefetch_indices, schedule, seg_dur_ms)
+    # Hit seeks must land beyond the linear buffer window (max_buffer_ms) so that
+    # the linear buffer always misses while the prefetched dynamic buffer hits.
+    hit_targets = build_forward_seek_targets(
+        prefetch_indices, schedule, seg_dur_ms, min_forward_ms=max_buffer_ms
+    )
     miss_targets = build_forward_seek_targets(complement, schedule, seg_dur_ms)
 
     seeks_hit = generate_seeks_for_segment_targets(
@@ -461,6 +476,11 @@ def main():
         help="Directory to write all output files into (default: same directory as this script)",
     )
     parser.add_argument(
+        "--max-buffer", type=int, default=25,
+        help="Player max buffer size in seconds (default: 25). Hit seeks are placed "
+             "beyond this window so the linear buffer always misses them.",
+    )
+    parser.add_argument(
         "--dry-run", action="store_true",
         help="Print JSON to stdout; do not write files",
     )
@@ -501,6 +521,7 @@ def main():
             prefetch_count=args.prefetch_count,
             mixed_hit_ratio=args.mixed_hit_ratio,
             seed=args.seed,
+            max_buffer_ms=args.max_buffer * 1000,
         )
     except ValueError as e:
         print(f"Error: {e}", file=sys.stderr)
