@@ -253,6 +253,10 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
         else:
             gs.next_segment = new_segment
 
+        # Return True to signal that the seek hit the multi-region buffer (prefetch hit),
+        # so the caller can inform ABR to use a conservative placeholder.
+        return not rebuffer
+
         # When the seek lands mid-segment (new_segment == floor_idx), align
         # current_playback_pos with the actual seek position so that deplete_buffer's
         # buffer_fcc path advances to the exact next segment boundary on pop_chunk().
@@ -288,6 +292,7 @@ def update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_ti
         else:
             # Seek landed at a segment boundary: no partial chunk has been consumed.
             gs.buffer_fcc = 0
+        return False  # linear buffer: not a prefetch hit
 
 
 def interrupted_by_seek(delta, abr):
@@ -355,11 +360,23 @@ def interrupted_by_seek(delta, abr):
                 print("[Seek] At playback time %d ms: seeking from segment %d to %d seconds (segment index %d)" %
                     (gs.total_play_time, from_segment, pos_seek_to_ms / 1000, new_segment))
 
-            # Update buffer during seek
-            update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time)
-                
+            # Update buffer during seek; returns True when seek hit multi-region prefetch.
+            prefetch_hit = update_buffer_during_seek(gs, new_segment, floor_idx, pos_seek_to_ms, seg_time)
+
             # Notify ABR of the seek event (using seek time in milliseconds).
             abr.report_seek(pos_seek_to_ms)
+            # Tell bolae (if active) that the seek landed on prefetch content so it
+            # can use a conservative placeholder and avoid stale-throughput quality
+            # overestimation in the subsequent STEADY calls.
+            if prefetch_hit and hasattr(abr, '_seek_hit_prefetch'):
+                abr._seek_hit_prefetch = True
+            elif prefetch_hit and gs.throughput is not None:
+                # For non-bolae algorithms: after a seek lands on prefetch content,
+                # the throughput estimate may be stale (inflated by recent high-
+                # bandwidth prefetch downloads). Apply a conservative factor so the
+                # first quality decision uses only the prefetch segment as buffer.
+                # The very next real download will overwrite this with measured data.
+                gs.throughput *= 0.5
             # Reset rampup variables.
             gs.rampup_origin = gs.total_play_time
             gs.rampup_time = None
@@ -637,7 +654,15 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                 if gs.multi_region_buffer._find_region_of_idx(prefetch_seg) is not None:
                     prefetch_module.mark_prefetched(prefetch_seg)
                     continue
-                pf_quality, pf_delay = abr.get_quality_delay(prefetch_seg)
+                # Use throughput-based quality for prefetch, not buffer-based.
+                # Buffer-level ABRs (e.g. bolae) see a full buffer here and select
+                # high quality, making the prefetch download large and slow — this
+                # steals good network-trace periods from regular segments and causes
+                # longer stalls. Throughput-based quality is sustainable and fast.
+                if gs.throughput is not None:
+                    pf_quality = abr.quality_from_throughput(gs.throughput)
+                else:
+                    pf_quality = 0
                 pf_size = gs.manifest.segments[prefetch_seg][pf_quality]
                 pf_bl = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
                 pf_metric = network.download(pf_size, prefetch_seg, pf_quality, pf_bl)
@@ -648,6 +673,13 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                 if pf_metric.abandon_to_quality is None:
                     gs.multi_region_buffer.add_prefetch_chunk(prefetch_seg, pf_quality)
                     prefetch_module.mark_prefetched(prefetch_seg)
+                    # Update throughput history with actual prefetch download speed so
+                    # subsequent ABR calls (e.g. bolae) see current network conditions,
+                    # not stale estimates from before the prefetch period.
+                    pf_download_time = pf_metric.time - pf_metric.time_to_first_bit
+                    if pf_download_time > 0:
+                        pf_tput = pf_metric.downloaded / pf_download_time
+                        gs.throughput_history.push(pf_download_time, pf_tput, pf_metric.time_to_first_bit)
                     if gs.verbose:
                         print("[%d-%d] prefetch segment %d quality=%d bl=%d->%d"
                               % (pf_start_time, pf_end_time, prefetch_seg, pf_quality,
@@ -656,11 +688,22 @@ def process_download_loop(abr, replacer, graph, args, network, prefetch_module=N
                 continue  # re-evaluate buffer state after prefetch
 
         # Check if there is extra content in the buffer.
-        full_delay = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc) + gs.manifest.segment_time - gs.buffer_size
+        buffer_level_now = get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)
+        full_delay = buffer_level_now + gs.manifest.segment_time - gs.buffer_size
         if full_delay > 0:
             if not deplete_buffer(full_delay, abr):
                 continue  # A seek event was triggered; restart loop.
-            network.delay(full_delay)
+            # When a prefetch segment merges into the regular buffer, buffer_level can
+            # exceed buffer_size. Only advance the network trace by the delay that would
+            # naturally occur without the prefetch-induced excess, so subsequent regular
+            # downloads are not shifted into worse bandwidth periods.
+            if gs.multi_region_buffer is not None and buffer_level_now > gs.buffer_size:
+                prefetch_excess = buffer_level_now - gs.buffer_size
+                network_full_delay = max(0, full_delay - prefetch_excess)
+            else:
+                network_full_delay = full_delay
+            if network_full_delay > 0:
+                network.delay(network_full_delay)
             abr.report_delay(full_delay)
             if gs.verbose:
                 print("full buffer delay %d bl=%d" % (full_delay, get_buffer_level(gs.manifest.segment_time, gs.buffer_contents, gs.buffer_fcc)))

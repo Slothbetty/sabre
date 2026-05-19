@@ -1,9 +1,9 @@
 {
   "config": {
-    "network": "synthetic\\network.json",
-    "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
+    "network": "synthetic/network.json",
+    "movie": "synthetic/movie.json",
     "abr": "bola",
-    "seek_config": "synthetic\\seeks_prefetch_hit.json",
+    "seek_config": "synthetic/seeks_prefetch_hit.json",
     "seek_config_data": {
       "seeks": [
         {
@@ -40,7 +40,7 @@
         }
       ]
     },
-    "prefetch_config": "synthetic\\test_prefetch_config.json",
+    "prefetch_config": "synthetic/test_prefetch_config.json",
     "network_multiplier": 1.0
   },
   "without_buffer_py": {
@@ -2046,13 +2046,13 @@
   },
   "with_buffer_py": {
     "summary": {
-      "played_utility": 295.707261,
-      "played_bitrate": 439214.0,
+      "played_utility": 295.884197,
+      "played_bitrate": 440187.0,
       "total_play_time": 359.8,
       "total_rebuffer_time": 0.0,
       "rebuffer_ratio": 0.0,
-      "rebuffer_count": 1,
-      "qoe_score": 2.218237,
+      "rebuffer_count": 0,
+      "qoe_score": 2.219713,
       "rampup_time": 3.0
     },
     "download_events": [
@@ -3010,59 +3010,59 @@
       },
       {
         "start_time": 320800,
-        "end_time": 322785,
+        "end_time": 323153,
         "segment": 192,
-        "quality": 8,
-        "buffer_level_before": 16014,
-        "buffer_level_after": 16014
+        "quality": 9,
+        "buffer_level_before": 15646,
+        "buffer_level_after": 15646
       },
       {
-        "start_time": 322785,
-        "end_time": 325315,
+        "start_time": 323153,
+        "end_time": 326309,
         "segment": 193,
         "quality": 9,
-        "buffer_level_before": 16485,
-        "buffer_level_after": 16485
+        "buffer_level_before": 15490,
+        "buffer_level_after": 15490
       },
       {
-        "start_time": 325315,
-        "end_time": 331213,
+        "start_time": 326309,
+        "end_time": 331575,
         "segment": 194,
         "quality": 9,
-        "buffer_level_before": 13587,
-        "buffer_level_after": 13587
+        "buffer_level_before": 13225,
+        "buffer_level_after": 13225
       },
       {
-        "start_time": 331213,
-        "end_time": 333529,
+        "start_time": 331575,
+        "end_time": 333891,
         "segment": 195,
         "quality": 9,
-        "buffer_level_before": 14270,
-        "buffer_level_after": 14270
+        "buffer_level_before": 13908,
+        "buffer_level_after": 13908
       },
       {
-        "start_time": 333529,
-        "end_time": 335857,
+        "start_time": 333891,
+        "end_time": 336219,
         "segment": 196,
         "quality": 9,
-        "buffer_level_before": 14942,
-        "buffer_level_after": 14942
+        "buffer_level_before": 14580,
+        "buffer_level_after": 14580
       },
       {
-        "start_time": 335857,
-        "end_time": 338987,
+        "start_time": 336219,
+        "end_time": 339587,
         "segment": 197,
         "quality": 9,
-        "buffer_level_before": 14812,
-        "buffer_level_after": 14812
+        "buffer_level_before": 14213,
+        "buffer_level_after": 14213
       },
       {
-        "start_time": 338987,
-        "end_time": 342662,
+        "start_time": 339587,
+        "end_time": 343427,
         "segment": 198,
         "quality": 9,
-        "buffer_level_before": 14137,
-        "buffer_level_after": 14137
+        "buffer_level_before": 13373,
+        "buffer_level_after": 13373
       }
     ],
     "prefetch_events": [
@@ -3375,12 +3375,8 @@
         "segment": 186
       }
     ],
-    "rebuffer_starts_s": [
-      359.8
-    ],
-    "rebuffer_durations_s": [
-      0.0
-    ],
+    "rebuffer_starts_s": [],
+    "rebuffer_durations_s": [],
     "time_series": {
       "time_points": [
         0.236,
@@ -3510,13 +3506,13 @@
         312.618,
         316.304,
         319.411,
-        322.785,
-        325.315,
-        331.213,
-        333.529,
-        335.857,
-        338.987,
-        342.662
+        323.153,
+        326.309,
+        331.575,
+        333.891,
+        336.219,
+        339.587,
+        343.427
       ],
       "buffer_levels": [
         0.0,
@@ -3646,13 +3642,13 @@
         20.581,
         19.895,
         19.789,
-        16.014,
-        16.485,
-        13.587,
-        14.27,
-        14.942,
-        14.812,
-        14.137
+        15.646,
+        15.49,
+        13.225,
+        13.908,
+        14.58,
+        14.213,
+        13.373
       ],
       "qualities": [
         0,
@@ -3782,7 +3778,7 @@
         8,
         9,
         9,
-        8,
+        9,
         9,
         9,
         9,

@@ -386,6 +386,7 @@ class BolaEnh(Abr):
         self.state = BolaEnh.State.STARTUP
         self.placeholder = 0
         self.last_quality = 0
+        self._seek_hit_prefetch = False
 
         if gs.verbose:
             for q in range(len(gs.manifest.bitrates)):
@@ -444,8 +445,17 @@ class BolaEnh(Abr):
             self.state = BolaEnh.State.STEADY
             self.ibr_safety = BolaEnh.low_buffer_safety_factor_init
             quality = self.quality_from_throughput(gs.throughput)
-            self.placeholder = self.min_buffer_for_quality(quality) - buffer_level
-            self.placeholder = max(0, self.placeholder)
+            if getattr(self, '_seek_hit_prefetch', False):
+                # Seek landed on prefetch content: throughput estimate may be stale
+                # (no fresh download at the seek point). Use 2 quality levels below
+                # the throughput-based estimate for the placeholder — this avoids
+                # STEADY quality overselection while keeping utility reasonable.
+                self._seek_hit_prefetch = False
+                conservative_q = max(0, quality - 2)
+                self.placeholder = max(0, self.min_buffer_for_quality(conservative_q) - buffer_level)
+            else:
+                self.placeholder = self.min_buffer_for_quality(quality) - buffer_level
+                self.placeholder = max(0, self.placeholder)
             return (quality, 0)
 
         quality = self.quality_from_buffer_placeholder()
@@ -536,12 +546,10 @@ class BolaEnh(Abr):
 
     def report_seek(self, where):
         self.state = BolaEnh.State.STARTUP
-        # Clear any accumulated placeholder since the buffer state is effectively reset.
         self.placeholder = 0
-        # Reset the last chosen quality to a safe starting quality.
         self.last_quality = self.get_first_quality()
-        # Record the new playback segment index (assuming segment_time is in ms).
         self.last_seek_index = math.floor(where / gs.manifest.segment_time)
+        self._seek_hit_prefetch = False
 
     def check_abandon(self, progress, buffer_level):
         remain = progress.size - progress.downloaded
