@@ -1,10 +1,10 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Run simulations with and without buffer.py and collect metrics for web
 visualisation.
 
 Without buffer.py  : linear buffering, no prefetch, seeks clear the buffer.
-With buffer.py     : dynamic buffering + optional prefetch, seeks can hit
+With buffer.py     : Nonlinear Buffering + optional prefetch, seeks can hit
                      pre-downloaded chunks and avoid rebuffering.
 
 The JSON output is compatible with view_comparison.html (which auto-detects

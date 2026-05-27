@@ -1,4 +1,4 @@
-{
+﻿{
   "config": {
     "network": "synthetic\\network.json",
     "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
@@ -6,8 +6,8 @@
       "synthetic\\seeks.json",
       "synthetic\\seeks_prefetch_hit.json",
       "synthetic\\seeks_mixed.json",
-      "synthetic\\seeks_linear_hit_dynamic_miss.json",
-      "synthetic\\seeks_linear_miss_dynamic_hit.json"
+      "synthetic\\seeks_linear_hit_nonlinear_miss.json",
+      "synthetic\\seeks_linear_miss_nonlinear_hit.json"
     ],
     "prefetch_config": "synthetic\\test_prefetch_config.json",
     "network_multiplier": 1.0
@@ -23,8 +23,8 @@
     "seeks",
     "seeks_prefetch_hit",
     "seeks_mixed",
-    "seeks_linear_hit_dynamic_miss",
-    "seeks_linear_miss_dynamic_hit"
+    "seeks_linear_hit_nonlinear_miss",
+    "seeks_linear_miss_nonlinear_hit"
   ],
   "results": {
     "seeks/bola": {
@@ -57138,12 +57138,12 @@
         }
       }
     },
-    "seeks_linear_hit_dynamic_miss/bola": {
+    "seeks_linear_hit_nonlinear_miss/bola": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "bola",
-        "seek_config": "synthetic\\seeks_linear_hit_dynamic_miss.json",
+        "seek_config": "synthetic\\seeks_linear_hit_nonlinear_miss.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -62473,12 +62473,12 @@
         }
       }
     },
-    "seeks_linear_hit_dynamic_miss/bolae": {
+    "seeks_linear_hit_nonlinear_miss/bolae": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "bolae",
-        "seek_config": "synthetic\\seeks_linear_hit_dynamic_miss.json",
+        "seek_config": "synthetic\\seeks_linear_hit_nonlinear_miss.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -67614,12 +67614,12 @@
         }
       }
     },
-    "seeks_linear_hit_dynamic_miss/dynamic": {
+    "seeks_linear_hit_nonlinear_miss/dynamic": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "dynamic",
-        "seek_config": "synthetic\\seeks_linear_hit_dynamic_miss.json",
+        "seek_config": "synthetic\\seeks_linear_hit_nonlinear_miss.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -72883,12 +72883,12 @@
         }
       }
     },
-    "seeks_linear_hit_dynamic_miss/dynamicdash": {
+    "seeks_linear_hit_nonlinear_miss/dynamicdash": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "dynamicdash",
-        "seek_config": "synthetic\\seeks_linear_hit_dynamic_miss.json",
+        "seek_config": "synthetic\\seeks_linear_hit_nonlinear_miss.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -78104,12 +78104,12 @@
         }
       }
     },
-    "seeks_linear_hit_dynamic_miss/throughput": {
+    "seeks_linear_hit_nonlinear_miss/throughput": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "throughput",
-        "seek_config": "synthetic\\seeks_linear_hit_dynamic_miss.json",
+        "seek_config": "synthetic\\seeks_linear_hit_nonlinear_miss.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -83353,12 +83353,12 @@
         }
       }
     },
-    "seeks_linear_miss_dynamic_hit/bola": {
+    "seeks_linear_miss_nonlinear_hit/bola": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "bola",
-        "seek_config": "synthetic\\seeks_linear_miss_dynamic_hit.json",
+        "seek_config": "synthetic\\seeks_linear_miss_nonlinear_hit.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -88864,12 +88864,12 @@
         }
       }
     },
-    "seeks_linear_miss_dynamic_hit/bolae": {
+    "seeks_linear_miss_nonlinear_hit/bolae": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "bolae",
-        "seek_config": "synthetic\\seeks_linear_miss_dynamic_hit.json",
+        "seek_config": "synthetic\\seeks_linear_miss_nonlinear_hit.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -94169,12 +94169,12 @@
         }
       }
     },
-    "seeks_linear_miss_dynamic_hit/dynamic": {
+    "seeks_linear_miss_nonlinear_hit/dynamic": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "dynamic",
-        "seek_config": "synthetic\\seeks_linear_miss_dynamic_hit.json",
+        "seek_config": "synthetic\\seeks_linear_miss_nonlinear_hit.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -99626,12 +99626,12 @@
         }
       }
     },
-    "seeks_linear_miss_dynamic_hit/dynamicdash": {
+    "seeks_linear_miss_nonlinear_hit/dynamicdash": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "dynamicdash",
-        "seek_config": "synthetic\\seeks_linear_miss_dynamic_hit.json",
+        "seek_config": "synthetic\\seeks_linear_miss_nonlinear_hit.json",
         "seek_config_data": {
           "seeks": [
             {
@@ -104973,12 +104973,12 @@
         }
       }
     },
-    "seeks_linear_miss_dynamic_hit/throughput": {
+    "seeks_linear_miss_nonlinear_hit/throughput": {
       "config": {
         "network": "synthetic\\network.json",
         "movie": "C:\\Users\\sloth\\OneDrive\\\u684c\u9762\\Research Project\\sabre\\src\\synthetic\\movie.json",
         "abr": "throughput",
-        "seek_config": "synthetic\\seeks_linear_miss_dynamic_hit.json",
+        "seek_config": "synthetic\\seeks_linear_miss_nonlinear_hit.json",
         "seek_config_data": {
           "seeks": [
             {

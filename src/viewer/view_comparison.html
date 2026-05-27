@@ -393,7 +393,7 @@
     <div class="container">
         <header>
             <h1>Buffer.py Comparison Viewer</h1>
-            <p>Compare simulation results with and without dynamic buffering</p>
+            <p>Compare simulation results with and without Nonlinear Buffering</p>
         </header>
         
         <div class="file-input-section">
@@ -415,7 +415,7 @@
                     <h2>Cross-Comparison Summary</h2>
                     <p style="color:#7f8c8d;font-size:15px;margin-bottom:14px;">
                         Each row is one <strong>seek scenario</strong> (see cards above) &times; one <strong>ABR algorithm</strong>.
-                        <strong>Without</strong> = baseline without <code>buffer.py</code> (no dynamic buffering); <strong>with</strong> = same run with prefetch + dynamic buffer.
+                        <strong>Without</strong> = baseline without <code>buffer.py</code> (no Nonlinear Buffering); <strong>with</strong> = same run with prefetch + Nonlinear Buffer.
                         Click a row for detailed charts.
                     </p>
                     <div id="scenarioFilter" class="scenario-filter"></div>
@@ -566,35 +566,35 @@
                 short: 'Miss PF',
                 file: 'seeks.json',
                 css: 'miss',
-                blurb: 'Seeks land on non-prefetched segments. Both linear and dynamic buffering must re-download after every seek — prefetch provides no benefit here.'
+                blurb: 'Seeks land on non-prefetched segments. Both linear and Nonlinear Buffering must re-download after every seek — prefetch provides no benefit here.'
             },
             seeks_prefetch_hit: {
                 title: 'Seeks hit prefetch',
                 short: 'Hit PF',
                 file: 'seeks_prefetch_hit.json',
                 css: 'hit',
-                blurb: 'Seeks land exactly on prefetched segments. Dynamic buffering resumes instantly from cache; linear buffering must still re-download — expect clear stall reduction with dynamic.'
+                blurb: 'Seeks land exactly on prefetched segments. Nonlinear Buffering resumes instantly from cache; linear buffering must still re-download — expect clear stall reduction with dynamic.'
             },
             seeks_mixed: {
                 title: 'Seeks mixed',
                 short: 'Mixed',
                 file: 'seeks_mixed.json',
                 css: 'mixed',
-                blurb: 'Half of seeks hit prefetched segments, half miss. Dynamic buffering gains a partial advantage — intermediate improvement between the full-hit and full-miss cases.'
+                blurb: 'Half of seeks hit prefetched segments, half miss. Nonlinear Buffering gains a partial advantage — intermediate improvement between the full-hit and full-miss cases.'
             },
-            seeks_linear_hit_dynamic_miss: {
+            seeks_linear_hit_nonlinear_miss: {
                 title: 'Linear hit, dynamic miss',
                 short: 'Lin Hit',
-                file: 'seeks_linear_hit_dynamic_miss.json',
+                file: 'seeks_linear_hit_nonlinear_miss.json',
                 css: 'miss',
-                blurb: 'Linear buffering hits the prefetch chunk when seeking; dynamic buffering misses the prefetch chunk when seeking.'
+                blurb: 'Linear buffering hits the prefetch chunk when seeking; Nonlinear Buffering misses the prefetch chunk when seeking.'
             },
-            seeks_linear_miss_dynamic_hit: {
+            seeks_linear_miss_nonlinear_hit: {
                 title: 'Linear miss, dynamic hit',
-                short: 'Dyn Hit',
-                file: 'seeks_linear_miss_dynamic_hit.json',
+                short: 'nonlinear hit',
+                file: 'seeks_linear_miss_nonlinear_hit.json',
                 css: 'hit',
-                blurb: 'Linear buffering misses the prefetch chunk when seeking; dynamic buffering hits the prefetch chunk when seeking.'
+                blurb: 'Linear buffering misses the prefetch chunk when seeking; Nonlinear Buffering hits the prefetch chunk when seeking.'
             },
             // Session-replay prefetch config scenarios (fixed seeks, varying prefetch strategy).
             // Ordered to mirror synthetic: miss → hit → mixed → lin-hit → dyn-hit.
@@ -605,7 +605,7 @@
                 file: 'prefetch_config_real_seeks_miss.json',
                 css: 'miss',
                 kind: 'real',
-                blurb: 'Both linear and dynamic buffering miss the prefetch chunk.'
+                blurb: 'Both linear and Nonlinear Buffering miss the prefetch chunk.'
             },
             prefetch_hit: {
                 title: 'Seeks hit prefetch',
@@ -613,7 +613,7 @@
                 file: 'prefetch_config_real_prefetch_hit.json',
                 css: 'hit',
                 kind: 'real',
-                blurb: 'Both linear and dynamic buffering hit the prefetch chunk.'
+                blurb: 'Both linear and Nonlinear Buffering hit the prefetch chunk.'
             },
             mixed: {
                 title: 'Seeks mixed',
@@ -623,21 +623,21 @@
                 kind: 'real',
                 blurb: 'Some seeks hit the prefetch chunk; others miss it.'
             },
-            linear_hit_dynamic_miss: {
+            linear_hit_nonlinear_miss: {
                 title: 'Linear hit, dynamic miss',
                 short: 'Lin Hit',
-                file: 'prefetch_config_real_linear_hit_dynamic_miss.json',
+                file: 'prefetch_config_real_linear_hit_nonlinear_miss.json',
                 css: 'miss',
                 kind: 'real',
-                blurb: 'Linear buffering hits the prefetch chunk when seeking; dynamic buffering misses the prefetch chunk when seeking.'
+                blurb: 'Linear buffering hits the prefetch chunk when seeking; Nonlinear Buffering misses the prefetch chunk when seeking.'
             },
-            linear_miss_dynamic_hit: {
+            linear_miss_nonlinear_hit: {
                 title: 'Linear miss, dynamic hit',
-                short: 'Dyn Hit',
-                file: 'prefetch_config_real_linear_miss_dynamic_hit.json',
+                short: 'nonlinear hit',
+                file: 'prefetch_config_real_linear_miss_nonlinear_hit.json',
                 css: 'hit',
                 kind: 'real',
-                blurb: 'Linear buffering misses the prefetch chunk when seeking; dynamic buffering hits the prefetch chunk when seeking.'
+                blurb: 'Linear buffering misses the prefetch chunk when seeking; Nonlinear Buffering hits the prefetch chunk when seeking.'
             }
         };
 

@@ -1,5 +1,5 @@
-"""
-Prefetch module for SABRE dynamic buffering.
+﻿"""
+Prefetch module for SABRE Nonlinear Buffering.
 
 Decides *when* and *where* to prefetch based on:
 - A JSON config that lists target segment indices and a buffer-level threshold

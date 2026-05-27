@@ -1,4 +1,4 @@
-# Copyright (c) 2018, Kevin Spiteri
+﻿# Copyright (c) 2018, Kevin Spiteri
 # All rights reserved.
 #
 # Redistribution and use in source and binary forms, with or without
@@ -1367,7 +1367,7 @@ if __name__ == "__main__":
     parser.add_argument(
         "--use-buffer-py",
         action="store_true",
-        help="Use MultiRegionBuffer from buffer.py for dynamic buffering."
+        help="Use MultiRegionBuffer from buffer.py for Nonlinear Buffering."
     )
     parser.add_argument(
         "-pc",

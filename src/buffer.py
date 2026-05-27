@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 import math
 import sys
 import typing
@@ -98,7 +98,7 @@ class BufferRegion:
 
 class MultiRegionBuffer:
     """
-    Multi-Region-Buffer: buffer with multiple regions for dynamic buffering."""
+    Multi-Region-Buffer: buffer with multiple regions for Nonlinear Buffering."""
     
     def __init__(self, chunk_duration) -> None:
         self.region_starts = []     # start idx of regions for bisect
@@ -270,7 +270,7 @@ class MultiRegionBuffer:
         except ValueError:
             return chunks
         
-        # QUESTION: Shall we ignore the gaps between regions for dynamic buffering? 
+        # QUESTION: Shall we ignore the gaps between regions for Nonlinear Buffering? 
         # Current implementation does not ignore the gaps.
         current_region = region
         for i in range(region_idx + 1, len(valid_starts)):

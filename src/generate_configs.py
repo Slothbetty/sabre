@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
 Generate prefetch + seek configs for SABRE comparison demos.
 
@@ -243,7 +243,7 @@ def build_mixed_seek_targets(
     return combined
 
 
-def generate_linear_hit_dynamic_miss_seeks(
+def generate_linear_hit_nonlinear_miss_seeks(
     seek_when_times: list[float],
     prefetch_set: set[int],
     seg_dur_ms: int,
@@ -252,7 +252,7 @@ def generate_linear_hit_dynamic_miss_seeks(
 ) -> list[dict]:
     """
     Generate short forward seeks that fall within the linear buffer window but
-    target non-prefetched segments (linear buffering hit, dynamic buffering miss).
+    target non-prefetched segments (linear buffering hit, Nonlinear Buffering miss).
 
     For each seek_when time W, picks the non-prefetch segment whose seek_to time
     is closest to W + forward_window_ms / 2, constrained to (W, W + forward_window_ms].
@@ -288,7 +288,7 @@ def generate_linear_hit_dynamic_miss_seeks(
     return seeks
 
 
-def generate_linear_miss_dynamic_hit_seeks(
+def generate_linear_miss_nonlinear_hit_seeks(
     seek_when_times: list[float],
     prefetch_indices: list[int],
     seg_dur_ms: int,
@@ -296,7 +296,7 @@ def generate_linear_miss_dynamic_hit_seeks(
 ) -> list[dict]:
     """
     Generate far forward seeks that jump beyond the linear buffer window but
-    land on prefetched segments (linear buffering miss, dynamic buffering hit).
+    land on prefetched segments (linear buffering miss, Nonlinear Buffering hit).
 
     For each seek_when time W, picks the first prefetch segment whose seek_to
     time exceeds W + min_forward_ms.  Falls back to the last prefetch segment
@@ -333,12 +333,12 @@ def generate_comparison_bundle(
 ) -> tuple[dict, dict, dict, dict, dict, dict]:
     """
     Build (test_prefetch_config, seeks_prefetch_hit, seeks_miss, seeks_mixed,
-           seeks_linear_hit_dynamic_miss, seeks_linear_miss_dynamic_hit):
+           seeks_linear_hit_nonlinear_miss, seeks_linear_miss_nonlinear_hit):
     one shared prefetch list; hit seeks land on prefetched segments;
     miss seeks land on segments outside that list;
     mixed seeks have a random mix of hits and misses;
-    linear_hit_dynamic_miss seeks are short forward seeks to non-prefetched segments;
-    linear_miss_dynamic_hit seeks are far forward seeks to prefetched segments.
+    linear_hit_nonlinear_miss seeks are short forward seeks to non-prefetched segments;
+    linear_miss_nonlinear_hit seeks are far forward seeks to prefetched segments.
     """
     prefetch_indices = build_spaced_prefetch_indices(num_segments, prefetch_count)
     prefetch_set = set(prefetch_indices)
@@ -354,7 +354,7 @@ def generate_comparison_bundle(
 
     # Per-seek forward-only targets: each entry is for the corresponding seek_when.
     # Hit seeks must land beyond the linear buffer window (max_buffer_ms) so that
-    # the linear buffer always misses while the prefetched dynamic buffer hits.
+    # the linear buffer always misses while the prefetched Nonlinear Buffer hits.
     hit_targets = build_forward_seek_targets(
         prefetch_indices, schedule, seg_dur_ms, min_forward_ms=max_buffer_ms
     )
@@ -385,10 +385,10 @@ def generate_comparison_bundle(
         mixed_targets, schedule, seg_dur_ms, num_segments
     )
 
-    seeks_lin_hit_dyn_miss = generate_linear_hit_dynamic_miss_seeks(
+    seeks_lin_hit_nonlin_miss = generate_linear_hit_nonlinear_miss_seeks(
         schedule, prefetch_set, seg_dur_ms, num_segments
     )
-    seeks_lin_miss_dyn_hit = generate_linear_miss_dynamic_hit_seeks(
+    seeks_lin_miss_nonlin_hit = generate_linear_miss_nonlinear_hit_seeks(
         schedule, prefetch_indices, seg_dur_ms
     )
 
@@ -402,8 +402,8 @@ def generate_comparison_bundle(
         {"seeks": seeks_hit},
         {"seeks": seeks_miss},
         {"seeks": seeks_mixed},
-        {"seeks": seeks_lin_hit_dyn_miss},
-        {"seeks": seeks_lin_miss_dyn_hit},
+        {"seeks": seeks_lin_hit_nonlin_miss},
+        {"seeks": seeks_lin_miss_nonlin_hit},
     )
 
 
@@ -454,14 +454,14 @@ def main():
         help="Seek file for mixed hit/miss scenario (default: seeks_mixed.json)",
     )
     parser.add_argument(
-        "--output-linear-hit-dynamic-miss",
-        default="seeks_linear_hit_dynamic_miss.json",
-        help="Seek file for linear-hit/dynamic-miss scenario (default: seeks_linear_hit_dynamic_miss.json)",
+        "--output-linear-hit-nonlinear-miss",
+        default="seeks_linear_hit_nonlinear_miss.json",
+        help="Seek file for linear-hit/nonlinear-miss scenario (default: seeks_linear_hit_nonlinear_miss.json)",
     )
     parser.add_argument(
-        "--output-linear-miss-dynamic-hit",
-        default="seeks_linear_miss_dynamic_hit.json",
-        help="Seek file for linear-miss/dynamic-hit scenario (default: seeks_linear_miss_dynamic_hit.json)",
+        "--output-linear-miss-nonlinear-hit",
+        default="seeks_linear_miss_nonlinear_hit.json",
+        help="Seek file for linear-miss/nonlinear-hit scenario (default: seeks_linear_miss_nonlinear_hit.json)",
     )
     parser.add_argument(
         "--mixed-hit-ratio", type=float, default=0.5,
@@ -510,8 +510,8 @@ def main():
             seeks_hit_cfg,
             seeks_miss_cfg,
             seeks_mixed_cfg,
-            seeks_lin_hit_dyn_miss_cfg,
-            seeks_lin_miss_dyn_hit_cfg,
+            seeks_lin_hit_nonlin_miss_cfg,
+            seeks_lin_miss_nonlin_hit_cfg,
         ) = generate_comparison_bundle(
             num_seeks=args.num_seeks,
             total_s=total_s,
@@ -539,15 +539,15 @@ def main():
     print(f"Seeks (miss):                  {args.output_seeks_miss} -> all seek_to miss prefetch")
     print(f"Seeks (mixed):                 {args.output_seeks_mixed} -> {num_hits}/{args.num_seeks} hit "
           f"(ratio={args.mixed_hit_ratio}, seed={args.seed})")
-    print(f"Seeks (linear hit, dyn miss):  {args.output_linear_hit_dynamic_miss} -> short forward seeks, non-prefetch targets")
-    print(f"Seeks (linear miss, dyn hit):  {args.output_linear_miss_dynamic_hit} -> far forward seeks, prefetch targets")
+    print(f"Seeks (linear hit, nonlinear miss):  {args.output_linear_hit_nonlinear_miss} -> short forward seeks, non-prefetch targets")
+    print(f"Seeks (linear miss, nonlinear hit):  {args.output_linear_miss_nonlinear_hit} -> far forward seeks, prefetch targets")
 
     for label, cfg in (
         ("prefetch_hit", seeks_hit_cfg),
         ("prefetch_miss", seeks_miss_cfg),
         ("mixed", seeks_mixed_cfg),
-        ("linear_hit_dynamic_miss", seeks_lin_hit_dyn_miss_cfg),
-        ("linear_miss_dynamic_hit", seeks_lin_miss_dyn_hit_cfg),
+        ("linear_hit_nonlinear_miss", seeks_lin_hit_nonlin_miss_cfg),
+        ("linear_miss_nonlinear_hit", seeks_lin_miss_nonlin_hit_cfg),
     ):
         print(f"\n  {label}:")
         for i, s in enumerate(cfg["seeks"], 1):
@@ -565,10 +565,10 @@ def main():
         print(json.dumps(seeks_miss_cfg, indent=2))
         print("\n--- seeks (mixed) ---")
         print(json.dumps(seeks_mixed_cfg, indent=2))
-        print("\n--- seeks_linear_hit_dynamic_miss ---")
-        print(json.dumps(seeks_lin_hit_dyn_miss_cfg, indent=2))
-        print("\n--- seeks_linear_miss_dynamic_hit ---")
-        print(json.dumps(seeks_lin_miss_dyn_hit_cfg, indent=2))
+        print("\n--- seeks_linear_hit_nonlinear_miss ---")
+        print(json.dumps(seeks_lin_hit_nonlin_miss_cfg, indent=2))
+        print("\n--- seeks_linear_miss_nonlinear_hit ---")
+        print(json.dumps(seeks_lin_miss_nonlin_hit_cfg, indent=2))
         print("\n(dry run — no files written)")
         return
 
@@ -577,8 +577,8 @@ def main():
         (out_dir / args.output_prefetch_hit, seeks_hit_cfg),
         (out_dir / args.output_seeks_miss, seeks_miss_cfg),
         (out_dir / args.output_seeks_mixed, seeks_mixed_cfg),
-        (out_dir / args.output_linear_hit_dynamic_miss, seeks_lin_hit_dyn_miss_cfg),
-        (out_dir / args.output_linear_miss_dynamic_hit, seeks_lin_miss_dyn_hit_cfg),
+        (out_dir / args.output_linear_hit_nonlinear_miss, seeks_lin_hit_nonlin_miss_cfg),
+        (out_dir / args.output_linear_miss_nonlinear_hit, seeks_lin_miss_nonlin_hit_cfg),
     ]
     for path, obj in paths:
         with open(path, "w") as f:
@@ -590,8 +590,8 @@ def main():
         args.output_seeks_miss,
         args.output_prefetch_hit,
         args.output_seeks_mixed,
-        args.output_linear_hit_dynamic_miss,
-        args.output_linear_miss_dynamic_hit,
+        args.output_linear_hit_nonlinear_miss,
+        args.output_linear_miss_nonlinear_hit,
     ])
     print("\nRun multi-scenario comparison with:")
     print(

@@ -1,6 +1,6 @@
 ﻿# StreamLens Simulation Guide
 
-StreamLens is a Python-based simulation environment for evaluating Adaptive Bitrate (ABR) streaming algorithms under realistic seek and prefetch conditions. It extends the original SABRE simulator with a dynamic multi-region buffer (`MultiRegionBuffer`) that preserves buffered segments across seek events and supports out-of-order prefetch downloads.
+StreamLens is a Python-based simulation environment for evaluating Adaptive Bitrate (ABR) streaming algorithms under realistic seek and prefetch conditions. It extends the original SABRE simulator with a nonlinear multi-region buffer (`MultiRegionBuffer`) that preserves buffered segments across seek events and supports out-of-order prefetch downloads.
 
 ---
 
@@ -15,7 +15,7 @@ StreamLens is a Python-based simulation environment for evaluating Adaptive Bitr
   - [Running Simulations](#running-simulations)
   - [Graph Generation](#graph-generation)
   - [Regression Testing](#regression-testing)
-- **Part II — Dynamic Buffering (`buffer.py`)**
+- **Part II — Nonlinear Buffering (`buffer.py`)**
   - [Overview](#overview)
   - [Running Buffer Comparisons](#running-buffer-comparisons)
   - [Viewing Results](#viewing-results)
@@ -169,7 +169,9 @@ python test_simulation_regression.py
 
 ---
 
-# Part II — Dynamic Buffering (`buffer.py`)
+# Part II — Nonlinear Buffering (`buffer.py`)
+
+> **Note:** In the paper, *Nonlinear Buffering* is referred to as **nonlinear buffering**. The terms are interchangeable throughout this codebase and documentation.
 
 Everything below relates to `MultiRegionBuffer` from `buffer.py` — the dynamic, multi-region buffer that replaces the simple linear `buffer_contents` list.
 
@@ -179,7 +181,7 @@ Everything below relates to `MultiRegionBuffer` from `buffer.py` — the dynamic
 
 **What `buffer.py` adds:**
 
-| | Linear Buffering (without) | Dynamic Buffering (with) |
+| | Linear Buffering (without) | Nonlinear Buffering (with) |
 |---|---|---|
 | Data structure | `gs.buffer_contents` — flat list of `(segment, quality)` tuples | `gs.multi_region_buffer` — `MultiRegionBuffer` with multiple `BufferRegion` objects |
 | Regions | Single contiguous region | Multiple non-contiguous regions |
@@ -225,7 +227,7 @@ The canonical synthetic workflow — runs all ABR algorithms against all five se
 ```bash
 python run_comparison.py \
   -n synthetic/network.json -m synthetic/movie.json \
-  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_dynamic_miss.json,synthetic/seeks_linear_miss_dynamic_hit.json \
+  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_nonlinear_miss.json,synthetic/seeks_linear_miss_nonlinear_hit.json \
   -pc synthetic/test_prefetch_config.json \
   -a all -o synthetic/results
 ```
@@ -373,8 +375,8 @@ The synthetic workflow varies the **seek pattern** across 5 scenarios with a fix
 | `seeks/` | `seeks.json` | Both buffer modes miss the prefetch cache |
 | `seeks_prefetch_hit/` | `seeks_prefetch_hit.json` | Seeks land on prefetched segments; dynamic wins |
 | `seeks_mixed/` | `seeks_mixed.json` | Mix of hits and misses |
-| `seeks_linear_hit_dynamic_miss/` | `seeks_linear_hit_dynamic_miss.json` | Short seeks within linear buffer range; prefetch targets wrong segments |
-| `seeks_linear_miss_dynamic_hit/` | `seeks_linear_miss_dynamic_hit.json` | Long seeks beyond linear range; prefetch targets correct segments |
+| `seeks_linear_hit_nonlinear_miss/` | `seeks_linear_hit_nonlinear_miss.json` | Short seeks within linear buffer range; prefetch targets wrong segments |
+| `seeks_linear_miss_nonlinear_hit/` | `seeks_linear_miss_nonlinear_hit.json` | Long seeks beyond linear range; prefetch targets correct segments |
 
 ### 1. Create seek + prefetch files
 
@@ -392,7 +394,7 @@ mv test_prefetch_config.json seeks.json seeks_prefetch_hit.json seeks_mixed.json
 ```bash
 python run_comparison.py \
   -n synthetic/network.json -m synthetic/movie.json \
-  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_dynamic_miss.json,synthetic/seeks_linear_miss_dynamic_hit.json \
+  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_nonlinear_miss.json,synthetic/seeks_linear_miss_nonlinear_hit.json \
   -pc synthetic/test_prefetch_config.json \
   -a all -o synthetic/results
 ```
@@ -410,7 +412,7 @@ python serve_viewer.py
 
 ### Buffer Equivalence Tests
 
-Verify that linear and dynamic buffers produce identical output during sequential chunk downloads:
+Verify that linear and Nonlinear Buffers produce identical output during sequential chunk downloads:
 ```bash
 python test_buffer_equivalence.py
 ```
@@ -420,21 +422,21 @@ python test_buffer_equivalence.py
 - `--abr <algorithm>` — test specific ABR algorithm
 - `-v, --verbose` — verbose output
 
-### Dynamic Buffer Case Tests
+### Nonlinear Buffer Case Tests
 
-Run case-based tests that verify the dynamic buffer algorithm handles each scenario correctly:
+Run case-based tests that verify the Nonlinear Buffer algorithm handles each scenario correctly:
 ```bash
-python test_dynamic_buffer_cases.py
+python test_nonlinear_buffer_cases.py
 ```
 
 With verbose output:
 ```bash
-python test_dynamic_buffer_cases.py -v
+python test_nonlinear_buffer_cases.py -v
 ```
 
 The suite contains 14 tests across two test classes:
 
-**TestDynamicBuffering** (Tests 1–10) — buffer seek and prefetch logic:
+**TestNonlinearBuffering** (Tests 1–10) — buffer seek and prefetch logic:
 
 | # | Test | What it verifies |
 |---|------|------------------|
@@ -464,7 +466,7 @@ The suite contains 14 tests across two test classes:
 
 ## Use Cases: Detailed Flow Documentation
 
-Each use case shows the **linear buffer** path side-by-side with the **dynamic buffer** path so you can see exactly where behaviour diverges.
+Each use case shows the **linear buffer** path side-by-side with the **Nonlinear Buffer** path so you can see exactly where behaviour diverges.
 
 > **Note:** The compatibility methods (previously in `BufferWrapper`) have been consolidated into `MultiRegionBuffer` in `buffer.py`. State variables like `current_playback_pos` are managed directly in `GlobalState`. All references use `gs.multi_region_buffer` for buffer operations and `gs.current_playback_pos` for playback position tracking.
 
@@ -492,7 +494,7 @@ gs.buffer_contents.append((gs.next_segment, quality))
 gs.next_segment += 1
 ```
 
-#### Dynamic Buffer Behavior
+#### Nonlinear Buffer Behavior
 
 **Flow** (for segment N):
 ```
@@ -537,7 +539,7 @@ gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
 | Within range (5 → 7) | `[(5,q5)..(8,q8)]` | `[(7,q7),(8,q8)]` | No |
 | Outside range (5 → 20) | `[(5,q5)..(8,q8)]` | `[]` | Yes |
 
-#### Dynamic Buffer Behavior
+#### Nonlinear Buffer Behavior
 
 **Flow** (seek from segment 5 to segment 20):
 ```
@@ -592,11 +594,11 @@ buffer_level = segment_time * len(playable_chunks) - buffer_fcc
 | Linear | All items in `buffer_contents` |
 | Dynamic | Contiguous chunks from `current_playback_pos` (gaps excluded) |
 
-Dynamic buffering does not inflate buffer level with gaps between regions.
+Nonlinear Buffering does not inflate buffer level with gaps between regions.
 
 ### Seek Behavior Comparison
 
-| Scenario | Linear Buffer | Dynamic Buffer |
+| Scenario | Linear Buffer | Nonlinear Buffer |
 |----------|--------------|----------------|
 | Seek within range | Trim from front | Trim from front, preserve ahead |
 | Forward seek outside | Clear buffer | Clear buffer, can prefetch |
@@ -620,7 +622,7 @@ Dynamic buffering does not inflate buffer level with gaps between regions.
 - No seeks expected
 - Baseline comparison
 
-**Dynamic Buffering (with `buffer.py`):**
+**Nonlinear Buffering (with `buffer.py`):**
 - Scenarios with user seeks
 - Prefetching strategies
 - Non-sequential segment access
@@ -721,11 +723,11 @@ The example trace (UUID `56329467-babb-4d75-bb58-70f3906369fe`) has a significan
 
 | Scenario | Config file | Threshold | Prefetch targets | What it tests |
 |----------|-------------|-----------|-----------------|--------------|
-| `seeks_miss` | `prefetch_config_real_seeks_miss.json` | 3 500 ms | segs 45–46 | Both linear and dynamic buffering miss the prefetch chunk |
-| `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Both linear and dynamic buffering hit the prefetch chunk |
+| `seeks_miss` | `prefetch_config_real_seeks_miss.json` | 3 500 ms | segs 45–46 | Both linear and Nonlinear Buffering miss the prefetch chunk |
+| `prefetch_hit` | `prefetch_config_real_prefetch_hit.json` | 3 500 ms | segs 62–63 | Both linear and Nonlinear Buffering hit the prefetch chunk |
 | `mixed` | `prefetch_config_real_mixed.json` | 3 500 ms | segs 62–63 + 75–76 | Some seeks hit the prefetch chunk; others miss it |
-| `linear_hit_dynamic_miss` | `prefetch_config_real_linear_hit_dynamic_miss.json` | 3 500 ms | segs 75–79 | Linear buffering hits the prefetch chunk; dynamic buffering misses it |
-| `linear_miss_dynamic_hit` | `prefetch_config_real_linear_miss_dynamic_hit.json` | 3 500 ms | segs 62–65 | Dynamic buffering hits the prefetch chunk; linear buffering misses it |
+| `linear_hit_nonlinear_miss` | `prefetch_config_real_linear_hit_nonlinear_miss.json` | 3 500 ms | segs 75–79 | Linear buffering hits the prefetch chunk; Nonlinear Buffering misses it |
+| `linear_miss_nonlinear_hit` | `prefetch_config_real_linear_miss_nonlinear_hit.json` | 3 500 ms | segs 62–65 | Nonlinear Buffering hits the prefetch chunk; linear buffering misses it |
 
 To create a new prefetch config:
 ```json
@@ -849,16 +851,16 @@ chunk_replay/
 ├── seeks.json                        # Seeks that miss the prefetch list
 ├── seeks_prefetch_hit.json           # Seeks aligned with prefetch targets
 ├── seeks_mixed.json                  # Mix of hit and miss seeks
-├── seeks_linear_hit_dynamic_miss.json
-├── seeks_linear_miss_dynamic_hit.json
+├── seeks_linear_hit_nonlinear_miss.json
+├── seeks_linear_miss_nonlinear_hit.json
 ├── prefetch_config.json              # Shared prefetch config for all scenarios
 └── results/
     ├── comparison_summary.json       # Load this in the viewer
     ├── seeks/
     ├── seeks_prefetch_hit/
     ├── seeks_mixed/
-    ├── seeks_linear_hit_dynamic_miss/
-    └── seeks_linear_miss_dynamic_hit/
+    ├── seeks_linear_hit_nonlinear_miss/
+    └── seeks_linear_miss_nonlinear_hit/
 ```
 
 Each run overwrites `chunk_replay/` with the new video's data.
@@ -871,7 +873,7 @@ Each run overwrites `chunk_replay/` with the new video's data.
 sabre/src/
 │
 ├── sabre.py                          # Core simulator
-├── buffer.py                         # MultiRegionBuffer (dynamic buffering)
+├── buffer.py                         # MultiRegionBuffer (Nonlinear Buffering)
 ├── prefetch.py                       # PrefetchModule
 ├── global_state.py                   # GlobalState singleton
 ├── abr_algorithms.py                 # ABR algorithm implementations
@@ -887,8 +889,8 @@ sabre/src/
 ├── parse_session_replays.py              # Converts YouTube trace CSV → network/seeks JSON
 ├── merge_session_replay_summaries.py     # Merges 5 Session-replay scenario summaries into one
 │
-├── test_buffer_equivalence.py        # Linear ↔ dynamic buffer equivalence tests
-├── test_dynamic_buffer_cases.py      # Dynamic buffer algorithm case tests
+├── test_buffer_equivalence.py        # Linear ↔ Nonlinear Buffer equivalence tests
+├── test_nonlinear_buffer_cases.py      # Nonlinear Buffer algorithm case tests
 │
 ├── viewer/
 │   └── view_comparison.html          # Main viewer: single-run + comparison_summary.json dashboard
@@ -899,8 +901,8 @@ sabre/src/
 │   ├── seeks.json                    # Seeks that miss the prefetch list
 │   ├── seeks_prefetch_hit.json       # Seeks aligned with prefetch targets
 │   ├── seeks_mixed.json              # Random mix of hit and miss seeks
-│   ├── seeks_linear_hit_dynamic_miss.json
-│   ├── seeks_linear_miss_dynamic_hit.json
+│   ├── seeks_linear_hit_nonlinear_miss.json
+│   ├── seeks_linear_miss_nonlinear_hit.json
 │   ├── test_prefetch_config.json     # Prefetch config used for synthetic runs
 │   ├── test_prefetch_config_fixture.json  # Fixture for unit tests
 │   └── results/                      # Output from synthetic run_comparison.py
@@ -909,8 +911,8 @@ sabre/src/
 │       │   └── comparison_<abr>.json
 │       ├── seeks_prefetch_hit/
 │       ├── seeks_mixed/
-│       ├── seeks_linear_hit_dynamic_miss/
-│       └── seeks_linear_miss_dynamic_hit/
+│       ├── seeks_linear_hit_nonlinear_miss/
+│       └── seeks_linear_miss_nonlinear_hit/
 │
 ├── session_replay/                       # Pipeline 1: real YouTube trace inputs and results
 │   ├── yt_traces_2026-04-18.csv      # Raw trace CSV from the browser extension
@@ -920,16 +922,16 @@ sabre/src/
 │   ├── prefetch_config_real_seeks_miss.json          # Regenerated by run_session_replay_comparison.py
 │   ├── prefetch_config_real_prefetch_hit.json        #   whenever a new movie is used
 │   ├── prefetch_config_real_mixed.json
-│   ├── prefetch_config_real_linear_hit_dynamic_miss.json
-│   ├── prefetch_config_real_linear_miss_dynamic_hit.json
+│   ├── prefetch_config_real_linear_hit_nonlinear_miss.json
+│   ├── prefetch_config_real_linear_miss_nonlinear_hit.json
 │   └── results/                      # Output from run_session_replay_comparison.py
 │       ├── comparison_summary.json   # Load this in the viewer
 │       ├── seeks_miss/
 │       │   └── comparison_<abr>.json
 │       ├── prefetch_hit/
 │       ├── mixed/
-│       ├── linear_hit_dynamic_miss/
-│       └── linear_miss_dynamic_hit/
+│       ├── linear_hit_nonlinear_miss/
+│       └── linear_miss_nonlinear_hit/
 │
 ├── chunk_replay/                     # Pipeline 2: generated by run_chunk_replay_comparison.py (git-ignored)
 │   ├── movie.json                    # Extracted from chunks entry
@@ -937,16 +939,16 @@ sabre/src/
 │   ├── seeks.json                    # Generated seeks (miss scenario)
 │   ├── seeks_prefetch_hit.json
 │   ├── seeks_mixed.json
-│   ├── seeks_linear_hit_dynamic_miss.json
-│   ├── seeks_linear_miss_dynamic_hit.json
+│   ├── seeks_linear_hit_nonlinear_miss.json
+│   ├── seeks_linear_miss_nonlinear_hit.json
 │   ├── prefetch_config.json          # Shared prefetch config for all scenarios
 │   └── results/
 │       ├── comparison_summary.json   # Load this in the viewer
 │       ├── seeks/
 │       ├── seeks_prefetch_hit/
 │       ├── seeks_mixed/
-│       ├── seeks_linear_hit_dynamic_miss/
-│       └── seeks_linear_miss_dynamic_hit/
+│       ├── seeks_linear_hit_nonlinear_miss/
+│       └── seeks_linear_miss_nonlinear_hit/
 │
 ├── yt_trace_collector/               # Chrome extension for collecting YouTube traces
 │   ├── manifest.json

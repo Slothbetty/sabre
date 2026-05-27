@@ -9,8 +9,8 @@
       "session_replay/prefetch_config_real_seeks_miss.json",
       "session_replay/prefetch_config_real_prefetch_hit.json",
       "session_replay/prefetch_config_real_mixed.json",
-      "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
-      "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json"
+      "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
+      "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json"
     ],
     "network_multiplier": 1.0
   },
@@ -25,8 +25,8 @@
     "seeks_miss",
     "prefetch_hit",
     "mixed",
-    "linear_hit_dynamic_miss",
-    "linear_miss_dynamic_hit"
+    "linear_hit_nonlinear_miss",
+    "linear_miss_nonlinear_hit"
   ],
   "results": {
     "seeks_miss/bola": {
@@ -80118,7 +80118,7 @@
         }
       }
     },
-    "linear_hit_dynamic_miss/bola": {
+    "linear_hit_nonlinear_miss/bola": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -80148,7 +80148,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -85405,7 +85405,7 @@
         }
       }
     },
-    "linear_hit_dynamic_miss/bolae": {
+    "linear_hit_nonlinear_miss/bolae": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -85435,7 +85435,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -90630,7 +90630,7 @@
         }
       }
     },
-    "linear_hit_dynamic_miss/dynamic": {
+    "linear_hit_nonlinear_miss/dynamic": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -90660,7 +90660,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -96013,7 +96013,7 @@
         }
       }
     },
-    "linear_hit_dynamic_miss/dynamicdash": {
+    "linear_hit_nonlinear_miss/dynamicdash": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -96043,7 +96043,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -101316,7 +101316,7 @@
         }
       }
     },
-    "linear_hit_dynamic_miss/throughput": {
+    "linear_hit_nonlinear_miss/throughput": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -101346,7 +101346,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_dynamic_miss.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_hit_nonlinear_miss.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -106613,7 +106613,7 @@
         }
       }
     },
-    "linear_miss_dynamic_hit/bola": {
+    "linear_miss_nonlinear_hit/bola": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -106643,7 +106643,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -111978,7 +111978,7 @@
         }
       }
     },
-    "linear_miss_dynamic_hit/bolae": {
+    "linear_miss_nonlinear_hit/bolae": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -112008,7 +112008,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -117243,7 +117243,7 @@
         }
       }
     },
-    "linear_miss_dynamic_hit/dynamic": {
+    "linear_miss_nonlinear_hit/dynamic": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -117273,7 +117273,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -122650,7 +122650,7 @@
         }
       }
     },
-    "linear_miss_dynamic_hit/dynamicdash": {
+    "linear_miss_nonlinear_hit/dynamicdash": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -122680,7 +122680,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {
@@ -127931,7 +127931,7 @@
         }
       }
     },
-    "linear_miss_dynamic_hit/throughput": {
+    "linear_miss_nonlinear_hit/throughput": {
       "config": {
         "network": "session_replay/network_56329467-babb-4d75-bb58-70f3906369fe.json",
         "movie": "synthetic/movie.json",
@@ -127961,7 +127961,7 @@
             }
           ]
         },
-        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_dynamic_hit.json",
+        "prefetch_config": "session_replay/prefetch_config_real_linear_miss_nonlinear_hit.json",
         "network_multiplier": 1.0
       },
       "without_buffer_py": {

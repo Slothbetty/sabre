@@ -1,4 +1,4 @@
-"""
+﻿"""
 GlobalState module for SABRE simulation.
 
 This module contains the GlobalState singleton class that manages all global state
@@ -85,7 +85,7 @@ class GlobalState:
             # Startup time
             self.startup_time = 0
             
-            # MultiRegionBuffer for dynamic buffering (initialized later when manifest is available)
+            # MultiRegionBuffer for Nonlinear Buffering (initialized later when manifest is available)
             self.multi_region_buffer = None
             
             GlobalState._initialized = True

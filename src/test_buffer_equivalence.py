@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+﻿#!/usr/bin/env python3
 """
-Equivalence test: linear buffer vs dynamic buffer.
+Equivalence test: linear buffer vs Nonlinear Buffer.
 
 Verifies that simulations with and without buffer.py (MultiRegionBuffer)
 produce identical metrics during sequential chunk downloads — i.e. the

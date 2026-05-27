@@ -8,8 +8,8 @@ SCENARIOS = [
     "seeks_miss",
     "prefetch_hit",
     "mixed",
-    "linear_hit_dynamic_miss",
-    "linear_miss_dynamic_hit",
+    "linear_hit_nonlinear_miss",
+    "linear_miss_nonlinear_hit",
 ]
 
 BASE_DIR = os.path.join(os.path.dirname(__file__), "session_replay", "results")

@@ -75,7 +75,7 @@ def build_prefetch_configs(movie_data, seeks, buffer_threshold=BUFFER_THRESHOLD)
 
     Returns a dict keyed by scenario name:
         "seeks_miss", "prefetch_hit", "mixed",
-        "linear_hit_dynamic_miss", "linear_miss_dynamic_hit"
+        "linear_hit_nonlinear_miss", "linear_miss_nonlinear_hit"
     """
     seg_s = movie_data["segment_duration_ms"] / 1000.0
     num_segments = len(movie_data["segment_sizes_bits"])
@@ -132,11 +132,11 @@ def build_prefetch_configs(movie_data, seeks, buffer_threshold=BUFFER_THRESHOLD)
             buffer_threshold,
             clamp_unique([main_dest, main_dest + 1, far_miss, far_miss + 1]),
         ),
-        "linear_hit_dynamic_miss": make_config(
+        "linear_hit_nonlinear_miss": make_config(
             buffer_threshold,
             clamp_unique(range(far_miss, far_miss + 5)),
         ),
-        "linear_miss_dynamic_hit": make_config(
+        "linear_miss_nonlinear_hit": make_config(
             buffer_threshold,
             clamp_unique(range(main_dest, main_dest + 4)),
         ),
@@ -185,8 +185,8 @@ def main():
     write_json(cfg_dir / "prefetch_config_real_seeks_miss.json",           configs["seeks_miss"])
     write_json(cfg_dir / "prefetch_config_real_prefetch_hit.json",         configs["prefetch_hit"])
     write_json(cfg_dir / "prefetch_config_real_mixed.json",                configs["mixed"])
-    write_json(cfg_dir / "prefetch_config_real_linear_hit_dynamic_miss.json", configs["linear_hit_dynamic_miss"])
-    write_json(cfg_dir / "prefetch_config_real_linear_miss_dynamic_hit.json", configs["linear_miss_dynamic_hit"])
+    write_json(cfg_dir / "prefetch_config_real_linear_hit_nonlinear_miss.json", configs["linear_hit_nonlinear_miss"])
+    write_json(cfg_dir / "prefetch_config_real_linear_miss_nonlinear_hit.json", configs["linear_miss_nonlinear_hit"])
 
     # Update TRACE_UUID in run_session_replay_comparison.py
     runner = SCRIPT_DIR / "run_session_replay_comparison.py"

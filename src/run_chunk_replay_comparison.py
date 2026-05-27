@@ -164,8 +164,8 @@ def main():
         seeks_hit_cfg,
         seeks_miss_cfg,
         seeks_mixed_cfg,
-        seeks_lin_hit_dyn_miss_cfg,
-        seeks_lin_miss_dyn_hit_cfg,
+        seeks_lin_hit_nonlin_miss_cfg,
+        seeks_lin_miss_nonlin_hit_cfg,
     ) = generate_comparison_bundle(
         num_seeks=args.num_seeks,
         total_s=total_s,
@@ -180,8 +180,8 @@ def main():
         "seeks.json":                         seeks_miss_cfg,
         "seeks_prefetch_hit.json":            seeks_hit_cfg,
         "seeks_mixed.json":                   seeks_mixed_cfg,
-        "seeks_linear_hit_dynamic_miss.json": seeks_lin_hit_dyn_miss_cfg,
-        "seeks_linear_miss_dynamic_hit.json": seeks_lin_miss_dyn_hit_cfg,
+        "seeks_linear_hit_nonlinear_miss.json": seeks_lin_hit_nonlin_miss_cfg,
+        "seeks_linear_miss_nonlinear_hit.json": seeks_lin_miss_nonlin_hit_cfg,
     }
     for fname, data in seek_files.items():
         write_json(CHUNKS_DIR / fname, data)
