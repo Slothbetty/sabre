@@ -171,9 +171,7 @@ python test_simulation_regression.py
 
 # Part II — Nonlinear Buffering (`buffer.py`)
 
-> **Note:** In the paper, *Nonlinear Buffering* is referred to as **nonlinear buffering**. The terms are interchangeable throughout this codebase and documentation.
-
-Everything below relates to `MultiRegionBuffer` from `buffer.py` — the dynamic, multi-region buffer that replaces the simple linear `buffer_contents` list.
+Everything below relates to `MultiRegionBuffer` from `buffer.py` — the nonlinear, multi-region buffer that replaces the simple linear `buffer_contents` list.
 
 ---
 
@@ -373,7 +371,7 @@ The synthetic workflow varies the **seek pattern** across 5 scenarios with a fix
 | Scenario folder | Seek file | What it tests |
 |----------------|-----------|--------------|
 | `seeks/` | `seeks.json` | Both buffer modes miss the prefetch cache |
-| `seeks_prefetch_hit/` | `seeks_prefetch_hit.json` | Seeks land on prefetched segments; dynamic wins |
+| `seeks_prefetch_hit/` | `seeks_prefetch_hit.json` | Seeks land on prefetched segments; nonlinear wins |
 | `seeks_mixed/` | `seeks_mixed.json` | Mix of hits and misses |
 | `seeks_linear_hit_nonlinear_miss/` | `seeks_linear_hit_nonlinear_miss.json` | Short seeks within linear buffer range; prefetch targets wrong segments |
 | `seeks_linear_miss_nonlinear_hit/` | `seeks_linear_miss_nonlinear_hit.json` | Long seeks beyond linear range; prefetch targets correct segments |
@@ -568,13 +566,13 @@ gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
 
 **Use Case 1 — Download Without Seek:**
 
-| Linear | Dynamic |
+| Linear | Nonlinear |
 |--------|---------|
 | `get_buffer_level()` → `deplete_buffer()` → `buffer_contents.pop(0)` → `abr.get_quality_delay()` → `network.download()` → `buffer_contents.append()` | `MultiRegionBuffer.get_buffer_level()` → `get_contiguous_chunks_from_current_position()` → `pop_chunk()` → `abr.get_quality_delay()` → `network.download()` → `add_chunk()` → `buffer_by_pos()` → `cleanup_and_merge()` |
 
 **Use Case 2 — Download With Seek:**
 
-| Linear | Dynamic |
+| Linear | Nonlinear |
 |--------|---------|
 | `interrupted_by_seek()` → `update_buffer_during_seek()` → `buffer_contents.clear()` / `[skip_count:]` → `abr.report_seek()` → `network.download()` | `interrupted_by_seek()` → `update_buffer_during_seek()` → `current_playback_pos` update → `_find_region_of()` → chunk trim → `cleanup_and_merge()` → `abr.report_seek()` → `add_chunk()` → `buffer_by_pos()` |
 
@@ -592,7 +590,7 @@ buffer_level = segment_time * len(playable_chunks) - buffer_fcc
 | | `playable_chunks` source |
 |---|---|
 | Linear | All items in `buffer_contents` |
-| Dynamic | Contiguous chunks from `current_playback_pos` (gaps excluded) |
+| Nonlinear | Contiguous chunks from `current_playback_pos` (gaps excluded) |
 
 Nonlinear Buffering does not inflate buffer level with gaps between regions.
 
@@ -607,7 +605,7 @@ Nonlinear Buffering does not inflate buffer level with gaps between regions.
 
 ### Performance Characteristics
 
-| | Linear | Dynamic |
+| | Linear | Nonlinear |
 |---|---|---|
 | Append / pop | O(1) / O(n) | O(1) / O(1) |
 | Region lookup | N/A | O(log n) |

@@ -1,21 +1,54 @@
-# Sabre
+# StreamLens
 
-Sabre is an open-source simulation environment for ABR algorithms. It is a Python tool that facilitates initial development and quick evaluation of algorithms in an environment similar to real production players, without requiring the algorithm researchers to learn the often complex implementation details of a production player. Sabre takes a video description, network trace, and an ABR algorithm as inputs and gives a collection of QoE metrics as output.
+StreamLens is an open-source ABR simulation environment for multi-region buffering, seeking, and prefetching. It extends [SABRE](https://github.com/UMass-LIDS/sabre) with nonlinear buffering, configurable seek and prefetch scenarios, session-replay and chunk-replay workflows, and a browser-based viewer for comparing ABR algorithms.
+
+## Requirements
+
+- Python >= 3.10
+- `numpy` (see `requirements.txt`)
+
+## Quick Start
+
+```bash
+git clone https://github.com/Slothbetty/sabre.git
+cd sabre
+pip install -r requirements.txt
+cd src
+```
+
+**Single ABR run:**
+```bash
+python run_comparison.py -n synthetic/network.json -m synthetic/movie.json -a bola -o results.json
+python serve_viewer.py
+# Open http://localhost:8000/viewer/view_comparison.html and load results.json
+```
+
+**Cross-ABR comparison across seek scenarios (main workflow from the paper):**
+```bash
+python run_comparison.py \
+  -n synthetic/network.json -m synthetic/movie.json \
+  -sc synthetic/seeks.json,synthetic/seeks_prefetch_hit.json,synthetic/seeks_mixed.json,synthetic/seeks_linear_hit_nonlinear_miss.json,synthetic/seeks_linear_miss_nonlinear_hit.json \
+  -pc synthetic/test_prefetch_config.json \
+  -a all -o synthetic/results
+python serve_viewer.py
+# Open http://localhost:8000/viewer/view_comparison.html and load synthetic/results/comparison_summary.json
+```
+
+## Docker
+
+```bash
+docker build -t streamlens .
+docker run --rm streamlens
+```
 
 ## Documentation
 
-For documentation about Sabre, read our [wiki](https://github.com/UMass-Lids/sabre/wiki).
+Full documentation and workflow guides are in [src/README.md](src/README.md).
 
-## Downloading
+## License
 
-You can checkout the project repository using the command
-```
-git clone https://github.com/UMass-LIDS/sabre.git
-```
-Otherwise, you can download a zipfile [here](https://github.com/UMass-LIDS/sabre/archive/master.zip).
+BSD 2-Clause — see [LICENSE](LICENSE).
 
-## Citing
+## Based On
 
-If you want to cite Sabre, please refer to the following paper:
-
-Kevin Spiteri, Ramesh Sitaraman, and Daniel Sparacio. 2018. From Theory to Practice: Improving Bitrate Adaptation in the DASH Reference Player. In *MMSys '18: 9th ACM Multimedia Systems Conference, June 12-15, 2018, Amsterdam, Netherlands.* [https://doi.org/10.1145/3204949.3204953](https://doi.org/10.1145/3204949.3204953)
+StreamLens builds on [SABRE](https://github.com/UMass-LIDS/sabre) by Kevin Spiteri, Ramesh Sitaraman, and Daniel Sparacio (MMSys '18).
