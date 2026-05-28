@@ -8,12 +8,10 @@ StreamLens is a Python-based simulation environment for evaluating Adaptive Bitr
 
 - [System Architecture](#system-architecture)
 - [Comparison Workflows](#comparison-workflows)
-- [Workflow Summary](#workflow-summary)
 - **Part I — Core Simulation**
   - [Setup & Prerequisites](#setup--prerequisites)
   - [Network Configuration](#network-configuration)
   - [Running Simulations](#running-simulations)
-  - [Graph Generation](#graph-generation)
   - [Regression Testing](#regression-testing)
 - **Part II — Nonlinear Buffering (`buffer.py`)**
   - [Overview](#overview)
@@ -23,7 +21,6 @@ StreamLens is a Python-based simulation environment for evaluating Adaptive Bitr
   - [Generating Seek & Prefetch Configs](#generating-seek--prefetch-configs)
   - [Prefetch Comparison Workflow (Synthetic)](#prefetch-comparison-workflow-synthetic)
   - [Testing](#testing)
-  - [Use Cases: Detailed Flow](#use-cases-detailed-flow-documentation)
   - [Technical Reference](#technical-reference)
   - [Advanced Usage](#advanced-usage)
   - [Troubleshooting](#troubleshooting)
@@ -55,13 +52,13 @@ StreamLens supports three comparison workflows — **Synthetic**, **Session-repl
 
 | | Synthetic | Session-replay | Chunk-replay |
 |---|---|---|---|
-| **Video source** | A hand-crafted video description file | Extracted from a real YouTube playback session | Converted from real YouTube chunk download records |
-| **Network conditions** | Artificially generated bandwidth and latency patterns | Taken directly from the real YouTube session recording | Artificially generated bandwidth and latency patterns |
-| **User seek events** | Auto-generated based on the video structure | Taken directly from the real YouTube session recording | Auto-generated based on the video structure |
-| **Prefetch settings** | Auto-generated based on the video structure | Derived from real seek destinations in the recording | Auto-generated based on the video structure |
+| **Video input** | Handcrafted | Handcrafted | Real YouTube metadata and chunks |
+| **Network input** | Handcrafted | Real YouTube session | Handcrafted |
+| **Seek input** | Generated from video | Real YouTube session | Generated from video |
+| **Prefetch input** | Generated from video | Derived from real seek destinations | Generated from video |
 | **How to run** | `run_comparison.py` | `run_session_replay_comparison.py` | `run_chunk_replay_comparison.py` |
 | **Results saved to** | `synthetic/results/` | `session_replay/results/` | `chunk_replay/results/` |
-| **Best used when** | You want full control over test conditions | You want to replay a real user session | You want real video content with flexible network conditions |
+| **Best use case** | Controlled experiments | Replay real user behavior | Real metadata and chunks with configurable network and seeks |
 
 ---
 
@@ -127,24 +124,6 @@ python sabre.py -v -n synthetic/network.json -m synthetic/movie.json
 Run with seeks:
 ```bash
 python sabre.py -v -n synthetic/network.json -m synthetic/movie.json -sc synthetic/seeks.json
-```
-
----
-
-## Graph Generation
-
-### Generate ABR Comparison Graphs
-
-Update the `abrArray` in `sabre_only_abr_graph__seek_visualization/generate_abr_comparison.py` to choose ABR algorithms, then run:
-```bash
-python sabre_only_abr_graph__seek_visualization/generate_abr_comparison.py
-```
-
-### Generate Individual ABR Graphs
-
-Use `graph_generate.py` for specific algorithms:
-```bash
-python sabre_only_abr_graph__seek_visualization/graph_generate.py -a bola
 ```
 
 ---
@@ -295,13 +274,13 @@ When you load a **`comparison_summary.json`** (synthetic or Session Replay), the
 The primary single-number metric combining quality and rebuffering:
 
 ```
-QoE = v̄ − β·ρ_rebuf − γ·p_switch
+QoE = ū − β·ρ_rebuf − γ·p_switch   where u_i = log(b_i / b_0)
 ```
 
-- **v̄** — time-average log-bitrate utility, sampled once per second
-- **ρ_rebuf = rebuffer_time / total_play_time** — fraction of session spent stalled
-- **p_switch = N_switch / T_seconds** — bitrate switches per second
-- **β = 10, γ = 1** — penalty coefficients (SFS paper §5.1)
+- **ū** — average u_i (playback utility normalized by the lowest possible bitrate)
+- **ρ_rebuf = rebuffer_time / total_play_time** — rebuffering ratio (fraction of session spent stalled)
+- **p_switch = N_switch / T_seconds** — quality-switch rate (each change between adjacent played chunks counts as one switch, regardless of direction or magnitude)
+- **β = 10, γ = 1**
 
 Higher QoE is better. A run that gains utility but adds rebuffering will only show a net improvement if the utility gain outweighs the penalty.
 
@@ -320,12 +299,7 @@ Higher QoE is better. A run that gains utility but adds rebuffering will only sh
 
 ### Expected Improvements
 
-With `buffer.py` (`MultiRegionBuffer`) and correct prefetch targets:
-
-- 20–40% reduction in rebuffering events
-- Better buffer level maintenance
-- Preserved segments after seeks
-- More efficient bandwidth utilisation
+With `buffer.py` (`MultiRegionBuffer`) and correct prefetch targets (seeks land on prefetched segments), nonlinear buffering can reduce rebuffering events and rebuffering time while maintaining or improving QoE. When prefetch targets do not align with seek destinations, results are more mixed — some ABR algorithms may reduce rebuffering events but QoE does not reliably improve. Prefetching is not automatically beneficial; its value depends on whether prefetched chunks are reused after seeks and how each ABR policy responds to the changed buffer state.
 
 ---
 
@@ -459,122 +433,6 @@ The suite contains 14 tests across two test classes:
 | 14 | Skip already-prefetched | Linear download loop skips prefetched segments |
 
 **Required fixture:** `synthetic/test_prefetch_config_fixture.json`.
-
----
-
-## Use Cases: Detailed Flow Documentation
-
-Each use case shows the **linear buffer** path side-by-side with the **Nonlinear Buffer** path so you can see exactly where behaviour diverges.
-
-> **Note:** The compatibility methods (previously in `BufferWrapper`) have been consolidated into `MultiRegionBuffer` in `buffer.py`. State variables like `current_playback_pos` are managed directly in `GlobalState`. All references use `gs.multi_region_buffer` for buffer operations and `gs.current_playback_pos` for playback position tracking.
-
-### Use Case 1: Download Chunk Without Seek
-
-**Trigger:** Sequential segment download during normal playback
-**Location:** `sabre.py` → `process_download_loop()`
-
-#### Linear Buffer Behavior
-
-**Flow** (for segment N):
-```
-1. get_buffer_level()
-   └─ If buffer full → deplete_buffer(full_delay) → buffer_contents.pop(0)
-2. ABR selects quality for segment N
-3. replacer.check_replace(quality)
-4. Download segment N
-5. gs.buffer_contents.append((N, quality))
-6. gs.next_segment = N + 1
-```
-
-**Code path:**
-```python
-gs.buffer_contents.append((gs.next_segment, quality))
-gs.next_segment += 1
-```
-
-#### Nonlinear Buffer Behavior
-
-**Flow** (for segment N):
-```
-1. gs.multi_region_buffer.get_buffer_level()
-   └─ get_contiguous_chunks_from_current_position()
-2. If buffer full → deplete_buffer() → multi_region_buffer.pop_chunk()
-3. ABR selects quality for segment N
-4. Download segment N
-5. gs.multi_region_buffer.add_chunk(N, quality)
-   └─ buffer_by_pos(pos_ms, quality) → cleanup_and_merge()
-6. gs.next_segment = N + 1
-```
-
-**Code path:**
-```python
-gs.multi_region_buffer.add_chunk(gs.next_segment, quality)
-```
-
----
-
-### Use Case 2: Download Chunk With Seek
-
-**Trigger:** User-initiated seek event during playback
-**Location:** `sabre.py` → `interrupted_by_seek()` / `update_buffer_during_seek()`
-
-#### Linear Buffer Behavior
-
-**Flow** (seek from segment 5 to segment 20):
-```
-1. interrupted_by_seek(delta, abr) detects seek event
-2. update_buffer_during_seek()
-   a. Is segment 20 in [5, 10)?  →  NO
-   b. gs.buffer_contents.clear()
-   c. gs.next_segment = 20, gs.buffer_fcc = 0
-3. Buffer: [] (EMPTY — rebuffering required)
-```
-
-**Seek scenarios:**
-
-| Scenario | Before | After | Rebuffer? |
-|----------|--------|-------|-----------|
-| Within range (5 → 7) | `[(5,q5)..(8,q8)]` | `[(7,q7),(8,q8)]` | No |
-| Outside range (5 → 20) | `[(5,q5)..(8,q8)]` | `[]` | Yes |
-
-#### Nonlinear Buffer Behavior
-
-**Flow** (seek from segment 5 to segment 20):
-```
-1. interrupted_by_seek(delta, abr) detects seek event
-2. update_buffer_during_seek()
-   a. seek_pos_ms = 20 * seg_time
-   b. gs.current_playback_pos = seek_pos_ms
-   c. region = multi_region_buffer._find_region_of(seek_pos_ms)
-   d. If hit: trim chunks before seek, preserve rest
-   e. If miss: clear non-prefetch regions before seek; preserve
-      regions after seek and all prefetch regions
-   f. cleanup_and_merge()
-```
-
-**Seek scenarios:**
-
-| Scenario | Regions before | Regions after | Rebuffer? |
-|----------|---------------|---------------|-----------|
-| Within range (5 → 7) | `[5*st → 10*st]` | `[7*st → 10*st]` | No |
-| Outside range (5 → 20) | `[5*st → 10*st]` | *(cleared)* | Yes |
-| To prefetched chunk | `[0-8s]` + prefetch `[20-22s]` | prefetch region preserved | No |
-
----
-
-### Method Call Chains (summary)
-
-**Use Case 1 — Download Without Seek:**
-
-| Linear | Nonlinear |
-|--------|---------|
-| `get_buffer_level()` → `deplete_buffer()` → `buffer_contents.pop(0)` → `abr.get_quality_delay()` → `network.download()` → `buffer_contents.append()` | `MultiRegionBuffer.get_buffer_level()` → `get_contiguous_chunks_from_current_position()` → `pop_chunk()` → `abr.get_quality_delay()` → `network.download()` → `add_chunk()` → `buffer_by_pos()` → `cleanup_and_merge()` |
-
-**Use Case 2 — Download With Seek:**
-
-| Linear | Nonlinear |
-|--------|---------|
-| `interrupted_by_seek()` → `update_buffer_during_seek()` → `buffer_contents.clear()` / `[skip_count:]` → `abr.report_seek()` → `network.download()` | `interrupted_by_seek()` → `update_buffer_during_seek()` → `current_playback_pos` update → `_find_region_of()` → chunk trim → `cleanup_and_merge()` → `abr.report_seek()` → `add_chunk()` → `buffer_by_pos()` |
 
 ---
 
@@ -956,9 +814,4 @@ sabre/src/
 │   ├── popup.html
 │   └── popup.js
 │
-└── sabre_only_abr_graph__seek_visualization/   # Legacy standalone graph generation
-    ├── generate_abr_comparison.py
-    ├── graph_generate.py
-    ├── extract_data.py
-    └── <abr>.csv
 ```
