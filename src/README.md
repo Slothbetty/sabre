@@ -243,7 +243,8 @@ python serve_viewer.py
 Use a file produced by `run_comparison.py` for **one** ABR (and **one** seek config, if any), e.g. `comparison_bola.json`.
 
 - **Summary cards** — total rebuffering time, rebuffering events, played utility, rebuffer ratio, Quality of Experience (QoE)
-- **Charts** — rebuffering bar chart; buffer level over time (with seek markers and prefetch band); quality over time; quality distribution
+- **Charts** — rebuffering bar chart; buffer level over time; quality over time; quality distribution
+- **Buffer level chart** — dashed red curve = baseline without `buffer.py`; solid green curve = with `buffer.py` + prefetching. Seek markers are drawn as numbered vertical lines: green = seek target hit a prefetched chunk; orange = seek target missed. Prefetch download periods are shown as a shaded band.
 - **Prefetch / seek panel** — when the JSON includes prefetch and seek events, the viewer shows annotations on the time-series charts
 
 ### Multi-run summary (`comparison_summary.json`)
