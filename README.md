@@ -51,7 +51,9 @@ python serve_viewer.py
 
 ```bash
 docker build -t streamlens .
-docker run --rm streamlens
+docker run --rm -p 8000:8000 streamlens
+# Open http://localhost:8000/viewer/view_comparison.html
+# Load: synthetic/results/comparison_summary.json
 ```
 
 ## Documentation
