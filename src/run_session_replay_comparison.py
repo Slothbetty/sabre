@@ -2,17 +2,13 @@
 """
 Run all 5 Session-replay prefetch scenarios then merge into a single comparison_summary.json.
 
-When a non-default movie is supplied (via --chunks or -m), prefetch configs for all
-5 scenarios are regenerated automatically from the real seek events and the movie's
-actual segment structure, so results are always meaningful regardless of movie length.
+When a non-default movie is supplied (via -m), prefetch configs for all 5 scenarios
+are regenerated automatically from the real seek events and the movie's actual
+segment structure, so results are always meaningful regardless of movie length.
 
 Usage:
     # Default: synthetic movie + pre-built prefetch configs
     python run_session_replay_comparison.py
-
-    # Real movie from chunks file (configs regenerated automatically)
-    python run_session_replay_comparison.py --chunks session_replay/chunks_1_200.json --index 0
-    python run_session_replay_comparison.py --chunks session_replay/chunks_1_200.json --video-id Qg9LxRHLbAk
 
     # Explicit movie.json (configs regenerated automatically)
     python run_session_replay_comparison.py -m session_replay/my_movie.json
@@ -21,7 +17,6 @@ Usage:
 import json
 import subprocess
 import sys
-import tempfile
 import argparse
 from pathlib import Path
 
@@ -57,92 +52,20 @@ def load_json(path, encoding="utf-8"):
         return json.load(f)
 
 
-def write_temp_json(data):
-    tmp = tempfile.NamedTemporaryFile(
-        mode="w", suffix=".json", delete=False,
-        dir=SCRIPT_DIR, encoding="utf-8",
-    )
-    json.dump(data, tmp)
-    tmp.close()
-    return Path(tmp.name)
-
-
-def load_chunks_entry(chunks_path, index=None, video_id=None):
-    chunks = load_json(chunks_path)
-    if not isinstance(chunks, list):
-        raise ValueError(f"{chunks_path} must be a top-level JSON array")
-    if index is not None:
-        if not (0 <= index < len(chunks)):
-            raise IndexError(f"index {index} out of range (0-{len(chunks) - 1})")
-        return chunks[index]
-    matches = [v for v in chunks if v.get("video_id") == video_id]
-    if not matches:
-        raise KeyError(f"video_id '{video_id}' not found in {chunks_path}")
-    return matches[0]
-
-
-def entry_to_movie(entry):
-    return {
-        "segment_duration_ms": entry["segment_duration_ms"],
-        "bitrates_kbps":       entry["bitrates_kbps"],
-        "segment_sizes_bits":  entry["segment_sizes_bits"],
-    }
-
-
 # ── main ───────────────────────────────────────────────────────────────────────
 
 def main():
     parser = argparse.ArgumentParser(
         description="Run 5 Session-replay ABR comparison scenarios"
     )
-    movie_group = parser.add_mutually_exclusive_group()
-    movie_group.add_argument(
+    parser.add_argument(
         "-m", "--movie", metavar="PATH",
         help="Path to a movie.json (configs regenerated automatically for this movie)",
     )
-    movie_group.add_argument(
-        "--chunks", metavar="PATH",
-        help="Path to a chunks JSON (e.g. chunks_1_200.json); "
-             "use with --index or --video-id",
-    )
-    parser.add_argument(
-        "--index", type=int, metavar="N",
-        help="0-based index of the video to use from --chunks",
-    )
-    parser.add_argument(
-        "--video-id", metavar="ID",
-        help="video_id of the video to use from --chunks",
-    )
     args = parser.parse_args()
 
-    tmp_files = []  # temp paths cleaned up in the finally block
-
     # ── resolve movie data and path ────────────────────────────────────────────
-    if args.chunks:
-        if args.index is None and args.video_id is None:
-            parser.error("--chunks requires --index N or --video-id ID")
-
-        entry = load_chunks_entry(
-            args.chunks,
-            index=args.index,
-            video_id=args.video_id,
-        )
-        movie_data = entry_to_movie(entry)
-        vid = entry.get("video_id", "?")
-        res = (entry.get("resolutions") or ["?"])[-1]
-        n   = len(movie_data["segment_sizes_bits"])
-        dur = n * movie_data["segment_duration_ms"] / 1000
-        print(f"Using video: [{args.index if args.index is not None else args.video_id}] "
-              f"{vid} — {entry.get('title', '')}")
-        print(f"  {n} segments x {movie_data['segment_duration_ms']} ms "
-              f"= {dur:.1f} s, up to {res}")
-
-        tmp_movie = write_temp_json(movie_data)
-        tmp_files.append(tmp_movie)
-        movie_path = tmp_movie.relative_to(SCRIPT_DIR)
-        regenerate_configs = True
-
-    elif args.movie:
+    if args.movie:
         movie_data  = load_json(args.movie)
         movie_path  = args.movie
         regenerate_configs = True
@@ -173,24 +96,20 @@ def main():
         }
 
     # ── run all scenarios ──────────────────────────────────────────────────────
-    try:
-        for scenario in SCENARIOS:
-            run([
-                sys.executable, "run_comparison.py",
-                "-n", NETWORK,
-                "-m", str(movie_path),
-                "-sc", SEEKS,
-                "-pc", str(prefetch_paths[scenario]),
-                "-a", "all",
-                "-o", f"session_replay/results/{scenario}",
-            ])
+    for scenario in SCENARIOS:
+        run([
+            sys.executable, "run_comparison.py",
+            "-n", NETWORK,
+            "-m", str(movie_path),
+            "-sc", SEEKS,
+            "-pc", str(prefetch_paths[scenario]),
+            "-a", "all",
+            "-o", f"session_replay/results/{scenario}",
+        ])
 
-        print("\n>>> Merging scenario summaries ...")
-        run([sys.executable, "merge_session_replay_summaries.py"])
-        print("\nDone. Load session_replay/results/comparison_summary.json in the viewer.")
-    finally:
-        for p in tmp_files:
-            p.unlink(missing_ok=True)
+    print("\n>>> Merging scenario summaries ...")
+    run([sys.executable, "merge_session_replay_summaries.py"])
+    print("\nDone. Load session_replay/results/comparison_summary.json in the viewer.")
 
 
 if __name__ == "__main__":

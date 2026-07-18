@@ -1,6 +1,6 @@
 # StreamLens
 
-StreamLens is an open-source ABR simulation environment for multi-region buffering, seeking, and prefetching. It extends [SABRE](https://github.com/UMass-LIDS/sabre) with nonlinear buffering, configurable seek and prefetch scenarios, session-replay and chunk-replay workflows, and a browser-based viewer for comparing ABR algorithms.
+StreamLens is an open-source ABR simulation environment for multi-region buffering, seeking, and prefetching. It extends [SABRE](https://github.com/UMass-LIDS/sabre) with nonlinear buffering, configurable seek and prefetch scenarios, synthetic and session-replay workflows, and a browser-based viewer for comparing ABR algorithms.
 
 ## Demo Video
 

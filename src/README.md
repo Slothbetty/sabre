@@ -29,10 +29,6 @@ StreamLens is a Python-based simulation environment for evaluating Adaptive Bitr
   - [Parsing Traces](#parsing-traces)
   - [Session Replay Prefetch Scenarios](#Session-replay-prefetch-scenarios)
   - [Running Session Replay Comparisons](#running-Session-replay-comparisons)
-- **Part IV — Chunk-replay Workflow**
-  - [Chunks Video Library](#chunks-video-library)
-  - [Running Chunks Comparisons](#running-chunks-comparisons)
-  - [Chunks Comparison Options](#chunks-comparison-options)
 - **Reference**
   - [File Structure](#file-structure)
 
@@ -48,17 +44,17 @@ The diagram below shows the module structure and component relationships of Stre
 
 ## Comparison Workflows
 
-StreamLens supports three comparison workflows — **Synthetic**, **Session-replay**, and **Chunk-replay** — all converging into a shared simulation core that runs each scenario with and without `MultiRegionBuffer`.
+StreamLens supports two comparison workflows — **Synthetic** and **Session-replay** — both converging into a shared simulation core that runs each scenario with and without `MultiRegionBuffer`.
 
-| | Synthetic | Session-replay | Chunk-replay |
-|---|---|---|---|
-| **Video input** | Handcrafted | Handcrafted | Real YouTube metadata and chunks |
-| **Network input** | Handcrafted | Real YouTube session | Handcrafted |
-| **Seek input** | Generated from video | Real YouTube session | Generated from video |
-| **Prefetch input** | Generated from video | Derived from real seek destinations | Generated from video |
-| **How to run** | `run_comparison.py` | `run_session_replay_comparison.py` | `run_chunk_replay_comparison.py` |
-| **Results saved to** | `synthetic/results/` | `session_replay/results/` | `chunk_replay/results/` |
-| **Best use case** | Controlled experiments | Replay real user behavior | Real metadata and chunks with configurable network and seeks |
+| | Synthetic | Session-replay |
+|---|---|---|
+| **Video input** | Handcrafted | Handcrafted |
+| **Network input** | Handcrafted | Real YouTube session |
+| **Seek input** | Generated from video | Real YouTube session |
+| **Prefetch input** | Generated from video | Derived from real seek destinations |
+| **How to run** | `run_comparison.py` | `run_session_replay_comparison.py` |
+| **Results saved to** | `synthetic/results/` | `session_replay/results/` |
+| **Best use case** | Controlled experiments | Replay real user behavior |
 
 ---
 
@@ -628,102 +624,6 @@ python serve_viewer.py
 
 ---
 
-# Part IV — Chunk-replay Workflow
-
-The Chunk-replay pipeline runs the same 5-scenario prefetch comparison as the Session Replay workflow, but derives everything — network conditions, seek events, and prefetch configs — synthetically from the video's own content data. No browser session or trace collection is needed.
-
----
-
-## Chunks Video Library
-
-`session_replay/chunks_1_200.json` contains **387 YouTube video entries** collected via yt-dlp. Each entry includes the full segment size matrix (`segment_sizes_bits`), bitrate ladder, resolution list, and viewer retention curve — everything needed to run a simulation.
-
-Browse available videos:
-
-```bash
-python chunks_to_movie.py session_replay/chunks_1_200.json --list
-```
-
-Output columns: index, video ID, duration, segment count, max resolution, title.
-
----
-
-## Running Chunks Comparisons
-
-One command runs the full pipeline for any video in the library:
-
-```bash
-# By index
-python run_chunk_replay_comparison.py --index 0
-
-# By video ID
-python run_chunk_replay_comparison.py --video-id Qg9LxRHLbAk
-```
-
-**What happens automatically:**
-
-1. Extracts `chunk_replay/movie.json` from the chosen video entry
-2. Generates `chunk_replay/network.json` — 120 synthetic network entries × 5 s each
-3. Generates 5 seek files + `chunk_replay/prefetch_config.json` via `generate_configs.py`
-4. Runs `run_comparison.py` for all 5 scenarios × all 5 ABR algorithms
-5. Results land in `chunk_replay/results/comparison_summary.json`
-
-**View results:**
-
-```bash
-python serve_viewer.py
-# Load: chunk_replay/results/comparison_summary.json
-```
-
----
-
-## Chunks Comparison Options
-
-| Flag | Description | Default |
-|---|---|---|
-| `--chunks PATH` | Chunks JSON file | `session_replay/chunks_1_200.json` |
-| `--index N` | 0-based video index | *(required if no --video-id)* |
-| `--video-id ID` | video_id string | *(required if no --index)* |
-| `--bandwidth-mean` | Mean network bandwidth (kbps) | `4000` |
-| `--bandwidth-std` | Bandwidth std deviation (kbps) | `1500` |
-| `--latency-mean` | Mean latency (ms) | `80` |
-| `--latency-std` | Latency std deviation (ms) | `20` |
-| `--num-seeks` | Seek events per scenario | `6` |
-| `--prefetch-count` | Number of prefetch segments | `8` |
-| `--buffer-threshold` | Buffer level threshold for prefetch (ms) | `15000` |
-| `--seed` | Random seed for mixed-scenario shuffle | *(random)* |
-
-**Example — simulate a throttled mobile network:**
-
-```bash
-python run_chunk_replay_comparison.py --index 0 --bandwidth-mean 1500 --bandwidth-std 400 --latency-mean 120 --latency-std 30
-```
-
-**Chunks trace directory layout after a run:**
-
-```
-chunk_replay/
-├── movie.json                        # Extracted from chunks entry
-├── network.json                      # Generated synthetic network
-├── seeks.json                        # Seeks that miss the prefetch list
-├── seeks_prefetch_hit.json           # Seeks aligned with prefetch targets
-├── seeks_mixed.json                  # Mix of hit and miss seeks
-├── seeks_linear_hit_nonlinear_miss.json
-├── seeks_linear_miss_nonlinear_hit.json
-├── prefetch_config.json              # Shared prefetch config for all scenarios
-└── results/
-    ├── comparison_summary.json       # Load this in the viewer
-    ├── seeks/
-    ├── seeks_prefetch_hit/
-    ├── seeks_mixed/
-    ├── seeks_linear_hit_nonlinear_miss/
-    └── seeks_linear_miss_nonlinear_hit/
-```
-
-Each run overwrites `chunk_replay/` with the new video's data.
-
----
-
 # File Structure
 
 ```
@@ -736,10 +636,8 @@ sabre/src/
 ├── abr_algorithms.py                 # ABR algorithm implementations
 │
 ├── run_comparison.py                 # With vs without buffer.py; writes comparison_summary.json
-├── run_session_replay_comparison.py      # Pipeline 1: runs 5 Session-replay scenarios, regenerates prefetch configs per movie
-├── run_chunk_replay_comparison.py          # Pipeline 2: runs 5 scenarios from chunks_1_200.json with synthetic network+seeks
+├── run_session_replay_comparison.py      # Runs 5 Session-replay scenarios, regenerates prefetch configs per movie
 ├── setup_session_replay.py               # Generates prefetch configs from trace UUID + movie; updates run_session_replay_comparison.py
-├── chunks_to_movie.py                # Converts a chunks JSON entry to movie.json; supports --list and --all
 ├── serve_viewer.py                   # HTTP server for the viewer (port 8000)
 ├── network_generator.py              # Generates synthetic network.json (-o flag for output path)
 ├── generate_configs.py               # Generates seeks + prefetch configs for synthetic scenarios
@@ -771,9 +669,8 @@ sabre/src/
 │       ├── seeks_linear_hit_nonlinear_miss/
 │       └── seeks_linear_miss_nonlinear_hit/
 │
-├── session_replay/                       # Pipeline 1: real YouTube trace inputs and results
+├── session_replay/                       # Session-replay: real YouTube trace inputs and results
 │   ├── yt_traces_2026-04-18.csv      # Raw trace CSV from the browser extension
-│   ├── chunks_1_200.json             # 387 YouTube video entries from yt-dlp (movie library)
 │   ├── network_<uuid>.json           # Real network trace (from parse_session_replays.py)
 │   ├── seeks_<uuid>.json             # Real seek events (from parse_session_replays.py)
 │   ├── prefetch_config_real_seeks_miss.json          # Regenerated by run_session_replay_comparison.py
@@ -789,23 +686,6 @@ sabre/src/
 │       ├── mixed/
 │       ├── linear_hit_nonlinear_miss/
 │       └── linear_miss_nonlinear_hit/
-│
-├── chunk_replay/                     # Pipeline 2: generated by run_chunk_replay_comparison.py (git-ignored)
-│   ├── movie.json                    # Extracted from chunks entry
-│   ├── network.json                  # Generated synthetic network
-│   ├── seeks.json                    # Generated seeks (miss scenario)
-│   ├── seeks_prefetch_hit.json
-│   ├── seeks_mixed.json
-│   ├── seeks_linear_hit_nonlinear_miss.json
-│   ├── seeks_linear_miss_nonlinear_hit.json
-│   ├── prefetch_config.json          # Shared prefetch config for all scenarios
-│   └── results/
-│       ├── comparison_summary.json   # Load this in the viewer
-│       ├── seeks/
-│       ├── seeks_prefetch_hit/
-│       ├── seeks_mixed/
-│       ├── seeks_linear_hit_nonlinear_miss/
-│       └── seeks_linear_miss_nonlinear_hit/
 │
 ├── yt_trace_collector/               # Chrome extension for collecting YouTube traces
 │   ├── manifest.json
